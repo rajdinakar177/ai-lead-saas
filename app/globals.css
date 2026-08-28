@@ -1,26 +1,87 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #08090b;
+  --foreground: #f8fafc;
+
+  --surface: #0f1115;
+  --card: #12151b;
+
+  --muted: #94a3b8;
+
+  --border: rgba(255, 255, 255, 0.08);
+
+  --accent: #4f8cff;
+  --accent-secondary: #22d3ee;
+
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #fb7185;
+}
+* {
+  box-sizing: border-box;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
+  margin: 0;
+
+  background:
+    radial-gradient(
+      circle at 20% 0%,
+      rgba(79, 140, 255, 0.08),
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 85% 15%,
+      rgba(34, 211, 238, 0.05),
+      transparent 30%
+    ),
+    var(--background);
+
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+
+  font-family:
+    Arial,
+    Helvetica,
+    sans-serif;
+
+  min-height: 100vh;
+}
+::selection {
+  background: rgba(139, 92, 246, 0.35);
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.glass-card {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.045),
+      rgba(255, 255, 255, 0.018)
+    );
+
+  border:
+    1px solid
+    rgba(255, 255, 255, 0.08);
+
+  box-shadow:
+    0 20px 70px
+    rgba(0, 0, 0, 0.28);
+
+  backdrop-filter:
+    blur(20px);
+}
+
+.blue-glow {
+  box-shadow:
+    0 0 60px
+    rgba(79, 140, 255, 0.14);
 }

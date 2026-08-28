@@ -1,0 +1,1082 @@
+"use client";
+
+import {
+  Bot,
+  CalendarDays,
+  CheckCircle2,
+  Flame,
+  LoaderCircle,
+  RefreshCcw,
+  Send,
+  User,
+} from "lucide-react";
+import {
+  FormEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+type Message = {
+  id: string;
+  sender: "ai" | "user";
+  text: string;
+};
+
+type LeadData = {
+  industry?: string;
+  service?: string;
+  urgency?: string;
+  timeline?: string;
+  name?: string;
+  phone?: string;
+  appointment?: string;
+};
+
+type LeadStatus =
+  | "new"
+  | "warm"
+  | "hot";
+
+type AIResponse = {
+  reply: string;
+
+  lead: {
+    industry: string | null;
+    service: string | null;
+    urgency: string | null;
+    timeline: string | null;
+    name: string | null;
+    phone: string | null;
+  };
+
+  status: LeadStatus;
+  readyToBook: boolean;
+};
+
+type DemoChatProps = {
+  businessSlug: string;
+  businessName: string;
+  compact?: boolean;
+};
+
+const appointments = [
+  "Today · 4:00 PM",
+  "Tomorrow · 10:00 AM",
+  "Tomorrow · 2:00 PM",
+  "Friday · 11:30 AM",
+];
+
+export function DemoChat({
+  businessSlug,
+  businessName,
+  compact = false,
+}: DemoChatProps) {
+  const [leadId, setLeadId] =
+    useState<string | null>(null);
+
+  const [initializing, setInitializing] =
+    useState(true);
+
+  const [messages, setMessages] =
+    useState<Message[]>([]);
+
+  const [lead, setLead] =
+    useState<LeadData>({});
+
+  const [status, setStatus] =
+    useState<LeadStatus>("new");
+
+  const [input, setInput] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [
+    readyToBook,
+    setReadyToBook,
+  ] = useState(false);
+
+  const [completed, setCompleted] =
+    useState(false);
+
+  const [error, setError] =
+    useState<string | null>(null);
+
+  const messagesEndRef =
+    useRef<HTMLDivElement>(null);
+
+  /* =========================================================
+     INITIALIZE / RESTORE LEAD
+     ========================================================= */
+
+  useEffect(() => {
+    async function initializeDemo() {
+      try {
+        setInitializing(true);
+        setError(null);
+
+        const storageKey =
+          `leadflow:${businessSlug}:leadId`;
+
+        const storedLeadId =
+          localStorage.getItem(
+            storageKey
+          );
+
+        if (storedLeadId) {
+          const response =
+            await fetch(
+              `/api/leads/${storedLeadId}`
+            );
+
+          if (response.ok) {
+            const data =
+              await response.json();
+
+            setLeadId(
+              data.lead.id
+            );
+
+            setMessages(
+              data.messages
+            );
+
+            setLead({
+              industry:
+                data.lead.industry ??
+                undefined,
+
+              service:
+                data.lead.service ??
+                undefined,
+
+              urgency:
+                data.lead.urgency ??
+                undefined,
+
+              timeline:
+                data.lead.timeline ??
+                undefined,
+
+              name:
+                data.lead.name ??
+                undefined,
+
+              phone:
+                data.lead.phone ??
+                undefined,
+
+              appointment:
+                data.lead.appointment ??
+                undefined,
+            });
+
+            setStatus(
+              normalizeStatus(
+                data.lead.status
+              )
+            );
+
+            setCompleted(
+              Boolean(data.completed)
+            );
+
+            setReadyToBook(
+              data.lead.status ===
+              "qualified"
+            );
+
+            return;
+          }
+
+          localStorage.removeItem(
+            storageKey
+          );
+        }
+
+        await createNewLead();
+      } catch (error) {
+        console.error(error);
+
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Unable to initialize demo."
+        );
+      } finally {
+        setInitializing(false);
+      }
+    }
+
+    async function createNewLead() {
+      const response =
+        await fetch(
+          "/api/leads",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              businessSlug,
+            }),
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Unable to create lead."
+        );
+      }
+
+      setLeadId(
+        data.lead.id
+      );
+
+      setMessages(
+        data.messages
+      );
+
+      setLead({});
+      setStatus("new");
+      setReadyToBook(false);
+      setCompleted(false);
+
+      const storageKey =
+        `leadflow:${businessSlug}:leadId`;
+
+      localStorage.setItem(
+        storageKey,
+        data.lead.id
+      );
+    }
+
+    initializeDemo();
+  }, [businessSlug]);
+
+  /* =========================================================
+     AUTO SCROLL
+     ========================================================= */
+
+  useEffect(() => {
+    messagesEndRef.current
+      ?.scrollIntoView({
+        behavior: "smooth",
+      });
+  }, [messages, loading]);
+
+  /* =========================================================
+     SEND MESSAGE
+     ========================================================= */
+
+  async function sendMessage(
+    messageText?: string
+  ) {
+    const text =
+      messageText?.trim() ||
+      input.trim();
+
+    if (
+      !text ||
+      loading ||
+      completed ||
+      !leadId
+    ) {
+      return;
+    }
+
+    setError(null);
+
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      sender: "user",
+      text,
+    };
+
+    const updatedMessages = [
+      ...messages,
+      userMessage,
+    ];
+
+    setMessages(
+      updatedMessages
+    );
+
+    setInput("");
+    setLoading(true);
+
+    try {
+      const response =
+        await fetch(
+          "/api/chat",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              leadId,
+              messages:
+                updatedMessages,
+              lead,
+            }),
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Unable to get AI response."
+        );
+      }
+
+      const result =
+        data as AIResponse;
+
+      const aiMessage: Message = {
+        id:
+          data.messageId ||
+          crypto.randomUUID(),
+
+        sender: "ai",
+
+        text: result.reply,
+      };
+
+      setMessages(
+        (previous) => [
+          ...previous,
+          aiMessage,
+        ]
+      );
+
+      setLead(
+        (previous) => ({
+          ...previous,
+
+          industry:
+            result.lead
+              .industry ||
+            previous.industry,
+
+          service:
+            result.lead
+              .service ||
+            previous.service,
+
+          urgency:
+            result.lead
+              .urgency ||
+            previous.urgency,
+
+          timeline:
+            result.lead
+              .timeline ||
+            previous.timeline,
+
+          name:
+            result.lead.name ||
+            previous.name,
+
+          phone:
+            result.lead.phone ||
+            previous.phone,
+        })
+      );
+
+      setStatus(
+        result.status
+      );
+
+      setReadyToBook(
+        result.readyToBook
+      );
+    } catch (error) {
+      console.error(error);
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* =========================================================
+     FORM
+     ========================================================= */
+
+  function handleSubmit(
+    event: FormEvent<HTMLFormElement>
+  ) {
+    event.preventDefault();
+
+    sendMessage();
+  }
+
+  /* =========================================================
+     BOOK APPOINTMENT
+     ========================================================= */
+
+  async function chooseAppointment(
+    appointment: string
+  ) {
+    if (
+      !leadId ||
+      loading
+    ) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response =
+        await fetch(
+          "/api/appointments",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              leadId,
+              appointment,
+            }),
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Unable to save appointment."
+        );
+      }
+
+      const userMessage: Message = {
+        id:
+          crypto.randomUUID(),
+
+        sender: "user",
+
+        text: appointment,
+      };
+
+      const aiMessage: Message = {
+        id:
+          data.messageId ||
+          crypto.randomUUID(),
+
+        sender: "ai",
+
+        text:
+          data.confirmation,
+      };
+
+      setMessages(
+        (previous) => [
+          ...previous,
+          userMessage,
+          aiMessage,
+        ]
+      );
+
+      setLead(
+        (previous) => ({
+          ...previous,
+          appointment,
+        })
+      );
+
+      setCompleted(true);
+      setReadyToBook(false);
+      setStatus("hot");
+    } catch (error) {
+      console.error(error);
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /* =========================================================
+     RESTART
+     ========================================================= */
+
+  async function restartDemo() {
+    try {
+      setInitializing(true);
+      setError(null);
+
+      const storageKey =
+        `leadflow:${businessSlug}:leadId`;
+
+      localStorage.removeItem(
+        storageKey
+      );
+
+      const response =
+        await fetch(
+          "/api/leads",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              businessSlug,
+            }),
+          }
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Unable to restart conversation."
+        );
+      }
+
+      setLeadId(
+        data.lead.id
+      );
+
+      setMessages(
+        data.messages
+      );
+
+      setLead({});
+      setInput("");
+      setStatus("new");
+      setReadyToBook(false);
+      setCompleted(false);
+      setLoading(false);
+
+      localStorage.setItem(
+        storageKey,
+        data.lead.id
+      );
+    } catch (error) {
+      console.error(error);
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to restart conversation."
+      );
+    } finally {
+      setInitializing(false);
+    }
+  }
+
+  /* =========================================================
+     INITIAL LOADING
+     ========================================================= */
+
+  if (initializing) {
+    return (
+      <div className="flex min-h-[500px] items-center justify-center rounded-3xl border border-white/10 bg-zinc-950">
+        <div className="flex items-center gap-3 text-sm text-zinc-400">
+          <LoaderCircle
+            size={18}
+            className="animate-spin"
+          />
+
+          Loading conversation...
+        </div>
+      </div>
+    );
+  }
+
+  /* =========================================================
+     UI
+     ========================================================= */
+
+  return (
+    <div
+      className={
+        compact
+          ? "w-full"
+          : "grid gap-6 lg:grid-cols-[1.4fr_0.8fr]"
+      }
+    >
+      {/* CHAT */}
+
+      <div className="overflow-hidden rounded-3xl border border-white/10 bg-zinc-950">
+        {/* HEADER */}
+
+        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/15 text-blue-400">
+              <Bot size={20} />
+            </div>
+
+            <div>
+              <p className="font-medium">
+                {businessName} AI
+              </p>
+
+              <div className="flex items-center gap-2 text-xs text-zinc-500">
+                <span className="h-2 w-2 rounded-full bg-emerald-400" />
+
+                Powered by AI
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={restartDemo}
+            disabled={loading}
+            className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs text-zinc-400 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
+          >
+            <RefreshCcw
+              size={14}
+            />
+
+            Restart
+          </button>
+        </div>
+
+        {/* MESSAGES */}
+
+        <div
+          className={`space-y-5 overflow-y-auto px-5 py-6 ${compact
+            ? "h-[430px]"
+            : "h-[500px]"
+            }`}
+        >
+          {messages.map(
+            (message) => (
+              <div
+                key={message.id}
+                className={`flex ${message.sender ===
+                  "user"
+                  ? "justify-end"
+                  : "justify-start"
+                  }`}
+              >
+                <div
+                  className={`flex max-w-[85%] gap-3 ${message.sender ===
+                    "user"
+                    ? "flex-row-reverse"
+                    : "flex-row"
+                    }`}
+                >
+                  <div
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${message.sender ===
+                      "user"
+                      ? "bg-white text-black"
+                      : "bg-violet-500/15 text-blue-400"
+                      }`}
+                  >
+                    {message.sender ===
+                      "user" ? (
+                      <User
+                        size={
+                          15
+                        }
+                      />
+                    ) : (
+                      <Bot
+                        size={
+                          15
+                        }
+                      />
+                    )}
+                  </div>
+
+                  <div
+                    className={`rounded-2xl px-4 py-3 text-sm leading-6 ${message.sender ===
+                      "user"
+                      ? "rounded-tr-md bg-white text-black"
+                      : "rounded-tl-md border border-white/10 bg-white/[0.04] text-zinc-200"
+                      }`}
+                  >
+                    {message.text}
+                  </div>
+                </div>
+              </div>
+            )
+          )}
+
+          {loading && (
+            <div className="flex justify-start">
+              <div className="flex gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-500/15 text-blue-400">
+                  <Bot
+                    size={15}
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 rounded-2xl rounded-tl-md border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-zinc-400">
+                  <LoaderCircle
+                    size={16}
+                    className="animate-spin"
+                  />
+
+                  Thinking...
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div
+            ref={
+              messagesEndRef
+            }
+          />
+        </div>
+
+        {/* INPUT */}
+
+        <div className="border-t border-white/10 p-5">
+          {error && (
+            <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+              {error}
+            </div>
+          )}
+
+          {readyToBook &&
+            !completed ? (
+            <div>
+              <p className="mb-3 text-sm text-zinc-400">
+                Choose an
+                available
+                appointment:
+              </p>
+
+              <div className="flex flex-wrap gap-2">
+                {appointments.map(
+                  (
+                    appointment
+                  ) => (
+                    <button
+                      key={
+                        appointment
+                      }
+                      onClick={() =>
+                        chooseAppointment(
+                          appointment
+                        )
+                      }
+                      disabled={
+                        loading
+                      }
+                      className="rounded-full border border-violet-500/30 bg-blue-500/10 px-4 py-2.5 text-sm text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-50"
+                    >
+                      {
+                        appointment
+                      }
+                    </button>
+                  )
+                )}
+              </div>
+            </div>
+          ) : completed ? (
+            <div className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 px-4 py-3 text-sm text-emerald-400">
+              <CheckCircle2
+                size={18}
+              />
+
+              Lead qualified and
+              appointment booked
+            </div>
+          ) : (
+            <form
+              onSubmit={
+                handleSubmit
+              }
+              className="flex gap-3"
+            >
+              <input
+                value={input}
+                onChange={(
+                  event
+                ) =>
+                  setInput(
+                    event
+                      .target
+                      .value
+                  )
+                }
+                placeholder="Describe what you need..."
+                disabled={
+                  loading
+                }
+                autoComplete="off"
+                className="flex-1 rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-violet-500/50 disabled:cursor-not-allowed disabled:opacity-60"
+              />
+
+              <button
+                type="submit"
+                disabled={
+                  loading ||
+                  !input.trim() ||
+                  !leadId
+                }
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {loading ? (
+                  <LoaderCircle
+                    size={17}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Send
+                    size={
+                      17
+                    }
+                  />
+                )}
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+
+      {/* LEAD SUMMARY */}
+
+      {!compact && (
+        <LeadSummary
+          lead={lead}
+          status={status}
+          completed={completed}
+        />
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   LEAD SUMMARY
+   ========================================================= */
+
+function LeadSummary({
+  lead,
+  status,
+  completed,
+}: {
+  lead: LeadData;
+  status: LeadStatus;
+  completed: boolean;
+}) {
+  return (
+    <aside className="h-fit rounded-3xl border border-white/10 bg-white/[0.03] p-6 lg:sticky lg:top-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-zinc-500">
+            Live Lead Profile
+          </p>
+
+          <h2 className="mt-1 text-xl font-semibold">
+            Qualification
+          </h2>
+        </div>
+
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
+          <Flame size={19} />
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4">
+        <p className="text-xs uppercase tracking-wider text-zinc-600">
+          Lead Status
+        </p>
+
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <span className="font-medium text-white">
+            {completed
+              ? "Appointment Booked"
+              : "Qualifying"}
+          </span>
+
+          <StatusBadge
+            status={status}
+          />
+        </div>
+      </div>
+
+      <div className="mt-5 space-y-4">
+        <SummaryRow
+          label="Industry"
+          value={
+            lead.industry
+          }
+        />
+
+        <SummaryRow
+          label="Service"
+          value={
+            lead.service
+          }
+        />
+
+        <SummaryRow
+          label="Urgency"
+          value={
+            lead.urgency
+          }
+        />
+
+        <SummaryRow
+          label="Timeline"
+          value={
+            lead.timeline
+          }
+        />
+
+        <SummaryRow
+          label="Name"
+          value={lead.name}
+        />
+
+        <SummaryRow
+          label="Phone"
+          value={lead.phone}
+        />
+      </div>
+
+      {lead.appointment && (
+        <div className="mt-6 rounded-2xl border border-blue-500/20 bg-violet-500/5 p-4">
+          <div className="flex items-center gap-3">
+            <CalendarDays
+              size={19}
+              className="text-blue-400"
+            />
+
+            <div>
+              <p className="text-xs text-zinc-500">
+                Appointment
+              </p>
+
+              <p className="mt-1 text-sm font-medium text-white">
+                {
+                  lead.appointment
+                }
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-6 border-t border-white/10 pt-5">
+        <p className="text-xs leading-5 text-zinc-600">
+          Lead qualification
+          information is
+          extracted from the
+          conversation in real
+          time.
+        </p>
+      </div>
+    </aside>
+  );
+}
+
+/* =========================================================
+   STATUS BADGE
+   ========================================================= */
+
+function StatusBadge({
+  status,
+}: {
+  status: LeadStatus;
+}) {
+  const styles = {
+    new:
+      "bg-zinc-500/10 text-zinc-400",
+
+    warm:
+      "bg-amber-500/10 text-amber-400",
+
+    hot:
+      "bg-red-500/10 text-red-400",
+  };
+
+  return (
+    <span
+      className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${styles[status]}`}
+    >
+      {status}
+    </span>
+  );
+}
+
+/* =========================================================
+   SUMMARY ROW
+   ========================================================= */
+
+function SummaryRow({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-white/5 pb-3">
+      <span className="text-sm text-zinc-500">
+        {label}
+      </span>
+
+      <span className="max-w-[60%] text-right text-sm text-zinc-200">
+        {value || "—"}
+      </span>
+    </div>
+  );
+}
+
+/* =========================================================
+   STATUS NORMALIZER
+   ========================================================= */
+
+function normalizeStatus(
+  status: string
+): LeadStatus {
+  if (
+    status === "hot" ||
+    status === "qualified" ||
+    status === "booked"
+  ) {
+    return "hot";
+  }
+
+  if (status === "warm") {
+    return "warm";
+  }
+
+  return "new";
+}
