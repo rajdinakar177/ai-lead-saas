@@ -14,6 +14,7 @@ const allowedQualificationFields = [
   "name",
   "phone",
   "service",
+  "location",
   "urgency",
   "timeline",
 ] as const;
@@ -58,13 +59,13 @@ export async function PATCH(
         body.qualificationFields
       )
         ? body.qualificationFields.filter(
-            (
-              field
-            ): field is QualificationField =>
-              allowedQualificationFields.includes(
-                field as QualificationField
-              )
-          )
+          (
+            field
+          ): field is QualificationField =>
+            allowedQualificationFields.includes(
+              field as QualificationField
+            )
+        )
         : [];
 
     const services =

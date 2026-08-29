@@ -1,59 +1,48 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+
 import {
   Check,
   Code2,
   Copy,
   MessageCircleMore,
 } from "lucide-react";
-import {
-  useMemo,
-  useState,
-} from "react";
 
-type Props = {
+type EmbedCodeProps = {
   slug: string;
 };
 
 export function EmbedCode({
   slug,
-}: Props) {
-  const [copied, setCopied] =
-    useState(false);
+}: EmbedCodeProps) {
+  const [origin, setOrigin] = useState("");
+  const [copied, setCopied] = useState(false);
 
-  const baseUrl =
-    typeof window !==
-    "undefined"
-      ? window.location.origin
-      : "";
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
 
-  const widgetCode =
-    useMemo(
-      () => `<script
-  src="${baseUrl}/widget.js"
+  const widgetCode = useMemo(() => {
+    const scriptUrl = origin
+      ? `${origin}/widget.js`
+      : "/widget.js";
+
+    return `<script
+  src="${scriptUrl}"
   data-business="${slug}"
-></script>`,
-      [
-        baseUrl,
-        slug,
-      ]
-    );
+></script>`;
+  }, [origin, slug]);
 
   async function copyCode() {
     try {
-      await navigator.clipboard.writeText(
-        widgetCode
-      );
+      await navigator.clipboard.writeText(widgetCode);
 
       setCopied(true);
 
-      setTimeout(
-        () =>
-          setCopied(
-            false
-          ),
-        2000
-      );
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
     } catch (error) {
       console.error(
         "Unable to copy widget code:",
@@ -66,9 +55,7 @@ export function EmbedCode({
     <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
       <div className="flex items-start gap-4">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
-          <MessageCircleMore
-            size={20}
-          />
+          <MessageCircleMore size={20} />
         </div>
 
         <div>
@@ -77,60 +64,41 @@ export function EmbedCode({
           </h2>
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
-            Add your AI lead
-            assistant to your
-            existing website with
-            one script tag.
+            Add your AI lead assistant to your existing website with one
+            script tag.
           </p>
         </div>
       </div>
 
       <div className="mt-7">
         <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-zinc-600">
-          <Code2
-            size={14}
-          />
-
+          <Code2 size={14} />
           Installation Code
         </div>
 
         <div className="mt-3 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
           <pre className="overflow-x-auto p-5 text-sm leading-6 text-zinc-300">
-            <code>
-              {
-                widgetCode
-              }
-            </code>
+            <code>{widgetCode}</code>
           </pre>
         </div>
       </div>
 
       <button
         type="button"
-        onClick={
-          copyCode
-        }
+        onClick={copyCode}
         className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-medium text-black transition hover:bg-zinc-200"
       >
         {copied ? (
           <>
             <Check
-              size={
-                16
-              }
+              size={16}
               className="text-emerald-600"
             />
-
             Copied
           </>
         ) : (
           <>
-            <Copy
-              size={
-                16
-              }
-            />
-
+            <Copy size={16} />
             Copy Code
           </>
         )}
@@ -142,9 +110,7 @@ export function EmbedCode({
         </p>
 
         <p className="mt-2 text-sm leading-6 text-zinc-500">
-          Paste the code
-          immediately before
-          the closing{" "}
+          Paste the code immediately before the closing{" "}
           <code className="rounded bg-black/30 px-1.5 py-0.5 text-zinc-300">
             &lt;/body&gt;
           </code>{" "}
@@ -152,9 +118,7 @@ export function EmbedCode({
         </p>
 
         <p className="mt-3 text-sm leading-6 text-zinc-500">
-          The widget will
-          automatically appear in
-          the bottom-right corner.
+          The widget will automatically appear in the bottom-right corner.
         </p>
       </div>
     </div>

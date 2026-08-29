@@ -64,9 +64,13 @@ export async function POST(
           "public-lead-page",
       });
 
-const welcomeText =
-  business.aiSettings?.welcomeMessage?.trim() ||
-  `Hi! 👋 I'm the AI assistant for ${business.name}. What can we help you with today?`;
+    const services: string[] =
+      business.aiSettings?.services ??
+      [];
+
+    const welcomeText =
+      business.aiSettings?.welcomeMessage?.trim() ||
+      `Hi! 👋 Welcome to ${business.name}. What can we help you with today?`;
 
     const welcomeMessage =
       await Message.create({
@@ -78,6 +82,14 @@ const welcomeText =
         content:
           welcomeText,
       });
+
+    const options =
+      services.map(
+        (service) => ({
+          label: service,
+          value: service,
+        })
+      );
 
     return NextResponse.json(
       {
@@ -101,15 +113,32 @@ const welcomeText =
           id:
             lead._id.toString(),
 
-          industry: null,
-          service: null,
-          urgency: null,
-          timeline: null,
-          name: null,
-          phone: null,
+          industry:
+            business.industry,
+
+          service:
+            null,
+
+          location:
+            null,
+
+          urgency:
+            null,
+
+          timeline:
+            null,
+
+          name:
+            null,
+
+          phone:
+            null,
+
           status:
             lead.status,
-          appointment: null,
+
+          appointment:
+            null,
         },
 
         messages: [
@@ -123,6 +152,8 @@ const welcomeText =
               welcomeMessage.content,
           },
         ],
+
+        options,
       },
       {
         status: 201,

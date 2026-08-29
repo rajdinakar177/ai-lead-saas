@@ -75,6 +75,7 @@ export default async function SettingsPage() {
                 "name",
                 "phone",
                 "service",
+                "location",
                 "urgency",
                 "timeline",
               ],
@@ -90,8 +91,8 @@ export default async function SettingsPage() {
             <PublicLeadLink
               slug={business.slug}
             />
-<br></br>
-            <EmbedCode 
+            <br></br>
+            <EmbedCode
               slug={business.slug}
             />
           </>

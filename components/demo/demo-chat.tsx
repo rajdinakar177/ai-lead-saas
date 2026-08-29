@@ -10,12 +10,17 @@ import {
   Send,
   User,
 } from "lucide-react";
+
 import {
   FormEvent,
   useEffect,
   useRef,
   useState,
 } from "react";
+
+/* =========================================================
+   TYPES
+   ========================================================= */
 
 type Message = {
   id: string;
@@ -26,6 +31,7 @@ type Message = {
 type LeadData = {
   industry?: string;
   service?: string;
+  location?: string;
   urgency?: string;
   timeline?: string;
   name?: string;
@@ -38,20 +44,34 @@ type LeadStatus =
   | "warm"
   | "hot";
 
-type AIResponse = {
+type ChatOption = {
+  label: string;
+  value: string;
+};
+
+type ChatApiResponse = {
   reply: string;
 
   lead: {
     industry: string | null;
     service: string | null;
+    location: string | null;
     urgency: string | null;
     timeline: string | null;
     name: string | null;
     phone: string | null;
   };
 
-  status: LeadStatus;
+  status:
+  | "new"
+  | "warm"
+  | "hot";
+
   readyToBook: boolean;
+
+  options?: ChatOption[];
+
+  messageId?: string;
 };
 
 type DemoChatProps = {
@@ -60,52 +80,124 @@ type DemoChatProps = {
   compact?: boolean;
 };
 
-const appointments = [
-  "Today · 4:00 PM",
-  "Tomorrow · 10:00 AM",
-  "Tomorrow · 2:00 PM",
-  "Friday · 11:30 AM",
-];
+/* =========================================================
+   MOCK APPOINTMENTS
+   ========================================================= */
+
+const appointments = {
+  Today: [
+    "Today · 4:00 PM",
+  ],
+
+  Tomorrow: [
+    "Tomorrow · 10:00 AM",
+    "Tomorrow · 2:00 PM",
+  ],
+
+  "This week": [
+    "Tomorrow · 10:00 AM",
+    "Tomorrow · 2:00 PM",
+    "Friday · 11:30 AM",
+  ],
+
+  "Next week": [
+    "Monday · 10:00 AM",
+    "Monday · 2:00 PM",
+    "Tuesday · 11:30 AM",
+  ],
+};
+
+/* =========================================================
+   DEMO CHAT
+   ========================================================= */
 
 export function DemoChat({
   businessSlug,
   businessName,
   compact = false,
 }: DemoChatProps) {
-  const [leadId, setLeadId] =
-    useState<string | null>(null);
+  const [
+    leadId,
+    setLeadId,
+  ] =
+    useState<string | null>(
+      null
+    );
 
-  const [initializing, setInitializing] =
+  const [
+    initializing,
+    setInitializing,
+  ] =
     useState(true);
 
-  const [messages, setMessages] =
-    useState<Message[]>([]);
+  const [
+    options,
+    setOptions,
+  ] =
+    useState<ChatOption[]>(
+      []
+    );
 
-  const [lead, setLead] =
-    useState<LeadData>({});
+  const [
+    messages,
+    setMessages,
+  ] =
+    useState<Message[]>(
+      []
+    );
 
-  const [status, setStatus] =
-    useState<LeadStatus>("new");
+  const [
+    lead,
+    setLead,
+  ] =
+    useState<LeadData>(
+      {}
+    );
 
-  const [input, setInput] =
+  const [
+    status,
+    setStatus,
+  ] =
+    useState<LeadStatus>(
+      "new"
+    );
+
+  const [
+    input,
+    setInput,
+  ] =
     useState("");
 
-  const [loading, setLoading] =
+  const [
+    loading,
+    setLoading,
+  ] =
     useState(false);
 
   const [
     readyToBook,
     setReadyToBook,
-  ] = useState(false);
-
-  const [completed, setCompleted] =
+  ] =
     useState(false);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [
+    completed,
+    setCompleted,
+  ] =
+    useState(false);
+
+  const [
+    error,
+    setError,
+  ] =
+    useState<string | null>(
+      null
+    );
 
   const messagesEndRef =
-    useRef<HTMLDivElement>(null);
+    useRef<HTMLDivElement>(
+      null
+    );
 
   /* =========================================================
      INITIALIZE / RESTORE LEAD
@@ -114,7 +206,10 @@ export function DemoChat({
   useEffect(() => {
     async function initializeDemo() {
       try {
-        setInitializing(true);
+        setInitializing(
+          true
+        );
+
         setError(null);
 
         const storageKey =
@@ -152,6 +247,10 @@ export function DemoChat({
                 data.lead.service ??
                 undefined,
 
+              location:
+                data.lead.location ??
+                undefined,
+
               urgency:
                 data.lead.urgency ??
                 undefined,
@@ -180,13 +279,17 @@ export function DemoChat({
             );
 
             setCompleted(
-              Boolean(data.completed)
+              Boolean(
+                data.completed
+              )
             );
 
             setReadyToBook(
               data.lead.status ===
               "qualified"
             );
+
+            setOptions([]);
 
             return;
           }
@@ -198,7 +301,9 @@ export function DemoChat({
 
         await createNewLead();
       } catch (error) {
-        console.error(error);
+        console.error(
+          error
+        );
 
         setError(
           error instanceof Error
@@ -206,7 +311,9 @@ export function DemoChat({
             : "Unable to initialize demo."
         );
       } finally {
-        setInitializing(false);
+        setInitializing(
+          false
+        );
       }
     }
 
@@ -222,9 +329,10 @@ export function DemoChat({
                 "application/json",
             },
 
-            body: JSON.stringify({
-              businessSlug,
-            }),
+            body:
+              JSON.stringify({
+                businessSlug,
+              }),
           }
         );
 
@@ -247,8 +355,15 @@ export function DemoChat({
       );
 
       setLead({});
+
+      setOptions([]);
+
       setStatus("new");
-      setReadyToBook(false);
+
+      setReadyToBook(
+        false
+      );
+
       setCompleted(false);
 
       const storageKey =
@@ -270,9 +385,14 @@ export function DemoChat({
   useEffect(() => {
     messagesEndRef.current
       ?.scrollIntoView({
-        behavior: "smooth",
+        behavior:
+          "smooth",
       });
-  }, [messages, loading]);
+  }, [
+    messages,
+    loading,
+    options,
+  ]);
 
   /* =========================================================
      SEND MESSAGE
@@ -296,22 +416,31 @@ export function DemoChat({
 
     setError(null);
 
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      sender: "user",
+    setOptions([]);
+
+    const userMessage: Message =
+    {
+      id:
+        crypto.randomUUID(),
+
+      sender:
+        "user",
+
       text,
     };
 
-    const updatedMessages = [
-      ...messages,
-      userMessage,
-    ];
+    const updatedMessages =
+      [
+        ...messages,
+        userMessage,
+      ];
 
     setMessages(
       updatedMessages
     );
 
     setInput("");
+
     setLoading(true);
 
     try {
@@ -319,95 +448,105 @@ export function DemoChat({
         await fetch(
           "/api/chat",
           {
-            method: "POST",
+            method:
+              "POST",
 
             headers: {
               "Content-Type":
                 "application/json",
             },
 
-            body: JSON.stringify({
-              leadId,
-              messages:
-                updatedMessages,
-              lead,
-            }),
+            body:
+              JSON.stringify({
+                leadId,
+
+                messages:
+                  updatedMessages,
+
+                lead,
+              }),
           }
         );
 
-      const data =
+      const data:
+        ChatApiResponse =
         await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.error ||
-          "Unable to get AI response."
+          "Unable to send message."
         );
       }
 
-      const result =
-        data as AIResponse;
+      setLead({
+        industry:
+          data.lead.industry ??
+          undefined,
 
-      const aiMessage: Message = {
-        id:
-          data.messageId ||
-          crypto.randomUUID(),
+        service:
+          data.lead.service ??
+          undefined,
 
-        sender: "ai",
+        location:
+          data.lead.location ??
+          undefined,
 
-        text: result.reply,
-      };
+        urgency:
+          data.lead.urgency ??
+          undefined,
 
-      setMessages(
-        (previous) => [
-          ...previous,
-          aiMessage,
-        ]
-      );
+        timeline:
+          data.lead.timeline ??
+          undefined,
 
-      setLead(
-        (previous) => ({
-          ...previous,
+        name:
+          data.lead.name ??
+          undefined,
 
-          industry:
-            result.lead
-              .industry ||
-            previous.industry,
+        phone:
+          data.lead.phone ??
+          undefined,
 
-          service:
-            result.lead
-              .service ||
-            previous.service,
-
-          urgency:
-            result.lead
-              .urgency ||
-            previous.urgency,
-
-          timeline:
-            result.lead
-              .timeline ||
-            previous.timeline,
-
-          name:
-            result.lead.name ||
-            previous.name,
-
-          phone:
-            result.lead.phone ||
-            previous.phone,
-        })
-      );
+        appointment:
+          lead.appointment,
+      });
 
       setStatus(
-        result.status
+        data.status
+      );
+
+      setOptions(
+        data.options ??
+        []
+      );
+
+      setMessages(
+        (
+          current
+        ) => [
+            ...current,
+
+            {
+              id:
+                data.messageId ||
+                crypto.randomUUID(),
+
+              sender:
+                "ai",
+
+              text:
+                data.reply,
+            },
+          ]
       );
 
       setReadyToBook(
-        result.readyToBook
+        data.readyToBook
       );
     } catch (error) {
-      console.error(error);
+      console.error(
+        error
+      );
 
       setError(
         error instanceof Error
@@ -415,8 +554,31 @@ export function DemoChat({
           : "Something went wrong."
       );
     } finally {
-      setLoading(false);
+      setLoading(
+        false
+      );
     }
+  }
+
+  /* =========================================================
+     QUICK REPLY
+     ========================================================= */
+
+  async function handleOptionClick(
+    option: ChatOption
+  ) {
+    if (
+      loading ||
+      completed
+    ) {
+      return;
+    }
+
+    setOptions([]);
+
+    await sendMessage(
+      option.value
+    );
   }
 
   /* =========================================================
@@ -424,7 +586,8 @@ export function DemoChat({
      ========================================================= */
 
   function handleSubmit(
-    event: FormEvent<HTMLFormElement>
+    event:
+      FormEvent<HTMLFormElement>
   ) {
     event.preventDefault();
 
@@ -446,24 +609,31 @@ export function DemoChat({
     }
 
     try {
-      setLoading(true);
+      setLoading(
+        true
+      );
+
       setError(null);
+
+      setOptions([]);
 
       const response =
         await fetch(
           "/api/appointments",
           {
-            method: "POST",
+            method:
+              "POST",
 
             headers: {
               "Content-Type":
                 "application/json",
             },
 
-            body: JSON.stringify({
-              leadId,
-              appointment,
-            }),
+            body:
+              JSON.stringify({
+                leadId,
+                appointment,
+              }),
           }
         );
 
@@ -477,46 +647,65 @@ export function DemoChat({
         );
       }
 
-      const userMessage: Message = {
+      const userMessage:
+        Message = {
         id:
           crypto.randomUUID(),
 
-        sender: "user",
+        sender:
+          "user",
 
-        text: appointment,
+        text:
+          appointment,
       };
 
-      const aiMessage: Message = {
+      const aiMessage:
+        Message = {
         id:
           data.messageId ||
           crypto.randomUUID(),
 
-        sender: "ai",
+        sender:
+          "ai",
 
         text:
           data.confirmation,
       };
 
       setMessages(
-        (previous) => [
-          ...previous,
-          userMessage,
-          aiMessage,
-        ]
+        (
+          previous
+        ) => [
+            ...previous,
+            userMessage,
+            aiMessage,
+          ]
       );
 
       setLead(
-        (previous) => ({
+        (
+          previous
+        ) => ({
           ...previous,
           appointment,
         })
       );
 
-      setCompleted(true);
-      setReadyToBook(false);
-      setStatus("hot");
+      setCompleted(
+        true
+      );
+
+      setReadyToBook(
+        false
+      );
+
+      setStatus(
+        "hot"
+      );
     } catch (error) {
-      console.error(error);
+      console.error(
+        error
+      );
 
       setError(
         error instanceof Error
@@ -524,7 +713,9 @@ export function DemoChat({
           : "Something went wrong."
       );
     } finally {
-      setLoading(false);
+      setLoading(
+        false
+      );
     }
   }
 
@@ -534,8 +725,13 @@ export function DemoChat({
 
   async function restartDemo() {
     try {
-      setInitializing(true);
+      setInitializing(
+        true
+      );
+
       setError(null);
+
+      setOptions([]);
 
       const storageKey =
         `leadflow:${businessSlug}:leadId`;
@@ -548,16 +744,18 @@ export function DemoChat({
         await fetch(
           "/api/leads",
           {
-            method: "POST",
+            method:
+              "POST",
 
             headers: {
               "Content-Type":
                 "application/json",
             },
 
-            body: JSON.stringify({
-              businessSlug,
-            }),
+            body:
+              JSON.stringify({
+                businessSlug,
+              }),
           }
         );
 
@@ -580,18 +778,35 @@ export function DemoChat({
       );
 
       setLead({});
-      setInput("");
-      setStatus("new");
-      setReadyToBook(false);
-      setCompleted(false);
-      setLoading(false);
+
+      setOptions(
+        data.options ?? []
+      );
+
+      setStatus(
+        "new"
+      );
+
+      setReadyToBook(
+        false
+      );
+
+      setCompleted(
+        false
+      );
+
+      setLoading(
+        false
+      );
 
       localStorage.setItem(
         storageKey,
         data.lead.id
       );
     } catch (error) {
-      console.error(error);
+      console.error(
+        error
+      );
 
       setError(
         error instanceof Error
@@ -599,9 +814,26 @@ export function DemoChat({
           : "Unable to restart conversation."
       );
     } finally {
-      setInitializing(false);
+      setInitializing(
+        false
+      );
     }
   }
+
+  /* =========================================================
+     APPOINTMENT FILTERING
+     ========================================================= */
+
+  const availableAppointments =
+    lead.timeline &&
+      lead.timeline in
+      appointments
+      ? appointments[
+      lead.timeline as keyof typeof appointments
+      ]
+      : Object.values(
+        appointments
+      ).flat();
 
   /* =========================================================
      INITIAL LOADING
@@ -616,7 +848,8 @@ export function DemoChat({
             className="animate-spin"
           />
 
-          Loading conversation...
+          Loading
+          conversation...
         </div>
       </div>
     );
@@ -642,12 +875,19 @@ export function DemoChat({
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/15 text-blue-400">
-              <Bot size={20} />
+              <Bot
+                size={
+                  20
+                }
+              />
             </div>
 
             <div>
               <p className="font-medium">
-                {businessName} AI
+                {
+                  businessName
+                }{" "}
+                AI
               </p>
 
               <div className="flex items-center gap-2 text-xs text-zinc-500">
@@ -659,12 +899,19 @@ export function DemoChat({
           </div>
 
           <button
-            onClick={restartDemo}
-            disabled={loading}
+            type="button"
+            onClick={
+              restartDemo
+            }
+            disabled={
+              loading
+            }
             className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs text-zinc-400 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
           >
             <RefreshCcw
-              size={14}
+              size={
+                14
+              }
             />
 
             Restart
@@ -675,32 +922,36 @@ export function DemoChat({
 
         <div
           className={`space-y-5 overflow-y-auto px-5 py-6 ${compact
-            ? "h-[430px]"
-            : "h-[500px]"
+              ? "h-[430px]"
+              : "h-[500px]"
             }`}
         >
           {messages.map(
-            (message) => (
+            (
+              message
+            ) => (
               <div
-                key={message.id}
+                key={
+                  message.id
+                }
                 className={`flex ${message.sender ===
-                  "user"
-                  ? "justify-end"
-                  : "justify-start"
+                    "user"
+                    ? "justify-end"
+                    : "justify-start"
                   }`}
               >
                 <div
                   className={`flex max-w-[85%] gap-3 ${message.sender ===
-                    "user"
-                    ? "flex-row-reverse"
-                    : "flex-row"
+                      "user"
+                      ? "flex-row-reverse"
+                      : "flex-row"
                     }`}
                 >
                   <div
                     className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${message.sender ===
-                      "user"
-                      ? "bg-white text-black"
-                      : "bg-violet-500/15 text-blue-400"
+                        "user"
+                        ? "bg-white text-black"
+                        : "bg-violet-500/15 text-blue-400"
                       }`}
                   >
                     {message.sender ===
@@ -721,12 +972,14 @@ export function DemoChat({
 
                   <div
                     className={`rounded-2xl px-4 py-3 text-sm leading-6 ${message.sender ===
-                      "user"
-                      ? "rounded-tr-md bg-white text-black"
-                      : "rounded-tl-md border border-white/10 bg-white/[0.04] text-zinc-200"
+                        "user"
+                        ? "rounded-tr-md bg-white text-black"
+                        : "rounded-tl-md border border-white/10 bg-white/[0.04] text-zinc-200"
                       }`}
                   >
-                    {message.text}
+                    {
+                      message.text
+                    }
                   </div>
                 </div>
               </div>
@@ -738,13 +991,17 @@ export function DemoChat({
               <div className="flex gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-500/15 text-blue-400">
                   <Bot
-                    size={15}
+                    size={
+                      15
+                    }
                   />
                 </div>
 
                 <div className="flex items-center gap-2 rounded-2xl rounded-tl-md border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-zinc-400">
                   <LoaderCircle
-                    size={16}
+                    size={
+                      16
+                    }
                     className="animate-spin"
                   />
 
@@ -764,23 +1021,65 @@ export function DemoChat({
         {/* INPUT */}
 
         <div className="border-t border-white/10 p-5">
+          {/* QUICK REPLIES */}
+
+          {options.length >
+            0 &&
+            !loading &&
+            !readyToBook &&
+            !completed && (
+              <div className="mb-4 flex flex-wrap gap-2">
+                {options.map(
+                  (
+                    option
+                  ) => (
+                    <button
+                      key={
+                        option.value
+                      }
+                      type="button"
+                      onClick={() =>
+                        handleOptionClick(
+                          option
+                        )
+                      }
+                      disabled={
+                        loading
+                      }
+                      className="rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-2.5 text-sm text-violet-200 transition hover:border-violet-400/50 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {
+                        option.label
+                      }
+                    </button>
+                  )
+                )}
+              </div>
+            )}
+
+          {/* ERROR */}
+
           {error && (
             <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
-              {error}
+              {
+                error
+              }
             </div>
           )}
+
+          {/* APPOINTMENTS */}
 
           {readyToBook &&
             !completed ? (
             <div>
               <p className="mb-3 text-sm text-zinc-400">
-                Choose an
-                available
-                appointment:
+                {lead.timeline
+                  ? `Available appointments for ${lead.timeline.toLowerCase()}:`
+                  : "Choose an available appointment:"}
               </p>
 
               <div className="flex flex-wrap gap-2">
-                {appointments.map(
+                {availableAppointments.map(
                   (
                     appointment
                   ) => (
@@ -788,6 +1087,7 @@ export function DemoChat({
                       key={
                         appointment
                       }
+                      type="button"
                       onClick={() =>
                         chooseAppointment(
                           appointment
@@ -809,7 +1109,9 @@ export function DemoChat({
           ) : completed ? (
             <div className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 px-4 py-3 text-sm text-emerald-400">
               <CheckCircle2
-                size={18}
+                size={
+                  18
+                }
               />
 
               Lead qualified and
@@ -823,7 +1125,9 @@ export function DemoChat({
               className="flex gap-3"
             >
               <input
-                value={input}
+                value={
+                  input
+                }
                 onChange={(
                   event
                 ) =>
@@ -852,7 +1156,9 @@ export function DemoChat({
               >
                 {loading ? (
                   <LoaderCircle
-                    size={17}
+                    size={
+                      17
+                    }
                     className="animate-spin"
                   />
                 ) : (
@@ -872,9 +1178,15 @@ export function DemoChat({
 
       {!compact && (
         <LeadSummary
-          lead={lead}
-          status={status}
-          completed={completed}
+          lead={
+            lead
+          }
+          status={
+            status
+          }
+          completed={
+            completed
+          }
         />
       )}
     </div>
@@ -908,7 +1220,11 @@ function LeadSummary({
         </div>
 
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
-          <Flame size={19} />
+          <Flame
+            size={
+              19
+            }
+          />
         </div>
       </div>
 
@@ -925,7 +1241,9 @@ function LeadSummary({
           </span>
 
           <StatusBadge
-            status={status}
+            status={
+              status
+            }
           />
         </div>
       </div>
@@ -946,6 +1264,13 @@ function LeadSummary({
         />
 
         <SummaryRow
+          label="Location"
+          value={
+            lead.location
+          }
+        />
+
+        <SummaryRow
           label="Urgency"
           value={
             lead.urgency
@@ -961,12 +1286,16 @@ function LeadSummary({
 
         <SummaryRow
           label="Name"
-          value={lead.name}
+          value={
+            lead.name
+          }
         />
 
         <SummaryRow
           label="Phone"
-          value={lead.phone}
+          value={
+            lead.phone
+          }
         />
       </div>
 
@@ -974,7 +1303,9 @@ function LeadSummary({
         <div className="mt-6 rounded-2xl border border-blue-500/20 bg-violet-500/5 p-4">
           <div className="flex items-center gap-3">
             <CalendarDays
-              size={19}
+              size={
+                19
+              }
               className="text-blue-400"
             />
 
@@ -1013,7 +1344,8 @@ function LeadSummary({
 function StatusBadge({
   status,
 }: {
-  status: LeadStatus;
+  status:
+  LeadStatus;
 }) {
   const styles = {
     new:
@@ -1030,7 +1362,9 @@ function StatusBadge({
     <span
       className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${styles[status]}`}
     >
-      {status}
+      {
+        status
+      }
     </span>
   );
 }
@@ -1049,11 +1383,14 @@ function SummaryRow({
   return (
     <div className="flex items-center justify-between gap-4 border-b border-white/5 pb-3">
       <span className="text-sm text-zinc-500">
-        {label}
+        {
+          label
+        }
       </span>
 
       <span className="max-w-[60%] text-right text-sm text-zinc-200">
-        {value || "—"}
+        {value ||
+          "—"}
       </span>
     </div>
   );
@@ -1067,14 +1404,20 @@ function normalizeStatus(
   status: string
 ): LeadStatus {
   if (
-    status === "hot" ||
-    status === "qualified" ||
-    status === "booked"
+    status ===
+    "hot" ||
+    status ===
+    "qualified" ||
+    status ===
+    "booked"
   ) {
     return "hot";
   }
 
-  if (status === "warm") {
+  if (
+    status ===
+    "warm"
+  ) {
     return "warm";
   }
 

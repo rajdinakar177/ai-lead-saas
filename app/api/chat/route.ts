@@ -5,6 +5,7 @@ import { Business } from "@/models/Business";
 import { connectDB } from "@/lib/mongodb";
 import { Lead } from "@/models/Lead";
 import { Message } from "@/models/Message";
+import { validatePhoneNumber } from "@/lib/phone";
 type ChatMessage = {
   sender: "ai" | "user";
   text: string;
@@ -13,6 +14,7 @@ type ChatMessage = {
 type LeadData = {
   industry?: string;
   service?: string;
+  location?: string;
   urgency?: string;
   timeline?: string;
   name?: string;
@@ -25,10 +27,12 @@ type RequestBody = {
   messages: ChatMessage[];
   lead: LeadData;
 };
+
 type QualificationField =
   | "name"
   | "phone"
   | "service"
+  | "location"
   | "urgency"
   | "timeline";
 
@@ -41,26 +45,37 @@ type AISettings = {
   | "friendly"
   | "professional"
   | "casual";
-  qualificationFields:
-  QualificationField[];
+  qualificationFields: QualificationField[];
   additionalInstructions: string;
 };
-type LeadStatus = "new" | "warm" | "hot";
+
+type LeadStatus =
+  | "new"
+  | "warm"
+  | "hot";
+
+type AILeadResult = {
+  industry: string | null;
+  service: string | null;
+  location: string | null;
+  urgency: string | null;
+  timeline: string | null;
+  name: string | null;
+  phone: string | null;
+};
+
+type ChatOption = {
+  label: string;
+  value: string;
+};
 
 type AIResult = {
   reply: string;
-  lead: {
-    industry: string | null;
-    service: string | null;
-    urgency: string | null;
-    timeline: string | null;
-    name: string | null;
-    phone: string | null;
-  };
+  lead: AILeadResult;
   status: LeadStatus;
   readyToBook: boolean;
+  options?: ChatOption[];
 };
-
 export async function POST(
   request: Request
 ) {
@@ -112,7 +127,7 @@ export async function POST(
         }
       );
     }
-    const aiSettings = {
+    const aiSettings: AISettings = {
       businessDescription:
         business.aiSettings?.businessDescription ?? "",
 
@@ -133,6 +148,7 @@ export async function POST(
           "name",
           "phone",
           "service",
+          "location",
           "urgency",
           "timeline",
         ],
@@ -140,6 +156,10 @@ export async function POST(
       additionalInstructions:
         business.aiSettings?.additionalInstructions ?? "",
     };
+    console.log(
+  "QUALIFICATION FIELDS:",
+  aiSettings.qualificationFields
+);
     const latestUserMessage =
       [...body.messages]
         .reverse()
@@ -164,11 +184,13 @@ export async function POST(
     let result: AIResult;
 
     if (mode === "mock") {
-      result =
-        createMockResponse(
-          body,
-          aiSettings
-        );
+      result = createMockResponse(
+        body,
+        aiSettings,
+        business.country ?? "US",
+        business.industry
+      );
+
 
       await new Promise(
         (resolve) =>
@@ -206,6 +228,10 @@ export async function POST(
           result.lead.service ??
           existingLead.service,
 
+        location:
+          result.lead.location ??
+          existingLead.location,
+
         urgency:
           result.lead.urgency ??
           existingLead.urgency,
@@ -231,7 +257,6 @@ export async function POST(
         new: true,
       }
     );
-
     const aiMessage =
       await Message.create({
         leadId: body.leadId,
@@ -269,7 +294,10 @@ export async function POST(
 
 function createMockResponse(
   body: RequestBody,
-  settings: AISettings
+  settings: AISettings,
+  country: string,
+  businessIndustry: string
+
 ): AIResult {
   const latestUserMessage =
     [...body.messages]
@@ -280,15 +308,29 @@ function createMockResponse(
       )
       ?.text.trim() || "";
 
+  const latestAssistantMessage =
+    [...body.messages]
+      .reverse()
+      .find(
+        (message) =>
+          message.sender === "ai"
+      )
+      ?.text.toLowerCase() || "";
+
   const text =
     latestUserMessage.toLowerCase();
 
-  const lead = {
+  const lead: AILeadResult = {
     industry:
-      body.lead.industry || null,
+      body.lead.industry ||
+      businessIndustry ||
+      null,
 
     service:
       body.lead.service || null,
+
+    location:
+      body.lead.location || null,
 
     urgency:
       body.lead.urgency || null,
@@ -304,38 +346,7 @@ function createMockResponse(
   };
 
   /* =========================================================
-     DETECT INDUSTRY
-     ========================================================= */
-
-  if (!lead.industry) {
-    if (
-      text.includes("roof") ||
-      text.includes("leak") ||
-      text.includes("shingle")
-    ) {
-      lead.industry =
-        "Roofing";
-    }
-
-    if (
-      text.includes("ac") ||
-      text.includes(
-        "air conditioner"
-      ) ||
-      text.includes(
-        "air conditioning"
-      ) ||
-      text.includes("hvac") ||
-      text.includes("heater") ||
-      text.includes("heating")
-    ) {
-      lead.industry =
-        "HVAC";
-    }
-  }
-
-  /* =========================================================
-     MATCH SERVICE FROM BUSINESS SETTINGS FIRST
+     DETECT SERVICE FROM CONFIGURED SERVICES
      ========================================================= */
 
   if (
@@ -369,30 +380,20 @@ function createMockResponse(
       lead.service =
         "Roof Leak Repair";
     } else if (
-      text.includes(
-        "roof replacement"
-      ) ||
-      text.includes(
-        "replace roof"
-      )
+      text.includes("roof replacement") ||
+      text.includes("replace roof")
     ) {
       lead.service =
         "Roof Replacement";
     } else if (
-      text.includes(
-        "roof inspection"
-      ) ||
-      text.includes(
-        "inspect roof"
-      )
+      text.includes("roof inspection") ||
+      text.includes("inspect roof")
     ) {
       lead.service =
         "Roof Inspection";
     } else if (
       text.includes("ac repair") ||
-      text.includes(
-        "ac not working"
-      ) ||
+      text.includes("ac not working") ||
       text.includes(
         "air conditioner not working"
       )
@@ -400,9 +401,7 @@ function createMockResponse(
       lead.service =
         "AC Repair";
     } else if (
-      text.includes(
-        "heating repair"
-      ) ||
+      text.includes("heating repair") ||
       text.includes(
         "heater not working"
       )
@@ -412,12 +411,61 @@ function createMockResponse(
     } else if (
       text.includes("new ac") ||
       text.includes("new hvac") ||
-      text.includes(
-        "installation"
-      )
+      text.includes("installation")
     ) {
       lead.service =
         "HVAC Installation";
+    }
+  }
+
+  /* =========================================================
+     DETECT INDUSTRY
+     ========================================================= */
+
+  if (!lead.industry) {
+    if (
+      text.includes("roof") ||
+      text.includes("leak") ||
+      text.includes("shingle")
+    ) {
+      lead.industry =
+        "Roofing";
+    }
+
+    if (
+      text.includes("ac") ||
+      text.includes("air conditioner") ||
+      text.includes("air conditioning") ||
+      text.includes("hvac") ||
+      text.includes("heater") ||
+      text.includes("heating")
+    ) {
+      lead.industry =
+        "HVAC";
+    }
+  }
+
+  /* =========================================================
+     CONVERSATION-AWARE LOCATION
+     ========================================================= */
+
+  if (
+    !lead.location &&
+    (
+      latestAssistantMessage.includes("city") ||
+      latestAssistantMessage.includes("zip") ||
+      latestAssistantMessage.includes("location") ||
+      latestAssistantMessage.includes("property")
+    )
+  ) {
+    const value =
+      latestUserMessage.trim();
+
+    if (
+      value.length >= 2 &&
+      value.length <= 100
+    ) {
+      lead.location = value;
     }
   }
 
@@ -427,46 +475,27 @@ function createMockResponse(
 
   if (!lead.urgency) {
     if (
-      text.includes(
-        "emergency"
-      ) ||
+      text.includes("emergency") ||
       text.includes("urgent") ||
-      text.includes(
-        "water coming inside"
-      ) ||
-      text.includes(
-        "water is coming"
-      ) ||
-      text.includes("flood") ||
-      text.includes(
-        "immediately"
-      ) ||
-      text.includes("asap")
+      text.includes("immediately") ||
+      text.includes("asap") ||
+      text.includes("flood")
     ) {
       lead.urgency =
         "Emergency";
     } else if (
-      text.includes("today") ||
-      text.includes(
-        "24 hour"
-      ) ||
-      text.includes(
-        "24 hours"
-      )
+      text.includes("24 hour") ||
+      text.includes("24 hours")
     ) {
       lead.urgency =
         "Within 24 hours";
     } else if (
-      text.includes(
-        "this week"
-      )
+      text.includes("this week")
     ) {
       lead.urgency =
         "This week";
     } else if (
-      text.includes(
-        "not urgent"
-      ) ||
+      text.includes("not urgent") ||
       text.includes("no rush")
     ) {
       lead.urgency =
@@ -485,23 +514,17 @@ function createMockResponse(
       lead.timeline =
         "Today";
     } else if (
-      text.includes(
-        "tomorrow"
-      )
+      text.includes("tomorrow")
     ) {
       lead.timeline =
         "Tomorrow";
     } else if (
-      text.includes(
-        "next week"
-      )
+      text.includes("next week")
     ) {
       lead.timeline =
         "Next week";
     } else if (
-      text.includes(
-        "this week"
-      )
+      text.includes("this week")
     ) {
       lead.timeline =
         "This week";
@@ -509,31 +532,43 @@ function createMockResponse(
   }
 
   /* =========================================================
-     DETECT PHONE
+     CONVERSATION-AWARE NAME
      ========================================================= */
 
-  if (!lead.phone) {
-    const phoneMatch =
-      latestUserMessage.match(
-        /(?:\+?\d[\d\s().-]{7,}\d)/
+  if (!lead.name) {
+    const assistantAskedForName =
+      latestAssistantMessage.includes(
+        "what name"
+      ) ||
+      latestAssistantMessage.includes(
+        "your name"
       );
 
-    if (phoneMatch) {
-      lead.phone =
-        phoneMatch[0].trim();
+    if (assistantAskedForName) {
+      const possibleName =
+        latestUserMessage.trim();
+
+      if (
+        /^[a-zA-Z][a-zA-Z\s'-]{1,49}$/.test(
+          possibleName
+        )
+      ) {
+        lead.name =
+          possibleName;
+      }
     }
   }
 
   /* =========================================================
-     DETECT NAME
+     FALLBACK NAME DETECTION
      ========================================================= */
 
   if (!lead.name) {
     const namePatterns = [
-      /my name is ([a-zA-Z ]+)/i,
-      /i am ([a-zA-Z ]+)/i,
-      /i'm ([a-zA-Z ]+)/i,
-      /this is ([a-zA-Z ]+)/i,
+      /my name is ([a-zA-Z '-]+)/i,
+      /i am ([a-zA-Z '-]+)/i,
+      /i'm ([a-zA-Z '-]+)/i,
+      /this is ([a-zA-Z '-]+)/i,
     ];
 
     for (
@@ -545,11 +580,8 @@ function createMockResponse(
         );
 
       if (match?.[1]) {
-        let possibleName =
-          match[1].trim();
-
-        possibleName =
-          possibleName
+        const possibleName =
+          match[1]
             .split(
               /\b(and|my|phone|number|i need|i want|looking|from|tomorrow|today)\b/i
             )[0]
@@ -568,35 +600,64 @@ function createMockResponse(
   }
 
   /* =========================================================
-     STATUS
+     PHONE VALIDATION
      ========================================================= */
 
-  const collectedFields =
-    Object.values(
-      lead
-    ).filter(Boolean).length;
+  if (!lead.phone) {
+    const assistantAskedForPhone =
+      latestAssistantMessage.includes(
+        "phone"
+      ) ||
+      latestAssistantMessage.includes(
+        "number"
+      );
 
-  let status: LeadStatus =
-    "new";
+    if (assistantAskedForPhone) {
+      const phoneResult =
+        validatePhoneNumber(
+          latestUserMessage,
+          country
+        );
 
-  if (
-    collectedFields >= 2
-  ) {
-    status = "warm";
-  }
+      if (!phoneResult.valid) {
+        return {
+          reply:
+            phoneResult.error ??
+            "Please enter a valid phone number.",
 
-  if (
-    lead.urgency ===
-      "Emergency" ||
-    lead.urgency ===
-      "Within 24 hours" ||
-    collectedFields >= 5
-  ) {
-    status = "hot";
+          lead,
+
+          status: "new",
+
+          readyToBook: false,
+        };
+      }
+
+      lead.phone =
+        phoneResult.normalized;
+    } else {
+      const phoneMatch =
+        latestUserMessage.match(
+          /(?:\+?\d[\d\s().-]{7,}\d)/
+        );
+
+      if (phoneMatch) {
+        const phoneResult =
+          validatePhoneNumber(
+            phoneMatch[0],
+            country
+          );
+
+        if (phoneResult.valid) {
+          lead.phone =
+            phoneResult.normalized;
+        }
+      }
+    }
   }
 
   /* =========================================================
-     QUALIFICATION SETTINGS
+     QUALIFICATION
      ========================================================= */
 
   const requiredFields =
@@ -612,30 +673,56 @@ function createMockResponse(
   const readyToBook =
     requiredFields.every(
       (field) =>
-        Boolean(
-          lead[field]
-        )
+        Boolean(lead[field])
     );
 
   /* =========================================================
-     SERVICE AREA INFO
+     STATUS
+     ========================================================= */
+
+  const collectedFields =
+    requiredFields.filter(
+      (field) =>
+        Boolean(lead[field])
+    ).length;
+
+  let status: LeadStatus =
+    "new";
+
+  if (collectedFields >= 2) {
+    status = "warm";
+  }
+
+  if (
+    lead.urgency === "Emergency" ||
+    lead.urgency ===
+    "Within 24 hours" ||
+    readyToBook
+  ) {
+    status = "hot";
+  }
+
+  /* =========================================================
+     SERVICE AREA INFORMATION
      ========================================================= */
 
   const asksAboutArea =
     text.includes("area") ||
     text.includes("serve") ||
-    text.includes("location") ||
-    text.includes("city");
+    text.includes("location");
 
   if (
     asksAboutArea &&
-    settings.serviceAreas.length >
-      0
+    settings.serviceAreas.length > 0 &&
+    !latestAssistantMessage.includes(
+      "location"
+    )
   ) {
     return {
-      reply: `We currently serve: ${settings.serviceAreas.join(
-        ", "
-      )}. What service do you need?`,
+      reply:
+        `We currently serve: ${settings.serviceAreas.join(
+          ", "
+        )}.`,
 
       lead,
       status,
@@ -644,54 +731,86 @@ function createMockResponse(
   }
 
   /* =========================================================
-     BUILD REPLY
+     BUILD NEXT QUESTION
      ========================================================= */
 
   let reply = "";
+  let options: ChatOption[] | undefined;
 
   if (
-    !lead.industry
-  ) {
-    if (
-      settings.services.length >
-      0
-    ) {
-      reply =
-        `What service are you looking for? We currently offer: ${settings.services.join(
-          ", "
-        )}.`;
-    } else {
-      reply =
-        "What type of service are you looking for?";
-    }
-  } else if (
     needs("service") &&
     !lead.service
   ) {
+    reply =
+      "Which service do you need?";
+
     if (
-      settings.services.length >
-      0
+      settings.services.length > 0
     ) {
-      reply =
-        `Which service do you need? We currently offer: ${settings.services.join(
-          ", "
-        )}.`;
-    } else {
-      reply =
-        "What service do you need?";
+      options =
+        settings.services.map(
+          (service) => ({
+            label: service,
+            value: service,
+          })
+        );
     }
+  } else if (
+    needs("location") &&
+    !lead.location
+  ) {
+    reply =
+      "What city, ZIP/postal code, or service location is the property in?";
   } else if (
     needs("urgency") &&
     !lead.urgency
   ) {
     reply =
-      "How urgent is the issue — emergency, within 24 hours, this week, or not urgent?";
+      "How urgent is the issue?";
+
+    options = [
+      {
+        label: "Emergency",
+        value: "Emergency",
+      },
+      {
+        label: "Within 24 hours",
+        value: "Within 24 hours",
+      },
+      {
+        label: "This week",
+        value: "This week",
+      },
+      {
+        label: "Not urgent",
+        value: "Not urgent",
+      },
+    ];
   } else if (
     needs("timeline") &&
     !lead.timeline
   ) {
     reply =
       "When would you ideally like someone to come out?";
+
+    options = [
+      {
+        label: "Today",
+        value: "Today",
+      },
+      {
+        label: "Tomorrow",
+        value: "Tomorrow",
+      },
+      {
+        label: "This week",
+        value: "This week",
+      },
+      {
+        label: "Next week",
+        value: "Next week",
+      },
+    ];
   } else if (
     needs("name") &&
     !lead.name
@@ -703,19 +822,14 @@ function createMockResponse(
     !lead.phone
   ) {
     reply =
-      `Thanks${
-        lead.name
-          ? ` ${lead.name}`
-          : ""
+      `Thanks${lead.name
+        ? ` ${lead.name}`
+        : ""
       }. What's the best phone number to reach you?`;
   } else {
     reply =
       "Great — I have everything I need. You can choose an available appointment time below.";
   }
-
-  /* =========================================================
-     APPLY TONE
-     ========================================================= */
 
   if (
     settings.tone ===
@@ -730,7 +844,7 @@ function createMockResponse(
 
   if (
     settings.tone ===
-      "casual" &&
+    "casual" &&
     !readyToBook
   ) {
     reply =
@@ -742,6 +856,7 @@ function createMockResponse(
     lead,
     status,
     readyToBook,
+    options,
   };
 }
 
@@ -831,11 +946,14 @@ Status rules:
 
 Return ONLY valid JSON in this exact structure:
 
+
+
 {
   "reply": "message",
   "lead": {
     "industry": null,
     "service": null,
+    "location": null,
     "urgency": null,
     "timeline": null,
     "name": null,

@@ -1,6 +1,6 @@
 "use client";
 
-import {  useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
     Bot,
     CheckCircle2,
@@ -21,6 +21,7 @@ type QualificationField =
     | "name"
     | "phone"
     | "service"
+    | "location"
     | "urgency"
     | "timeline";
 
@@ -59,6 +60,12 @@ const qualificationOptions: {
             description: "Understand what service the lead needs.",
         },
         {
+            value: "location",
+            label: "Service Location",
+            description:
+                "Collect the customer's city, ZIP code, or service location.",
+        },
+        {
             value: "urgency",
             label: "Urgency",
             description: "Determine how urgent the request is.",
@@ -90,6 +97,7 @@ export function AISettingsForm({
                     "name",
                     "phone",
                     "service",
+                    "location",
                     "urgency",
                     "timeline",
                 ],
@@ -243,62 +251,62 @@ export function AISettingsForm({
         );
     }
 
-   async function handleSubmit(
-  event: React.SubmitEvent<HTMLFormElement>
-) {
-  event.preventDefault();
+    async function handleSubmit(
+        event: React.SubmitEvent<HTMLFormElement>
+    ) {
+        event.preventDefault();
 
-  try {
-    setLoading(true);
-    setError(null);
-    setSuccess(false);
+        try {
+            setLoading(true);
+            setError(null);
+            setSuccess(false);
 
-    const response =
-      await fetch(
-        "/api/business/ai-settings",
-        {
-          method: "PATCH",
+            const response =
+                await fetch(
+                    "/api/business/ai-settings",
+                    {
+                        method: "PATCH",
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+                        headers: {
+                            "Content-Type":
+                                "application/json",
+                        },
 
-          body: JSON.stringify({
-            businessDescription,
-            services,
-            serviceAreas,
-            welcomeMessage,
-            tone,
-            qualificationFields,
-            additionalInstructions,
-          }),
+                        body: JSON.stringify({
+                            businessDescription,
+                            services,
+                            serviceAreas,
+                            welcomeMessage,
+                            tone,
+                            qualificationFields,
+                            additionalInstructions,
+                        }),
+                    }
+                );
+
+            const data =
+                await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    data.error ||
+                    "Unable to save AI settings."
+                );
+            }
+
+            setSuccess(true);
+        } catch (error) {
+            console.error(error);
+
+            setError(
+                error instanceof Error
+                    ? error.message
+                    : "Unable to save AI settings."
+            );
+        } finally {
+            setLoading(false);
         }
-      );
-
-    const data =
-      await response.json();
-
-    if (!response.ok) {
-      throw new Error(
-        data.error ||
-          "Unable to save AI settings."
-      );
     }
-
-    setSuccess(true);
-  } catch (error) {
-    console.error(error);
-
-    setError(
-      error instanceof Error
-        ? error.message
-        : "Unable to save AI settings."
-    );
-  } finally {
-    setLoading(false);
-  }
-}
 
     return (
         <form
@@ -321,10 +329,7 @@ export function AISettingsForm({
             )}
 
             <motion.section
-                initial={{
-                    opacity: 0,
-                    y: 12,
-                }}
+                initial={false}
                 animate={{
                     opacity: 1,
                     y: 0,
@@ -381,17 +386,13 @@ export function AISettingsForm({
             </motion.section>
 
             <motion.section
-                initial={{
-                    opacity: 0,
-                    y: 12,
-                }}
+                initial={false}
                 animate={{
                     opacity: 1,
                     y: 0,
                 }}
                 transition={{
                     duration: 0.35,
-                    delay: 0.05,
                 }}
                 className="rounded-3xl border border-white/[0.08] bg-white/[0.025] p-6 sm:p-8"
             >
@@ -457,17 +458,13 @@ export function AISettingsForm({
             </motion.section>
 
             <motion.section
-                initial={{
-                    opacity: 0,
-                    y: 12,
-                }}
+                initial={false}
                 animate={{
                     opacity: 1,
                     y: 0,
                 }}
                 transition={{
                     duration: 0.35,
-                    delay: 0.1,
                 }}
                 className="rounded-3xl border border-white/[0.08] bg-white/[0.025] p-6 sm:p-8"
             >
@@ -539,17 +536,13 @@ export function AISettingsForm({
             </motion.section>
 
             <motion.section
-                initial={{
-                    opacity: 0,
-                    y: 12,
-                }}
+                initial={false}
                 animate={{
                     opacity: 1,
                     y: 0,
                 }}
                 transition={{
                     duration: 0.35,
-                    delay: 0.15,
                 }}
                 className="rounded-3xl border border-white/[0.08] bg-white/[0.025] p-6 sm:p-8"
             >
@@ -600,14 +593,14 @@ export function AISettingsForm({
                                         )
                                     }
                                     className={`rounded-2xl border p-4 text-left transition ${selected
-                                            ? "border-blue-500/40 bg-blue-500/10"
-                                            : "border-white/10 bg-black/10 hover:bg-white/[0.03]"
+                                        ? "border-blue-500/40 bg-blue-500/10"
+                                        : "border-white/10 bg-black/10 hover:bg-white/[0.03]"
                                         }`}
                                 >
                                     <p
                                         className={`text-sm font-medium capitalize ${selected
-                                                ? "text-blue-300"
-                                                : "text-white"
+                                            ? "text-blue-300"
+                                            : "text-white"
                                             }`}
                                     >
                                         {option}
@@ -626,17 +619,13 @@ export function AISettingsForm({
             </motion.section>
 
             <motion.section
-                initial={{
-                    opacity: 0,
-                    y: 12,
-                }}
+                initial={false}
                 animate={{
                     opacity: 1,
                     y: 0,
                 }}
                 transition={{
                     duration: 0.35,
-                    delay: 0.2,
                 }}
                 className="rounded-3xl border border-white/[0.08] bg-white/[0.025] p-6 sm:p-8"
             >
@@ -670,14 +659,14 @@ export function AISettingsForm({
                                         )
                                     }
                                     className={`flex items-start gap-3 rounded-2xl border p-4 text-left transition ${selected
-                                            ? "border-blue-500/30 bg-blue-500/[0.07]"
-                                            : "border-white/10 bg-black/10 hover:bg-white/[0.03]"
+                                        ? "border-blue-500/30 bg-blue-500/[0.07]"
+                                        : "border-white/10 bg-black/10 hover:bg-white/[0.03]"
                                         }`}
                                 >
                                     <div
                                         className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${selected
-                                                ? "border-blue-400 bg-blue-500 text-white"
-                                                : "border-white/20"
+                                            ? "border-blue-400 bg-blue-500 text-white"
+                                            : "border-white/20"
                                             }`}
                                     >
                                         {selected && (
@@ -710,17 +699,13 @@ export function AISettingsForm({
             </motion.section>
 
             <motion.section
-                initial={{
-                    opacity: 0,
-                    y: 12,
-                }}
+                initial={false}
                 animate={{
                     opacity: 1,
                     y: 0,
                 }}
                 transition={{
                     duration: 0.35,
-                    delay: 0.25,
                 }}
                 className="rounded-3xl border border-white/[0.08] bg-white/[0.025] p-6 sm:p-8"
             >

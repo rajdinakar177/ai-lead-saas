@@ -38,7 +38,11 @@ const leadSchema = new Schema(
       type: String,
       trim: true,
     },
-
+location: {
+  type: String,
+  default: null,
+  trim: true,
+},
     urgency: {
       type: String,
       trim: true,
