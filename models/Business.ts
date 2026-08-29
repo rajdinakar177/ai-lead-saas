@@ -57,6 +57,56 @@ const businessSchema = new Schema(
       type: Date,
       default: null,
     },
+    aiSettings: {
+      businessDescription: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+
+      services: {
+        type: [String],
+        default: [],
+      },
+
+      serviceAreas: {
+        type: [String],
+        default: [],
+      },
+
+      welcomeMessage: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+
+      tone: {
+        type: String,
+        enum: [
+          "friendly",
+          "professional",
+          "casual",
+        ],
+        default: "friendly",
+      },
+
+      qualificationFields: {
+        type: [String],
+        default: [
+          "name",
+          "phone",
+          "service",
+          "urgency",
+          "timeline",
+        ],
+      },
+
+      additionalInstructions: {
+        type: String,
+        default: "",
+        trim: true,
+      },
+    },
   },
   {
     timestamps: true,

@@ -5,7 +5,10 @@ import {
   Copy,
   ExternalLink,
 } from "lucide-react";
-import { useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 
 type Props = {
   slug: string;
@@ -17,13 +20,16 @@ export function PublicLeadLink({
   const [copied, setCopied] =
     useState(false);
 
-  const baseUrl =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : "";
+  const [publicUrl, setPublicUrl] =
+    useState(
+      `/lead/${slug}`
+    );
 
-  const publicUrl =
-    `${baseUrl}/lead/${slug}`;
+  useEffect(() => {
+    setPublicUrl(
+      `${window.location.origin}/lead/${slug}`
+    );
+  }, [slug]);
 
   async function copyLink() {
     try {
@@ -52,8 +58,7 @@ export function PublicLeadLink({
         </h2>
 
         <p className="mt-2 text-sm leading-6 text-zinc-500">
-          Share this link with customers or use it
-          from your website to collect new leads.
+          Share this link with customers or use it from your website to collect new leads.
         </p>
       </div>
 
@@ -80,7 +85,6 @@ export function PublicLeadLink({
                   size={16}
                   className="text-emerald-400"
                 />
-
                 Copied
               </>
             ) : (
@@ -103,8 +107,8 @@ export function PublicLeadLink({
         </div>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-violet-500/15 bg-violet-500/[0.04] p-4">
-        <p className="text-sm font-medium text-violet-300">
+      <div className="mt-6 rounded-2xl border border-blue-500/15 bg-blue-500/[0.04] p-4">
+        <p className="text-sm font-medium text-blue-300">
           How to use it
         </p>
 

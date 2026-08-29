@@ -64,8 +64,9 @@ export async function POST(
           "public-lead-page",
       });
 
-    const welcomeText =
-      `Hi! 👋 I'm the AI assistant for ${business.name}. What can we help you with today?`;
+const welcomeText =
+  business.aiSettings?.welcomeMessage?.trim() ||
+  `Hi! 👋 I'm the AI assistant for ${business.name}. What can we help you with today?`;
 
     const welcomeMessage =
       await Message.create({
