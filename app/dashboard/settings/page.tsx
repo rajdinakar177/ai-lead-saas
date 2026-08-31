@@ -1,14 +1,15 @@
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
-import { BusinessSettingsForm } from "@/components/dashboard/business-settings-form";
+import { BusinessSettingsForm } from "@/components/dashboard/settings/business-settings-form";
 import { requireBusiness } from "@/lib/auth";
-import { PublicLeadLink } from "@/components/dashboard/public-lead-link";
-import { EmbedCode } from "@/components/dashboard/embed-code";
-import { AISettingsForm } from "@/components/dashboard/ai-settings-form";
+import { PublicLeadLink } from "@/components/dashboard/settings/public-lead-link";
+import { EmbedCode } from "@/components/dashboard/settings/embed-code";
+import { AISettingsForm } from "@/components/dashboard/settings/ai-settings-form";
+import { AvailabilitySettingsForm } from "@/components/dashboard/settings/availability-settings-form";
+
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const business =
-    await requireBusiness();
+  const business = await requireBusiness();
 
   return (
     <div>
@@ -17,7 +18,9 @@ export default async function SettingsPage() {
         description="Manage your business profile and account information."
       />
 
-      <div className="mt-8 mb-5 max-w-4xl">
+      {/* BUSINESS PROFILE */}
+
+      <div className="mt-8 mb-8 max-w-4xl">
         <div className="mb-5">
           <h2 className="font-semibold text-white">
             Business Profile
@@ -33,68 +36,22 @@ export default async function SettingsPage() {
             name: business.name,
             industry: business.industry,
             email: business.email,
-            phone:
-              business.phone ?? "",
+            phone: business.phone ?? "",
           }}
         />
       </div>
-      <div>
-        <div className="mb-5">
-          <p className="text-sm font-medium uppercase tracking-wider text-blue-400">
-            AI Configuration
-          </p>
 
-          <h2 className="mt-2 text-xl font-semibold text-white">
-            AI Assistant Settings
-          </h2>
+     
+      {/* PUBLIC LEAD PAGE */}
 
-          <p className="mt-1 text-sm text-zinc-600">
-            Customize how your AI assistant talks to and qualifies customers.
-          </p>
-        </div>
-
-        <AISettingsForm
-          initialSettings={{
-            businessDescription:
-              business.aiSettings?.businessDescription ?? "",
-
-            services:
-              business.aiSettings?.services ?? [],
-
-            serviceAreas:
-              business.aiSettings?.serviceAreas ?? [],
-
-            welcomeMessage:
-              business.aiSettings?.welcomeMessage ?? "",
-
-            tone:
-              business.aiSettings?.tone ?? "friendly",
-
-            qualificationFields:
-              business.aiSettings?.qualificationFields ?? [
-                "name",
-                "phone",
-                "service",
-                "location",
-                "urgency",
-                "timeline",
-              ],
-
-            additionalInstructions:
-              business.aiSettings?.additionalInstructions ?? "",
-          }}
-        />
-      </div>
-      <div className="mt-8 ">
+      <div className="mt-8 max-w-4xl">
         {business.slug && (
           <>
-            <PublicLeadLink
-              slug={business.slug}
-            />
-            <br></br>
-            <EmbedCode
-              slug={business.slug}
-            />
+            <PublicLeadLink slug={business.slug} />
+
+            <div className="mt-5">
+              <EmbedCode slug={business.slug} />
+            </div>
           </>
         )}
       </div>

@@ -19,7 +19,7 @@ export function LoginForm() {
     );
 
   const [password, setPassword] =
-    useState("Demo123456!");
+    useState("12345678!");
   const [needsVerification, setNeedsVerification] =
     useState(false);
 

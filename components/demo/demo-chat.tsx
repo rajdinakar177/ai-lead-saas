@@ -49,6 +49,11 @@ type ChatOption = {
   value: string;
 };
 
+type AppointmentSlot = {
+  label: string;
+  scheduledFor: string;
+};
+
 type ChatApiResponse = {
   reply: string;
 
@@ -81,33 +86,6 @@ type DemoChatProps = {
 };
 
 /* =========================================================
-   MOCK APPOINTMENTS
-   ========================================================= */
-
-const appointments = {
-  Today: [
-    "Today · 4:00 PM",
-  ],
-
-  Tomorrow: [
-    "Tomorrow · 10:00 AM",
-    "Tomorrow · 2:00 PM",
-  ],
-
-  "This week": [
-    "Tomorrow · 10:00 AM",
-    "Tomorrow · 2:00 PM",
-    "Friday · 11:30 AM",
-  ],
-
-  "Next week": [
-    "Monday · 10:00 AM",
-    "Monday · 2:00 PM",
-    "Tuesday · 11:30 AM",
-  ],
-};
-
-/* =========================================================
    DEMO CHAT
    ========================================================= */
 
@@ -119,85 +97,158 @@ export function DemoChat({
   const [
     leadId,
     setLeadId,
-  ] =
-    useState<string | null>(
-      null
-    );
+  ] = useState<string | null>(
+    null
+  );
 
   const [
     initializing,
     setInitializing,
-  ] =
-    useState(true);
+  ] = useState(true);
 
   const [
     options,
     setOptions,
-  ] =
-    useState<ChatOption[]>(
-      []
-    );
+  ] = useState<ChatOption[]>(
+    []
+  );
 
   const [
     messages,
     setMessages,
-  ] =
-    useState<Message[]>(
-      []
-    );
+  ] = useState<Message[]>(
+    []
+  );
 
   const [
     lead,
     setLead,
-  ] =
-    useState<LeadData>(
-      {}
-    );
+  ] = useState<LeadData>(
+    {}
+  );
 
   const [
     status,
     setStatus,
-  ] =
-    useState<LeadStatus>(
-      "new"
-    );
+  ] = useState<LeadStatus>(
+    "new"
+  );
 
   const [
     input,
     setInput,
-  ] =
-    useState("");
+  ] = useState("");
 
   const [
     loading,
     setLoading,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     readyToBook,
     setReadyToBook,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     completed,
     setCompleted,
-  ] =
-    useState(false);
+  ] = useState(false);
 
   const [
     error,
     setError,
-  ] =
-    useState<string | null>(
-      null
-    );
+  ] = useState<string | null>(
+    null
+  );
+
+  const [
+    appointmentSlots,
+    setAppointmentSlots,
+  ] = useState<AppointmentSlot[]>(
+    []
+  );
+
+  const [
+    loadingSlots,
+    setLoadingSlots,
+  ] = useState(false);
 
   const messagesEndRef =
     useRef<HTMLDivElement>(
       null
     );
+
+  /* =========================================================
+     LOAD REAL AVAILABILITY
+     ========================================================= */
+
+  async function loadAvailability(
+    timeline: string,
+    currentLeadId?: string
+  ) {
+    const id =
+      currentLeadId ??
+      leadId;
+
+    if (
+      !id ||
+      !timeline
+    ) {
+      setAppointmentSlots(
+        []
+      );
+
+      return;
+    }
+
+    try {
+      setLoadingSlots(
+        true
+      );
+
+      const response =
+        await fetch(
+          `/api/availability?leadId=${encodeURIComponent(
+            id
+          )}&timeline=${encodeURIComponent(
+            timeline
+          )}`
+        );
+
+      const data =
+        await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error ||
+          "Unable to load availability."
+        );
+      }
+
+      setAppointmentSlots(
+        data.slots ?? []
+      );
+    } catch (error) {
+      console.error(
+        "Availability error:",
+        error
+      );
+
+      setAppointmentSlots(
+        []
+      );
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load available appointments."
+      );
+    } finally {
+      setLoadingSlots(
+        false
+      );
+    }
+  }
 
   /* =========================================================
      INITIALIZE / RESTORE LEAD
@@ -278,18 +329,35 @@ export function DemoChat({
               )
             );
 
-            setCompleted(
+            const isCompleted =
               Boolean(
                 data.completed
-              )
+              );
+
+            const canBook =
+              data.lead.status ===
+              "qualified" &&
+              !isCompleted;
+
+            setCompleted(
+              isCompleted
             );
 
             setReadyToBook(
-              data.lead.status ===
-              "qualified"
+              canBook
             );
 
             setOptions([]);
+
+            if (
+              canBook &&
+              data.lead.timeline
+            ) {
+              await loadAvailability(
+                data.lead.timeline,
+                data.lead.id
+              );
+            }
 
             return;
           }
@@ -354,17 +422,55 @@ export function DemoChat({
         data.messages
       );
 
-      setLead({});
+      setLead({
+        industry:
+          data.lead.industry ??
+          undefined,
 
-      setOptions([]);
+        service:
+          data.lead.service ??
+          undefined,
 
-      setStatus("new");
+        location:
+          data.lead.location ??
+          undefined,
+
+        urgency:
+          data.lead.urgency ??
+          undefined,
+
+        timeline:
+          data.lead.timeline ??
+          undefined,
+
+        name:
+          data.lead.name ??
+          undefined,
+
+        phone:
+          data.lead.phone ??
+          undefined,
+      });
+
+      setOptions(
+        data.options ?? []
+      );
+
+      setAppointmentSlots(
+        []
+      );
+
+      setStatus(
+        "new"
+      );
 
       setReadyToBook(
         false
       );
 
-      setCompleted(false);
+      setCompleted(
+        false
+      );
 
       const storageKey =
         `leadflow:${businessSlug}:leadId`;
@@ -392,6 +498,8 @@ export function DemoChat({
     messages,
     loading,
     options,
+    appointmentSlots,
+    loadingSlots,
   ]);
 
   /* =========================================================
@@ -418,8 +526,8 @@ export function DemoChat({
 
     setOptions([]);
 
-    const userMessage: Message =
-    {
+    const userMessage:
+      Message = {
       id:
         crypto.randomUUID(),
 
@@ -474,11 +582,13 @@ export function DemoChat({
 
       if (!response.ok) {
         throw new Error(
+          data.reply ||
           "Unable to send message."
         );
       }
 
-      setLead({
+      const updatedLead:
+        LeadData = {
         industry:
           data.lead.industry ??
           undefined,
@@ -509,7 +619,11 @@ export function DemoChat({
 
         appointment:
           lead.appointment,
-      });
+      };
+
+      setLead(
+        updatedLead
+      );
 
       setStatus(
         data.status
@@ -543,6 +657,20 @@ export function DemoChat({
       setReadyToBook(
         data.readyToBook
       );
+
+      if (
+        data.readyToBook &&
+        data.lead.timeline
+      ) {
+        await loadAvailability(
+          data.lead.timeline,
+          leadId
+        );
+      } else {
+        setAppointmentSlots(
+          []
+        );
+      }
     } catch (error) {
       console.error(
         error
@@ -599,7 +727,7 @@ export function DemoChat({
      ========================================================= */
 
   async function chooseAppointment(
-    appointment: string
+    slot: AppointmentSlot
   ) {
     if (
       !leadId ||
@@ -632,7 +760,11 @@ export function DemoChat({
             body:
               JSON.stringify({
                 leadId,
-                appointment,
+                appointment:
+                  slot.label,
+
+                scheduledFor:
+                  slot.scheduledFor,
               }),
           }
         );
@@ -656,7 +788,7 @@ export function DemoChat({
           "user",
 
         text:
-          appointment,
+          slot.label,
       };
 
       const aiMessage:
@@ -687,8 +819,14 @@ export function DemoChat({
           previous
         ) => ({
           ...previous,
-          appointment,
+
+          appointment:
+            slot.label,
         })
+      );
+
+      setAppointmentSlots(
+        []
       );
 
       setCompleted(
@@ -732,6 +870,14 @@ export function DemoChat({
       setError(null);
 
       setOptions([]);
+
+      setAppointmentSlots(
+        []
+      );
+
+      setLoadingSlots(
+        false
+      );
 
       const storageKey =
         `leadflow:${businessSlug}:leadId`;
@@ -777,7 +923,35 @@ export function DemoChat({
         data.messages
       );
 
-      setLead({});
+      setLead({
+        industry:
+          data.lead.industry ??
+          undefined,
+
+        service:
+          data.lead.service ??
+          undefined,
+
+        location:
+          data.lead.location ??
+          undefined,
+
+        urgency:
+          data.lead.urgency ??
+          undefined,
+
+        timeline:
+          data.lead.timeline ??
+          undefined,
+
+        name:
+          data.lead.name ??
+          undefined,
+
+        phone:
+          data.lead.phone ??
+          undefined,
+      });
 
       setOptions(
         data.options ?? []
@@ -821,21 +995,6 @@ export function DemoChat({
   }
 
   /* =========================================================
-     APPOINTMENT FILTERING
-     ========================================================= */
-
-  const availableAppointments =
-    lead.timeline &&
-      lead.timeline in
-      appointments
-      ? appointments[
-      lead.timeline as keyof typeof appointments
-      ]
-      : Object.values(
-        appointments
-      ).flat();
-
-  /* =========================================================
      INITIAL LOADING
      ========================================================= */
 
@@ -848,8 +1007,7 @@ export function DemoChat({
             className="animate-spin"
           />
 
-          Loading
-          conversation...
+          Loading conversation...
         </div>
       </div>
     );
@@ -876,18 +1034,13 @@ export function DemoChat({
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/15 text-blue-400">
               <Bot
-                size={
-                  20
-                }
+                size={20}
               />
             </div>
 
             <div>
               <p className="font-medium">
-                {
-                  businessName
-                }{" "}
-                AI
+                {businessName} AI
               </p>
 
               <div className="flex items-center gap-2 text-xs text-zinc-500">
@@ -909,9 +1062,7 @@ export function DemoChat({
             className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs text-zinc-400 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
           >
             <RefreshCcw
-              size={
-                14
-              }
+              size={14}
             />
 
             Restart
@@ -957,15 +1108,11 @@ export function DemoChat({
                     {message.sender ===
                       "user" ? (
                       <User
-                        size={
-                          15
-                        }
+                        size={15}
                       />
                     ) : (
                       <Bot
-                        size={
-                          15
-                        }
+                        size={15}
                       />
                     )}
                   </div>
@@ -977,9 +1124,7 @@ export function DemoChat({
                         : "rounded-tl-md border border-white/10 bg-white/[0.04] text-zinc-200"
                       }`}
                   >
-                    {
-                      message.text
-                    }
+                    {message.text}
                   </div>
                 </div>
               </div>
@@ -991,17 +1136,13 @@ export function DemoChat({
               <div className="flex gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-500/15 text-blue-400">
                   <Bot
-                    size={
-                      15
-                    }
+                    size={15}
                   />
                 </div>
 
                 <div className="flex items-center gap-2 rounded-2xl rounded-tl-md border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-zinc-400">
                   <LoaderCircle
-                    size={
-                      16
-                    }
+                    size={16}
                     className="animate-spin"
                   />
 
@@ -1048,9 +1189,7 @@ export function DemoChat({
                       }
                       className="rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-2.5 text-sm text-violet-200 transition hover:border-violet-400/50 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {
-                        option.label
-                      }
+                      {option.label}
                     </button>
                   )
                 )}
@@ -1061,9 +1200,7 @@ export function DemoChat({
 
           {error && (
             <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
-              {
-                error
-              }
+              {error}
             </div>
           )}
 
@@ -1078,40 +1215,55 @@ export function DemoChat({
                   : "Choose an available appointment:"}
               </p>
 
-              <div className="flex flex-wrap gap-2">
-                {availableAppointments.map(
-                  (
-                    appointment
-                  ) => (
-                    <button
-                      key={
-                        appointment
-                      }
-                      type="button"
-                      onClick={() =>
-                        chooseAppointment(
-                          appointment
-                        )
-                      }
-                      disabled={
-                        loading
-                      }
-                      className="rounded-full border border-violet-500/30 bg-blue-500/10 px-4 py-2.5 text-sm text-violet-200 transition hover:bg-violet-500/20 disabled:opacity-50"
-                    >
-                      {
-                        appointment
-                      }
-                    </button>
-                  )
-                )}
-              </div>
+              {loadingSlots ? (
+                <div className="flex items-center gap-2 text-sm text-zinc-500">
+                  <LoaderCircle
+                    size={16}
+                    className="animate-spin"
+                  />
+
+                  Loading available appointments...
+                </div>
+              ) : appointmentSlots.length >
+                0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {appointmentSlots.map(
+                    (
+                      slot
+                    ) => (
+                      <button
+                        key={
+                          slot.scheduledFor
+                        }
+                        type="button"
+                        onClick={() =>
+                          chooseAppointment(
+                            slot
+                          )
+                        }
+                        disabled={
+                          loading
+                        }
+                        className="rounded-full border border-violet-500/30 bg-blue-500/10 px-4 py-2.5 text-sm text-violet-200 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {slot.label}
+                      </button>
+                    )
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-zinc-500">
+                  No appointment
+                  times are currently
+                  available for this
+                  period.
+                </div>
+              )}
             </div>
           ) : completed ? (
             <div className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 px-4 py-3 text-sm text-emerald-400">
               <CheckCircle2
-                size={
-                  18
-                }
+                size={18}
               />
 
               Lead qualified and
@@ -1132,8 +1284,7 @@ export function DemoChat({
                   event
                 ) =>
                   setInput(
-                    event
-                      .target
+                    event.target
                       .value
                   )
                 }
@@ -1156,16 +1307,12 @@ export function DemoChat({
               >
                 {loading ? (
                   <LoaderCircle
-                    size={
-                      17
-                    }
+                    size={17}
                     className="animate-spin"
                   />
                 ) : (
                   <Send
-                    size={
-                      17
-                    }
+                    size={17}
                   />
                 )}
               </button>
@@ -1221,9 +1368,7 @@ function LeadSummary({
 
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
           <Flame
-            size={
-              19
-            }
+            size={19}
           />
         </div>
       </div>
@@ -1303,9 +1448,7 @@ function LeadSummary({
         <div className="mt-6 rounded-2xl border border-blue-500/20 bg-violet-500/5 p-4">
           <div className="flex items-center gap-3">
             <CalendarDays
-              size={
-                19
-              }
+              size={19}
               className="text-blue-400"
             />
 
@@ -1344,8 +1487,7 @@ function LeadSummary({
 function StatusBadge({
   status,
 }: {
-  status:
-  LeadStatus;
+  status: LeadStatus;
 }) {
   const styles = {
     new:
@@ -1362,9 +1504,7 @@ function StatusBadge({
     <span
       className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${styles[status]}`}
     >
-      {
-        status
-      }
+      {status}
     </span>
   );
 }
@@ -1383,14 +1523,11 @@ function SummaryRow({
   return (
     <div className="flex items-center justify-between gap-4 border-b border-white/5 pb-3">
       <span className="text-sm text-zinc-500">
-        {
-          label
-        }
+        {label}
       </span>
 
       <span className="max-w-[60%] text-right text-sm text-zinc-200">
-        {value ||
-          "—"}
+        {value || "—"}
       </span>
     </div>
   );
@@ -1404,19 +1541,16 @@ function normalizeStatus(
   status: string
 ): LeadStatus {
   if (
-    status ===
-    "hot" ||
+    status === "hot" ||
     status ===
     "qualified" ||
-    status ===
-    "booked"
+    status === "booked"
   ) {
     return "hot";
   }
 
   if (
-    status ===
-    "warm"
+    status === "warm"
   ) {
     return "warm";
   }
