@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 
 import { connectDB } from "@/lib/mongodb";
 import { Business } from "@/models/Business";
-import { Lead } from "@/models/Lead";
-import { Message } from "@/models/Message";
 
 type CreateLeadBody = {
   businessSlug?: string;
@@ -39,7 +37,7 @@ export async function POST(
       await Business.findOne({
         slug: businessSlug,
         emailVerified: true,
-      });
+      }).lean();
 
     if (!business) {
       return NextResponse.json(
@@ -53,17 +51,6 @@ export async function POST(
       );
     }
 
-    const lead =
-      await Lead.create({
-        businessId:
-          business._id,
-
-        status: "new",
-
-        source:
-          "public-lead-page",
-      });
-
     const services: string[] =
       business.aiSettings?.services ??
       [];
@@ -71,17 +58,6 @@ export async function POST(
     const welcomeText =
       business.aiSettings?.welcomeMessage?.trim() ||
       `Hi! 👋 Welcome to ${business.name}. What can we help you with today?`;
-
-    const welcomeMessage =
-      await Message.create({
-        leadId:
-          lead._id,
-
-        sender: "ai",
-
-        content:
-          welcomeText,
-      });
 
     const options =
       services.map(
@@ -109,66 +85,65 @@ export async function POST(
             business.industry,
         },
 
+        // Important:
+        // No permanent Lead exists yet.
         lead: {
-          id:
-            lead._id.toString(),
+          id: null,
 
           industry:
             business.industry,
 
-          service:
-            null,
+          service: null,
 
-          location:
-            null,
+          location: null,
 
-          urgency:
-            null,
+          urgency: null,
 
-          timeline:
-            null,
+          timeline: null,
 
-          name:
-            null,
+          name: null,
 
-          phone:
-            null,
+          phone: null,
 
-          status:
-            lead.status,
+          status: "new",
 
-          appointment:
-            null,
+          appointment: null,
         },
 
+        // Welcome message is temporary.
+        // It is not written to MongoDB yet.
         messages: [
           {
             id:
-              welcomeMessage._id.toString(),
+              crypto.randomUUID(),
 
             sender: "ai",
 
             text:
-              welcomeMessage.content,
+              welcomeText,
           },
         ],
 
         options,
       },
       {
-        status: 201,
+        status: 200,
+        headers: {
+          "Cache-Control":
+            "no-store",
+        },
       }
     );
   } catch (error) {
     console.error(
-      "Create lead error:",
+      "Initialize chat error:",
       error
     );
 
     return NextResponse.json(
       {
         error:
-          "Unable to create lead.",
+          "Unable to initialize chat.",
       },
       {
         status: 500,

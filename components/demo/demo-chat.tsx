@@ -57,6 +57,8 @@ type AppointmentSlot = {
 type ChatApiResponse = {
   reply: string;
 
+  leadId?: string | null;
+
   lead: {
     industry: string | null;
     service: string | null;
@@ -68,15 +70,15 @@ type ChatApiResponse = {
   };
 
   status:
-  | "new"
-  | "warm"
-  | "hot";
+    | "new"
+    | "warm"
+    | "hot";
 
   readyToBook: boolean;
 
   options?: ChatOption[];
 
-  messageId?: string;
+  messageId?: string | null;
 };
 
 type DemoChatProps = {
@@ -212,7 +214,10 @@ export function DemoChat({
             id
           )}&timeline=${encodeURIComponent(
             timeline
-          )}`
+          )}`,
+          {
+            cache: "no-store",
+          }
         );
 
       const data =
@@ -221,7 +226,7 @@ export function DemoChat({
       if (!response.ok) {
         throw new Error(
           data.error ||
-          "Unable to load availability."
+            "Unable to load availability."
         );
       }
 
@@ -251,7 +256,7 @@ export function DemoChat({
   }
 
   /* =========================================================
-     INITIALIZE / RESTORE LEAD
+     INITIALIZE / RESTORE CHAT
      ========================================================= */
 
   useEffect(() => {
@@ -271,10 +276,17 @@ export function DemoChat({
             storageKey
           );
 
+        /* ===================================================
+           RESTORE EXISTING REAL LEAD
+           =================================================== */
+
         if (storedLeadId) {
           const response =
             await fetch(
-              `/api/leads/${storedLeadId}`
+              `/api/leads/${storedLeadId}`,
+              {
+                cache: "no-store",
+              }
             );
 
           if (response.ok) {
@@ -336,7 +348,7 @@ export function DemoChat({
 
             const canBook =
               data.lead.status ===
-              "qualified" &&
+                "qualified" &&
               !isCompleted;
 
             setCompleted(
@@ -362,12 +374,20 @@ export function DemoChat({
             return;
           }
 
+          /* ===============================================
+             STORED LEAD NO LONGER EXISTS
+             =============================================== */
+
           localStorage.removeItem(
             storageKey
           );
         }
 
-        await createNewLead();
+        /* ===================================================
+           START ANONYMOUS CHAT
+           =================================================== */
+
+        await initializeAnonymousChat();
       } catch (error) {
         console.error(
           error
@@ -385,7 +405,11 @@ export function DemoChat({
       }
     }
 
-    async function createNewLead() {
+    /* =======================================================
+       INITIALIZE ANONYMOUS CHAT
+       ======================================================= */
+
+    async function initializeAnonymousChat() {
       const response =
         await fetch(
           "/api/leads",
@@ -401,6 +425,8 @@ export function DemoChat({
               JSON.stringify({
                 businessSlug,
               }),
+
+            cache: "no-store",
           }
         );
 
@@ -410,16 +436,24 @@ export function DemoChat({
       if (!response.ok) {
         throw new Error(
           data.error ||
-          "Unable to create lead."
+            "Unable to initialize chat."
         );
       }
 
+      /* =====================================================
+         IMPORTANT:
+         leadId is null here.
+         No Lead exists in MongoDB yet.
+         ===================================================== */
+
       setLeadId(
-        data.lead.id
+        data.lead.id ??
+          null
       );
 
       setMessages(
-        data.messages
+        data.messages ??
+          []
       );
 
       setLead({
@@ -453,7 +487,8 @@ export function DemoChat({
       });
 
       setOptions(
-        data.options ?? []
+        data.options ??
+          []
       );
 
       setAppointmentSlots(
@@ -470,14 +505,6 @@ export function DemoChat({
 
       setCompleted(
         false
-      );
-
-      const storageKey =
-        `leadflow:${businessSlug}:leadId`;
-
-      localStorage.setItem(
-        storageKey,
-        data.lead.id
       );
     }
 
@@ -513,11 +540,16 @@ export function DemoChat({
       messageText?.trim() ||
       input.trim();
 
+    /* =======================================================
+       IMPORTANT:
+       leadId is NOT required anymore.
+       Anonymous visitors can chat.
+       ======================================================= */
+
     if (
       !text ||
       loading ||
-      completed ||
-      !leadId
+      completed
     ) {
       return;
     }
@@ -568,6 +600,8 @@ export function DemoChat({
               JSON.stringify({
                 leadId,
 
+                businessSlug,
+
                 messages:
                   updatedMessages,
 
@@ -583,9 +617,37 @@ export function DemoChat({
       if (!response.ok) {
         throw new Error(
           data.reply ||
-          "Unable to send message."
+            "Unable to send message."
         );
       }
+
+      /* =====================================================
+         SERVER CREATED A REAL LEAD
+
+         This happens when valid phone is collected.
+         ===================================================== */
+
+      if (
+        data.leadId &&
+        data.leadId !==
+          leadId
+      ) {
+        setLeadId(
+          data.leadId
+        );
+
+        const storageKey =
+          `leadflow:${businessSlug}:leadId`;
+
+        localStorage.setItem(
+          storageKey,
+          data.leadId
+        );
+      }
+
+      /* =====================================================
+         UPDATE LOCAL LEAD PROFILE
+         ===================================================== */
 
       const updatedLead:
         LeadData = {
@@ -631,40 +693,51 @@ export function DemoChat({
 
       setOptions(
         data.options ??
-        []
+          []
       );
+
+      /* =====================================================
+         ADD AI RESPONSE TO BROWSER CHAT
+         ===================================================== */
 
       setMessages(
         (
           current
         ) => [
-            ...current,
+          ...current,
 
-            {
-              id:
-                data.messageId ||
-                crypto.randomUUID(),
+          {
+            id:
+              data.messageId ||
+              crypto.randomUUID(),
 
-              sender:
-                "ai",
+            sender:
+              "ai",
 
-              text:
-                data.reply,
-            },
-          ]
+            text:
+              data.reply,
+          },
+        ]
       );
 
       setReadyToBook(
         data.readyToBook
       );
 
+      /* =====================================================
+         LOAD AVAILABILITY
+
+         At this point a real Lead MUST exist.
+         ===================================================== */
+
       if (
         data.readyToBook &&
-        data.lead.timeline
+        data.lead.timeline &&
+        data.leadId
       ) {
         await loadAvailability(
           data.lead.timeline,
-          leadId
+          data.leadId
         );
       } else {
         setAppointmentSlots(
@@ -760,6 +833,7 @@ export function DemoChat({
             body:
               JSON.stringify({
                 leadId,
+
                 appointment:
                   slot.label,
 
@@ -775,7 +849,7 @@ export function DemoChat({
       if (!response.ok) {
         throw new Error(
           data.error ||
-          "Unable to save appointment."
+            "Unable to save appointment."
         );
       }
 
@@ -808,10 +882,10 @@ export function DemoChat({
         (
           previous
         ) => [
-            ...previous,
-            userMessage,
-            aiMessage,
-          ]
+          ...previous,
+          userMessage,
+          aiMessage,
+        ]
       );
 
       setLead(
@@ -886,6 +960,12 @@ export function DemoChat({
         storageKey
       );
 
+      /* =====================================================
+         Restart means:
+         start a brand new anonymous conversation.
+         Do NOT create a Lead here.
+         ===================================================== */
+
       const response =
         await fetch(
           "/api/leads",
@@ -902,6 +982,8 @@ export function DemoChat({
               JSON.stringify({
                 businessSlug,
               }),
+
+            cache: "no-store",
           }
         );
 
@@ -911,16 +993,18 @@ export function DemoChat({
       if (!response.ok) {
         throw new Error(
           data.error ||
-          "Unable to restart conversation."
+            "Unable to restart conversation."
         );
       }
 
       setLeadId(
-        data.lead.id
+        data.lead.id ??
+          null
       );
 
       setMessages(
-        data.messages
+        data.messages ??
+          []
       );
 
       setLead({
@@ -954,7 +1038,8 @@ export function DemoChat({
       });
 
       setOptions(
-        data.options ?? []
+        data.options ??
+          []
       );
 
       setStatus(
@@ -971,11 +1056,6 @@ export function DemoChat({
 
       setLoading(
         false
-      );
-
-      localStorage.setItem(
-        storageKey,
-        data.lead.id
       );
     } catch (error) {
       console.error(
@@ -1072,10 +1152,11 @@ export function DemoChat({
         {/* MESSAGES */}
 
         <div
-          className={`space-y-5 overflow-y-auto px-5 py-6 ${compact
+          className={`space-y-5 overflow-y-auto px-5 py-6 ${
+            compact
               ? "h-[430px]"
               : "h-[500px]"
-            }`}
+          }`}
         >
           {messages.map(
             (
@@ -1085,28 +1166,31 @@ export function DemoChat({
                 key={
                   message.id
                 }
-                className={`flex ${message.sender ===
-                    "user"
+                className={`flex ${
+                  message.sender ===
+                  "user"
                     ? "justify-end"
                     : "justify-start"
-                  }`}
+                }`}
               >
                 <div
-                  className={`flex max-w-[85%] gap-3 ${message.sender ===
-                      "user"
+                  className={`flex max-w-[85%] gap-3 ${
+                    message.sender ===
+                    "user"
                       ? "flex-row-reverse"
                       : "flex-row"
-                    }`}
+                  }`}
                 >
                   <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${message.sender ===
-                        "user"
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                      message.sender ===
+                      "user"
                         ? "bg-white text-black"
                         : "bg-violet-500/15 text-blue-400"
-                      }`}
+                    }`}
                   >
                     {message.sender ===
-                      "user" ? (
+                    "user" ? (
                       <User
                         size={15}
                       />
@@ -1118,11 +1202,12 @@ export function DemoChat({
                   </div>
 
                   <div
-                    className={`rounded-2xl px-4 py-3 text-sm leading-6 ${message.sender ===
-                        "user"
+                    className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
+                      message.sender ===
+                      "user"
                         ? "rounded-tr-md bg-white text-black"
                         : "rounded-tl-md border border-white/10 bg-white/[0.04] text-zinc-200"
-                      }`}
+                    }`}
                   >
                     {message.text}
                   </div>
@@ -1207,7 +1292,7 @@ export function DemoChat({
           {/* APPOINTMENTS */}
 
           {readyToBook &&
-            !completed ? (
+          !completed ? (
             <div>
               <p className="mb-3 text-sm text-zinc-400">
                 {lead.timeline
@@ -1300,8 +1385,7 @@ export function DemoChat({
                 type="submit"
                 disabled={
                   loading ||
-                  !input.trim() ||
-                  !leadId
+                  !input.trim()
                 }
                 className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -1543,8 +1627,9 @@ function normalizeStatus(
   if (
     status === "hot" ||
     status ===
-    "qualified" ||
-    status === "booked"
+      "qualified" ||
+    status ===
+      "booked"
   ) {
     return "hot";
   }

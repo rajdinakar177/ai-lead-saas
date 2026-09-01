@@ -14,7 +14,7 @@ import { Lead } from "@/models/Lead";
 import { Business } from "@/models/Business";
 import { Appointment } from "@/models/Appointment";
 import { Message } from "@/models/Message";
-
+import { sendAppointmentBookedEmail } from "@/lib/email/send-appointment-booked-email";
 type AppointmentRequest = {
   leadId: string;
   appointment: string;
@@ -294,7 +294,7 @@ export async function POST(
       );
     }
 
-  
+
 
     // ----------------------------
     // Create appointment
@@ -364,7 +364,42 @@ export async function POST(
         content:
           confirmation,
       });
+    // ----------------------------
+    // Send appointment notification
+    // ----------------------------
 
+    try {
+      await sendAppointmentBookedEmail({
+        businessEmail:
+          business.email,
+
+        businessName:
+          business.name,
+
+        appointmentId:
+          appointment._id.toString(),
+
+        name:
+          lead.name ?? null,
+
+        phone:
+          lead.phone ?? null,
+
+        service:
+          lead.service ?? null,
+
+        location:
+          lead.location ?? null,
+
+        appointmentLabel:
+          matchedSlot.label,
+      });
+    } catch (emailError) {
+      console.error(
+        "Appointment booked email notification failed:",
+        emailError
+      );
+    }
     return NextResponse.json({
       success:
         true,
