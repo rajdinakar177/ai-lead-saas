@@ -71,7 +71,11 @@ const leadSchema = new Schema(
       type: String,
       default: "website",
     },
-
+    smsConversationActive: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     notes: {
       type: String,
     },

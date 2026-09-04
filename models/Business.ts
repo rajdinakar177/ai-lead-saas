@@ -82,6 +82,12 @@ const businessSchema = new Schema(
       type: String,
       trim: true,
     },
+    twilioPhoneNumber: {
+      type: String,
+      default: null,
+      trim: true,
+      index: true,
+    },
     availability: {
       slotDurationMinutes: {
         type: Number,

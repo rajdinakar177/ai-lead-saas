@@ -21,7 +21,7 @@ export default function DemoPage() {
         </div>
 
         <DemoChat
-          businessSlug="abc-home-services"
+          businessSlug="abc"
           businessName="ABC Home Services"
         />
       </div>

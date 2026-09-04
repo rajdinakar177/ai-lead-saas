@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { connectDB } from "@/lib/mongodb";
 import { validatePhoneNumber } from "@/lib/phone";
+import { verifyTwilioSignature } from "@/lib/sms/verify-twilio-signature";
 
 import {
   generateQualificationResponse,
@@ -24,6 +25,25 @@ import { Lead } from "@/models/Lead";
 import { Business } from "@/models/Business";
 import { Message } from "@/models/Message";
 import { Appointment } from "@/models/Appointment";
+import { TwilioInboundEvent } from "@/models/TwilioInboundEvent";
+
+/* =========================================================
+   LEAD STATUS GROUPS
+   ========================================================= */
+
+const ACTIVE_LEAD_STATUSES = [
+  "new",
+  "warm",
+  "hot",
+  "qualified",
+] as const;
+
+const VALID_TIMELINES: Timeline[] = [
+  "Today",
+  "Tomorrow",
+  "This week",
+  "Next week",
+];
 
 /* =========================================================
    POST
@@ -39,6 +59,12 @@ export async function POST(
 
     const formData =
       await request.formData();
+
+    const messageSid =
+      formData
+        .get("MessageSid")
+        ?.toString()
+        .trim();
 
     const from =
       formData
@@ -61,6 +87,7 @@ export async function POST(
     console.log(
       "Incoming Twilio SMS:",
       {
+        messageSid,
         from,
         to,
         body,
@@ -68,10 +95,111 @@ export async function POST(
     );
 
     /* =====================================================
-       REQUIRED FIELDS
+       TWILIO SIGNATURE VALIDATION
+
+       Local development:
+       TWILIO_SIGNATURE_VALIDATION=false
+
+       Production:
+       TWILIO_SIGNATURE_VALIDATION=true
+       ===================================================== */
+
+    const signatureValidationEnabled =
+      process.env
+        .TWILIO_SIGNATURE_VALIDATION ===
+      "true";
+
+    if (signatureValidationEnabled) {
+      const signature =
+        request.headers.get(
+          "x-twilio-signature"
+        );
+
+      /*
+       * Twilio signs the full POST parameter set,
+       * not only From / To / Body / MessageSid.
+       */
+      const twilioParams: Record<
+        string,
+        string
+      > = {};
+
+      for (
+        const [key, value] of
+        formData.entries()
+      ) {
+        if (
+          typeof value ===
+          "string"
+        ) {
+          twilioParams[key] =
+            value;
+        }
+      }
+
+      /*
+       * The URL must exactly match the URL
+       * configured in Twilio.
+       *
+       * TWILIO_WEBHOOK_URL can be set in
+       * production if needed.
+       */
+      const webhookUrl =
+        process.env
+          .TWILIO_WEBHOOK_URL
+          ?.trim() ||
+        request.url;
+
+      let signatureValid =
+        false;
+
+      try {
+        signatureValid =
+          verifyTwilioSignature({
+            signature,
+            url:
+              webhookUrl,
+            params:
+              twilioParams,
+          });
+      } catch (error) {
+        console.error(
+          "Twilio signature validation error:",
+          error
+        );
+
+        return forbiddenResponse();
+      }
+
+      if (!signatureValid) {
+        console.warn(
+          "Invalid Twilio signature rejected:",
+          {
+            messageSid,
+            from,
+            to,
+          }
+        );
+
+        return forbiddenResponse();
+      }
+
+      console.log(
+        "Twilio signature verified:",
+        messageSid
+      );
+    } else {
+      console.log(
+        "Twilio signature validation disabled for local testing."
+      );
+    }
+
+    /* =====================================================
+       REQUIRED TWILIO FIELDS
        ===================================================== */
 
     if (
+      !messageSid ||
       !from ||
       !to ||
       !body
@@ -82,26 +210,60 @@ export async function POST(
     await connectDB();
 
     /* =====================================================
-       VERIFY TWILIO NUMBER
+       MESSAGE SID IDEMPOTENCY
 
-       DEVELOPMENT:
-       Currently one Twilio number
-       from .env.local.
+       Twilio may retry the same webhook.
 
-       Later:
-       Twilio number -> Business
+       First request:
+       -> create TwilioInboundEvent
+       -> continue processing
+
+       Duplicate request:
+       -> Mongo unique index throws 11000
+       -> ignore safely
        ===================================================== */
 
-    const twilioPhoneNumber =
-      process.env
-        .TWILIO_PHONE_NUMBER;
+    try {
+      await TwilioInboundEvent.create({
+        messageSid,
+        from,
+        to,
+        body,
+        status: "processing",
+      });
+    } catch (error) {
+      if (
+        typeof error ===
+          "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code ===
+          11000
+      ) {
+        console.log(
+          "Duplicate Twilio webhook ignored:",
+          messageSid
+        );
 
-    if (
-      !twilioPhoneNumber ||
-      to !== twilioPhoneNumber
-    ) {
+        return twimlResponse();
+      }
+
+      throw error;
+    }
+
+    /* =====================================================
+       FIND BUSINESS FROM TWILIO TO NUMBER
+       ===================================================== */
+
+    const business =
+      await Business.findOne({
+        twilioPhoneNumber:
+          to,
+      }).lean();
+
+    if (!business) {
       console.warn(
-        "Unknown Twilio number:",
+        "No business found for Twilio number:",
         to
       );
 
@@ -134,52 +296,514 @@ export async function POST(
       phoneResult.normalized;
 
     /* =====================================================
-       FIND LEAD
-
-       DEVELOPMENT:
-       Finds latest lead by customer phone.
-
-       Later production routing:
-       business Twilio number + customer phone
+       FIND LATEST LEAD FOR THIS BUSINESS + CUSTOMER
        ===================================================== */
 
-    const lead =
+    const latestLead =
       await Lead.findOne({
+        businessId:
+          business._id,
+
         phone:
           normalizedPhone,
       }).sort({
         createdAt: -1,
       });
 
-    if (!lead) {
+    if (!latestLead) {
       console.warn(
         "No lead found for incoming SMS:",
-        normalizedPhone
+        {
+          businessId:
+            business._id.toString(),
+
+          phone:
+            normalizedPhone,
+        }
       );
 
       return twimlResponse();
     }
 
     /* =====================================================
-       FIND BUSINESS
+       BUSINESS AI SETTINGS
        ===================================================== */
 
-    const business =
-      await Business.findById(
-        lead.businessId
-      ).lean();
+    const aiSettings: AISettings = {
+      businessDescription:
+        business.aiSettings
+          ?.businessDescription ??
+        "",
 
-    if (!business) {
+      services:
+        business.aiSettings
+          ?.services ??
+        [],
+
+      serviceAreas:
+        business.aiSettings
+          ?.serviceAreas ??
+        [],
+
+      welcomeMessage:
+        business.aiSettings
+          ?.welcomeMessage ??
+        "",
+
+      tone:
+        business.aiSettings
+          ?.tone ??
+        "friendly",
+
+      qualificationFields:
+        business.aiSettings
+          ?.qualificationFields ??
+        [
+          "name",
+          "phone",
+          "service",
+          "location",
+          "urgency",
+          "timeline",
+        ],
+
+      additionalInstructions:
+        business.aiSettings
+          ?.additionalInstructions ??
+        "",
+    };
+
+    /* =====================================================
+       FIND CURRENT ACTIVE SMS CONVERSATION
+       ===================================================== */
+
+    let lead =
+      await Lead.findOne({
+        businessId:
+          business._id,
+
+        phone:
+          normalizedPhone,
+
+        smsConversationActive:
+          true,
+      }).sort({
+        updatedAt: -1,
+      });
+
+    /* =====================================================
+       NO ACTIVE SMS CONVERSATION
+       ===================================================== */
+
+    if (!lead) {
+      const openLeads =
+        await Lead.find({
+          businessId:
+            business._id,
+
+          phone:
+            normalizedPhone,
+
+          status: {
+            $in:
+              ACTIVE_LEAD_STATUSES,
+          },
+        }).sort({
+          createdAt: -1,
+        });
+
+      /* ===================================================
+         CASE 1:
+         ONLY ONE OPEN LEAD
+         =================================================== */
+
+      if (
+        openLeads.length ===
+        1
+      ) {
+        lead =
+          openLeads[0];
+
+        lead.smsConversationActive =
+          true;
+
+        await lead.save();
+
+        console.log(
+          "Automatically activated SMS conversation:",
+          {
+            leadId:
+              lead._id.toString(),
+
+            service:
+              lead.service,
+
+            status:
+              lead.status,
+          }
+        );
+      }
+
+      /* ===================================================
+         CASE 2:
+         MULTIPLE OPEN LEADS
+         =================================================== */
+
+      else if (
+        openLeads.length >
+        1
+      ) {
+        const matchedLead =
+          findLeadByService(
+            openLeads,
+            body
+          );
+
+        if (matchedLead) {
+          await Lead.updateMany(
+            {
+              businessId:
+                business._id,
+
+              phone:
+                normalizedPhone,
+            },
+            {
+              $set: {
+                smsConversationActive:
+                  false,
+              },
+            }
+          );
+
+          matchedLead.smsConversationActive =
+            true;
+
+          await matchedLead.save();
+
+          lead =
+            matchedLead;
+
+          console.log(
+            "SMS conversation selected by service:",
+            {
+              leadId:
+                lead._id.toString(),
+
+              service:
+                lead.service,
+            }
+          );
+        } else {
+          const uniqueServices =
+            Array.from(
+              new Set(
+                openLeads
+                  .map(
+                    (item) =>
+                      item.service
+                        ?.trim()
+                  )
+                  .filter(
+                    (
+                      service
+                    ): service is string =>
+                      Boolean(
+                        service
+                      )
+                  )
+              )
+            );
+
+          let clarification =
+            "You currently have more than one active service request.";
+
+          if (
+            uniqueServices.length >
+            0
+          ) {
+            clarification +=
+              ` Please reply with the service you want to continue: ${uniqueServices.join(
+                " or "
+              )}.`;
+          } else {
+            clarification +=
+              " Please tell me which service request you want to continue.";
+          }
+
+          try {
+            await sendSmsReply({
+              to:
+                normalizedPhone,
+
+              body:
+                clarification,
+            });
+          } catch (
+            smsError
+          ) {
+            console.error(
+              "SMS lead-selection reply failed:",
+              smsError
+            );
+          }
+
+          console.log(
+            "Multiple active leads require service selection:",
+            {
+              phone:
+                normalizedPhone,
+
+              leads:
+                openLeads.map(
+                  (item) => ({
+                    id:
+                      item._id.toString(),
+
+                    service:
+                      item.service,
+
+                    status:
+                      item.status,
+                  })
+                ),
+            }
+          );
+
+          return twimlResponse();
+        }
+      }
+
+      /* ===================================================
+         CASE 3:
+         NO OPEN LEADS
+         =================================================== */
+
+      else {
+        console.log(
+          "No active/open lead. Checking for new service request..."
+        );
+
+        const newRequestResult =
+          await generateQualificationResponse(
+            {
+              messages: [
+                {
+                  sender:
+                    "user",
+
+                  text:
+                    body,
+                },
+              ],
+
+              lead: {
+                phone:
+                  normalizedPhone,
+
+                industry:
+                  business.industry,
+              },
+            },
+
+            {
+              name:
+                business.name,
+
+              industry:
+                business.industry,
+
+              country:
+                business.country ??
+                "US",
+
+              aiSettings,
+            }
+          );
+
+        if (
+          newRequestResult.lead
+            .service
+        ) {
+          await Lead.updateMany(
+            {
+              businessId:
+                business._id,
+
+              phone:
+                normalizedPhone,
+
+              smsConversationActive:
+                true,
+            },
+            {
+              $set: {
+                smsConversationActive:
+                  false,
+              },
+            }
+          );
+
+          lead =
+            await Lead.create({
+              businessId:
+                business._id,
+
+              phone:
+                normalizedPhone,
+
+              name:
+                newRequestResult.lead
+                  .name ??
+                latestLead.name ??
+                null,
+
+              industry:
+                newRequestResult.lead
+                  .industry ??
+                business.industry,
+
+              service:
+                newRequestResult.lead
+                  .service,
+
+              location:
+                newRequestResult.lead
+                  .location ??
+                null,
+
+              urgency:
+                newRequestResult.lead
+                  .urgency ??
+                null,
+
+              timeline:
+                newRequestResult.lead
+                  .timeline ??
+                null,
+
+              status:
+                newRequestResult
+                  .readyToBook
+                  ? "qualified"
+                  : newRequestResult
+                    .status,
+
+              source:
+                "sms",
+
+              smsConversationActive:
+                true,
+            });
+
+          await Message.create({
+            leadId:
+              lead._id,
+
+            sender:
+              "lead",
+
+            content:
+              body,
+          });
+
+          const aiMessage =
+            await Message.create({
+              leadId:
+                lead._id,
+
+              sender:
+                "ai",
+
+              content:
+                newRequestResult.reply,
+            });
+
+          try {
+            await sendSmsReply({
+              to:
+                normalizedPhone,
+
+              body:
+                newRequestResult.reply,
+            });
+          } catch (
+            smsError
+          ) {
+            console.error(
+              "New service request SMS reply failed:",
+              smsError
+            );
+          }
+
+          console.log(
+            "New SMS service request created:",
+            {
+              previousLeadId:
+                latestLead._id.toString(),
+
+              newLeadId:
+                lead._id.toString(),
+
+              service:
+                lead.service,
+
+              status:
+                lead.status,
+
+              smsConversationActive:
+                lead.smsConversationActive,
+
+              messageId:
+                aiMessage._id.toString(),
+            }
+          );
+
+          return twimlResponse();
+        }
+
+        await Message.create({
+          leadId:
+            latestLead._id,
+
+          sender:
+            "lead",
+
+          content:
+            body,
+        });
+
+        console.log(
+          "SMS attached to latest closed lead:",
+          {
+            leadId:
+              latestLead._id.toString(),
+
+            status:
+              latestLead.status,
+
+            body,
+          }
+        );
+
+        return twimlResponse();
+      }
+    }
+
+    /* =====================================================
+       ACTIVE LEAD IS NOW RESOLVED
+       ===================================================== */
+
+    if (!lead) {
       console.warn(
-        "Business not found for lead:",
-        lead._id.toString()
+        "Unable to resolve SMS lead."
       );
 
       return twimlResponse();
     }
 
     /* =====================================================
-       SAVE INCOMING CUSTOMER SMS
+       SAVE CUSTOMER MESSAGE
        ===================================================== */
 
     const incomingMessage =
@@ -208,17 +832,20 @@ export async function POST(
 
         phone:
           normalizedPhone,
+
+        service:
+          lead.service,
+
+        status:
+          lead.status,
+
+        smsConversationActive:
+          lead.smsConversationActive,
       }
     );
 
     /* =====================================================
-       STAGE 4.9
        SMS APPOINTMENT SELECTION
-
-       Customer replies:
-       1
-       2
-       3
        ===================================================== */
 
     const selectedOption =
@@ -232,26 +859,14 @@ export async function POST(
       lead.status ===
         "qualified"
     ) {
-      const validTimelines: Timeline[] =
-        [
-          "Today",
-          "Tomorrow",
-          "This week",
-          "Next week",
-        ];
-
       const timeline =
         lead.timeline as Timeline;
 
       if (
-        validTimelines.includes(
+        VALID_TIMELINES.includes(
           timeline
         )
       ) {
-        /* ---------------------------------
-           Regenerate current availability
-           --------------------------------- */
-
         const availableSlots =
           await getSmsAvailableSlots({
             business,
@@ -266,12 +881,9 @@ export async function POST(
 
         const selectedSlot =
           smsSlots[
-            selectedOption - 1
+            selectedOption -
+              1
           ];
-
-        /* ---------------------------------
-           Invalid / disappeared option
-           --------------------------------- */
 
         if (!selectedSlot) {
           const unavailableReply =
@@ -296,7 +908,9 @@ export async function POST(
               body:
                 unavailableReply,
             });
-          } catch (smsError) {
+          } catch (
+            smsError
+          ) {
             console.error(
               "SMS unavailable-slot reply failed:",
               smsError
@@ -310,10 +924,6 @@ export async function POST(
           new Date(
             selectedSlot.scheduledFor
           );
-
-        /* ---------------------------------
-           Final conflict check
-           --------------------------------- */
 
         const existingAppointment =
           await Appointment.findOne({
@@ -330,7 +940,9 @@ export async function POST(
             },
           }).lean();
 
-        if (existingAppointment) {
+        if (
+          existingAppointment
+        ) {
           const conflictReply =
             "That appointment time was just taken. Please choose another available time.";
 
@@ -353,19 +965,17 @@ export async function POST(
               body:
                 conflictReply,
             });
-          } catch (smsError) {
+          } catch (
+            smsError
+          ) {
             console.error(
-              "SMS conflict reply delivery failed:",
+              "SMS conflict reply failed:",
               smsError
             );
           }
 
           return twimlResponse();
         }
-
-        /* ---------------------------------
-           Create appointment
-           --------------------------------- */
 
         try {
           const appointment =
@@ -385,18 +995,13 @@ export async function POST(
                 "scheduled",
             });
 
-          /* ---------------------------------
-             Mark lead booked
-             --------------------------------- */
-
           lead.status =
             "booked";
 
-          await lead.save();
+          lead.smsConversationActive =
+            false;
 
-          /* ---------------------------------
-             Appointment confirmation
-             --------------------------------- */
+          await lead.save();
 
           const confirmation =
             `Perfect! We've reserved ${selectedSlot.label}.`;
@@ -413,10 +1018,6 @@ export async function POST(
                 confirmation,
             });
 
-          /* ---------------------------------
-             SMS delivery layer
-             --------------------------------- */
-
           try {
             await sendSmsReply({
               to:
@@ -425,16 +1026,14 @@ export async function POST(
               body:
                 confirmation,
             });
-          } catch (smsError) {
+          } catch (
+            smsError
+          ) {
             console.error(
-              "SMS appointment confirmation delivery failed:",
+              "SMS appointment confirmation failed:",
               smsError
             );
           }
-
-          /* ---------------------------------
-             Business email notification
-             --------------------------------- */
 
           try {
             await sendAppointmentBookedEmail({
@@ -448,16 +1047,20 @@ export async function POST(
                 appointment._id.toString(),
 
               name:
-                lead.name ?? null,
+                lead.name ??
+                null,
 
               phone:
-                lead.phone ?? null,
+                lead.phone ??
+                null,
 
               service:
-                lead.service ?? null,
+                lead.service ??
+                null,
 
               location:
-                lead.location ?? null,
+                lead.location ??
+                null,
 
               appointmentLabel:
                 selectedSlot.label,
@@ -466,7 +1069,7 @@ export async function POST(
             emailError
           ) {
             console.error(
-              "SMS appointment email notification failed:",
+              "SMS appointment email failed:",
               emailError
             );
           }
@@ -480,6 +1083,9 @@ export async function POST(
               appointmentId:
                 appointment._id.toString(),
 
+              service:
+                lead.service,
+
               option:
                 selectedOption,
 
@@ -489,6 +1095,9 @@ export async function POST(
               scheduledFor:
                 selectedSlot.scheduledFor,
 
+              smsConversationActive:
+                lead.smsConversationActive,
+
               messageId:
                 aiMessage._id.toString(),
             }
@@ -496,11 +1105,6 @@ export async function POST(
 
           return twimlResponse();
         } catch (error) {
-          /* ---------------------------------
-             MongoDB unique index race
-             protection
-             --------------------------------- */
-
           if (
             typeof error ===
               "object" &&
@@ -535,7 +1139,7 @@ export async function POST(
               smsError
             ) {
               console.error(
-                "SMS duplicate-slot reply delivery failed:",
+                "SMS duplicate-slot reply failed:",
                 smsError
               );
             }
@@ -549,7 +1153,7 @@ export async function POST(
     }
 
     /* =====================================================
-       LOAD CONVERSATION HISTORY
+       LOAD THIS LEAD'S CONVERSATION
        ===================================================== */
 
     const conversation =
@@ -567,7 +1171,7 @@ export async function POST(
         (message) => ({
           sender:
             message.sender ===
-              "ai"
+            "ai"
               ? ("ai" as const)
               : ("user" as const),
 
@@ -577,56 +1181,7 @@ export async function POST(
       );
 
     /* =====================================================
-       BUSINESS AI SETTINGS
-       ===================================================== */
-
-    const aiSettings: AISettings =
-      {
-        businessDescription:
-          business.aiSettings
-            ?.businessDescription ??
-          "",
-
-        services:
-          business.aiSettings
-            ?.services ??
-          [],
-
-        serviceAreas:
-          business.aiSettings
-            ?.serviceAreas ??
-          [],
-
-        welcomeMessage:
-          business.aiSettings
-            ?.welcomeMessage ??
-          "",
-
-        tone:
-          business.aiSettings
-            ?.tone ??
-          "friendly",
-
-        qualificationFields:
-          business.aiSettings
-            ?.qualificationFields ??
-          [
-            "name",
-            "phone",
-            "service",
-            "location",
-            "urgency",
-            "timeline",
-          ],
-
-        additionalInstructions:
-          business.aiSettings
-            ?.additionalInstructions ??
-          "",
-      };
-
-    /* =====================================================
-       GENERATE SHARED AI RESPONSE
+       GENERATE AI QUALIFICATION RESPONSE
        ===================================================== */
 
     const result =
@@ -674,7 +1229,7 @@ export async function POST(
       );
 
     /* =====================================================
-       QUALIFIED LEAD
+       QUALIFIED
        GENERATE REAL APPOINTMENT OPTIONS
        ===================================================== */
 
@@ -682,20 +1237,12 @@ export async function POST(
       result.readyToBook &&
       result.lead.timeline
     ) {
-      const validTimelines: Timeline[] =
-        [
-          "Today",
-          "Tomorrow",
-          "This week",
-          "Next week",
-        ];
-
       const timeline =
         result.lead
           .timeline as Timeline;
 
       if (
-        validTimelines.includes(
+        VALID_TIMELINES.includes(
           timeline
         )
       ) {
@@ -747,7 +1294,7 @@ export async function POST(
     }
 
     /* =====================================================
-       UPDATE LEAD QUALIFICATION DATA
+       UPDATE LEAD
        ===================================================== */
 
     lead.industry =
@@ -778,11 +1325,6 @@ export async function POST(
       result.lead.phone ??
       lead.phone;
 
-    /*
-     * Never accidentally downgrade
-     * an already-booked lead back
-     * to qualified/hot/warm.
-     */
     if (
       lead.status !==
       "booked"
@@ -793,10 +1335,23 @@ export async function POST(
           : result.status;
     }
 
+    if (
+      ACTIVE_LEAD_STATUSES.includes(
+        lead.status as
+          | "new"
+          | "warm"
+          | "hot"
+          | "qualified"
+      )
+    ) {
+      lead.smsConversationActive =
+        true;
+    }
+
     await lead.save();
 
     /* =====================================================
-       SAVE AI RESPONSE
+       SAVE AI MESSAGE
        ===================================================== */
 
     const aiMessage =
@@ -812,13 +1367,7 @@ export async function POST(
       });
 
     /* =====================================================
-       SEND AI RESPONSE THROUGH SMS DELIVERY LAYER
-
-       SMS_MODE=mock
-       -> console only
-
-       SMS_MODE=twilio
-       -> real Twilio
+       OUTBOUND SMS
        ===================================================== */
 
     try {
@@ -829,7 +1378,9 @@ export async function POST(
         body:
           result.reply,
       });
-    } catch (smsError) {
+    } catch (
+      smsError
+    ) {
       console.error(
         "SMS AI reply delivery failed:",
         smsError
@@ -842,6 +1393,9 @@ export async function POST(
         leadId:
           lead._id.toString(),
 
+        service:
+          lead.service,
+
         messageId:
           aiMessage._id.toString(),
 
@@ -853,6 +1407,9 @@ export async function POST(
 
         readyToBook:
           result.readyToBook,
+
+        smsConversationActive:
+          lead.smsConversationActive,
       }
     );
 
@@ -863,17 +1420,111 @@ export async function POST(
       error
     );
 
-    /*
-     * Return TwiML instead of
-     * throwing HTML/JSON back
-     * to Twilio.
-     */
     return twimlResponse();
   }
 }
 
 /* =========================================================
-   EMPTY TWIML RESPONSE
+   SERVICE MATCHING
+   ========================================================= */
+
+function findLeadByService(
+  leads: any[],
+  message: string
+) {
+  const normalizedMessage =
+    normalizeText(message);
+
+  if (!normalizedMessage) {
+    return null;
+  }
+
+  const matches =
+    leads.filter((lead) => {
+      if (!lead.service) {
+        return false;
+      }
+
+      const normalizedService =
+        normalizeText(
+          lead.service
+        );
+
+      if (!normalizedService) {
+        return false;
+      }
+
+      if (
+        normalizedMessage ===
+        normalizedService
+      ) {
+        return true;
+      }
+
+      if (
+        normalizedMessage.includes(
+          normalizedService
+        )
+      ) {
+        return true;
+      }
+
+      const serviceWords =
+        normalizedService
+          .split(" ")
+          .filter(
+            (word) =>
+              word.length >=
+              2
+          );
+
+      if (
+        serviceWords.length ===
+        0
+      ) {
+        return false;
+      }
+
+      return serviceWords.every(
+        (word) =>
+          normalizedMessage.includes(
+            word
+          )
+      );
+    });
+
+  if (
+    matches.length !==
+    1
+  ) {
+    return null;
+  }
+
+  return matches[0];
+}
+
+/* =========================================================
+   TEXT NORMALIZATION
+   ========================================================= */
+
+function normalizeText(
+  value: string
+) {
+  return value
+    .toLowerCase()
+    .replace(
+      /[^a-z0-9\s]/g,
+      " "
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .trim();
+}
+
+/* =========================================================
+   TWIML RESPONSE
    ========================================================= */
 
 function twimlResponse() {
@@ -892,14 +1543,24 @@ function twimlResponse() {
 }
 
 /* =========================================================
-   SMS AVAILABILITY
+   FORBIDDEN RESPONSE
+   ========================================================= */
 
-   Same rules as website availability:
-   - business timezone
-   - business working hours
-   - slot duration
-   - buffer
-   - remove scheduled/confirmed appointments
+function forbiddenResponse() {
+  return new NextResponse(
+    "Forbidden",
+    {
+      status: 403,
+      headers: {
+        "Content-Type":
+          "text/plain",
+      },
+    }
+  );
+}
+
+/* =========================================================
+   SMS AVAILABILITY
    ========================================================= */
 
 async function getSmsAvailableSlots({
@@ -918,7 +1579,8 @@ async function getSmsAvailableSlots({
 
   if (
     !availability ||
-    !availability.days?.length
+    !availability.days
+      ?.length
   ) {
     return [];
   }
@@ -974,7 +1636,8 @@ async function getSmsAvailableSlots({
   }
 
   if (
-    slots.length === 0
+    slots.length ===
+    0
   ) {
     return [];
   }
