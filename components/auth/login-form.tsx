@@ -15,11 +15,11 @@ export function LoginForm() {
 
   const [email, setEmail] =
     useState(
-      "demo@abchomeservices.com"
+      ""
     );
 
   const [password, setPassword] =
-    useState("12345678!");
+    useState("");
   const [needsVerification, setNeedsVerification] =
     useState(false);
 

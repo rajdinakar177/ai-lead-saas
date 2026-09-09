@@ -323,13 +323,22 @@ export async function POST(
     // Update lead
     // ----------------------------
 
-    await Lead.findByIdAndUpdate(
-      lead._id,
-      {
-        status:
-          "booked",
-      }
-    );
+   await Lead.findByIdAndUpdate(
+  lead._id,
+  {
+    status:
+      "booked",
+
+    smsConversationActive:
+      false,
+
+    "followUp.enabled":
+      false,
+
+    "followUp.nextFollowUpAt":
+      null,
+  }
+);
 
     // ----------------------------
     // Save booking message

@@ -1,23 +1,26 @@
-
 import { NextResponse } from "next/server";
 
 import { connectDB } from "@/lib/mongodb";
 import { validatePhoneNumber } from "@/lib/phone";
+import {
+  canFollowUp,
+  getNextFollowUpAt,
+} from "@/lib/follow-up";
 
 import { Business } from "@/models/Business";
 import { Lead } from "@/models/Lead";
 import { Message } from "@/models/Message";
+
 import {
   generateQualificationResponse,
   type AISettings,
   type ChatMessage,
   type LeadData,
 } from "@/lib/ai/qualification";
+
 /* =========================================================
    TYPES
    ========================================================= */
-
-
 
 type RequestBody = {
   leadId?: string | null;
@@ -25,8 +28,6 @@ type RequestBody = {
   messages: ChatMessage[];
   lead: LeadData;
 };
-
-
 
 /* =========================================================
    POST
@@ -57,7 +58,8 @@ export async function POST(
 
     await connectDB();
 
-    let existingLead: any = null;
+    let existingLead: any =
+      null;
 
     let business;
 
@@ -125,8 +127,11 @@ export async function POST(
 
       business =
         await Business.findOne({
-          slug: businessSlug,
-          emailVerified: true,
+          slug:
+            businessSlug,
+
+          emailVerified:
+            true,
         });
 
       if (!business) {
@@ -204,7 +209,14 @@ export async function POST(
         );
 
     /* =====================================================
-       SAVE USER MESSAGE ONLY FOR EXISTING LEAD
+       SAVE USER MESSAGE
+
+       A customer reply means any previously scheduled
+       follow-up is no longer needed.
+
+       We clear nextFollowUpAt here.
+
+       A new timer will be scheduled after the AI replies.
        ===================================================== */
 
     if (
@@ -221,6 +233,15 @@ export async function POST(
         content:
           latestUserMessage.text,
       });
+
+      existingLead.followUp =
+        existingLead.followUp ??
+        {};
+
+      existingLead.followUp.nextFollowUpAt =
+        null;
+
+      await existingLead.save();
     }
 
     /* =====================================================
@@ -254,7 +275,6 @@ export async function POST(
 
     /* =====================================================
        EXISTING LEAD
-       Update normally.
        ===================================================== */
 
     if (existingLead) {
@@ -291,6 +311,53 @@ export async function POST(
           ? "qualified"
           : result.status;
 
+      /* ===================================================
+         SCHEDULE NEXT FOLLOW-UP
+
+         Customer has just received another AI response.
+
+         For normal customer/AI conversation we keep the
+         current follow-up count and schedule based on it.
+
+         count 0 -> 1 hour
+         count 1 -> 24 hours
+         count 2 -> 48 hours
+         =================================================== */
+
+      if (
+        canFollowUp(
+          existingLead.status,
+          existingLead.phone
+        )
+      ) {
+        existingLead.followUp =
+          existingLead.followUp ??
+          {};
+
+        const followUpCount =
+          existingLead.followUp
+            .count ??
+          0;
+
+        existingLead.followUp.enabled =
+          true;
+
+        existingLead.followUp.nextFollowUpAt =
+          getNextFollowUpAt(
+            followUpCount
+          );
+      } else {
+        existingLead.followUp =
+          existingLead.followUp ??
+          {};
+
+        existingLead.followUp.enabled =
+          false;
+
+        existingLead.followUp.nextFollowUpAt =
+          null;
+      }
+
       await existingLead.save();
 
       const aiMessage =
@@ -322,17 +389,21 @@ export async function POST(
        No phone:
        Do NOT create Lead.
        Do NOT create Messages.
+       Do NOT schedule follow-up.
        ===================================================== */
 
     if (!result.lead.phone) {
       return NextResponse.json({
         ...result,
 
-        leadId: null,
+        leadId:
+          null,
 
-        messageId: null,
+        messageId:
+          null,
       });
     }
+
     /* =====================================================
        RE-VALIDATE PHONE BEFORE CREATING REAL LEAD
        ===================================================== */
@@ -340,7 +411,8 @@ export async function POST(
     const verifiedPhone =
       validatePhoneNumber(
         result.lead.phone,
-        business.country ?? "US"
+        business.country ??
+          "US"
       );
 
     if (
@@ -357,20 +429,25 @@ export async function POST(
 
           lead: {
             ...result.lead,
-            phone: null,
+            phone:
+              null,
           },
 
-          leadId: null,
+          leadId:
+            null,
 
-          messageId: null,
+          messageId:
+            null,
 
-          readyToBook: false,
+          readyToBook:
+            false,
         }
       );
     }
 
     result.lead.phone =
       verifiedPhone.normalized;
+
     /* =====================================================
        PHONE CAPTURED
 
@@ -417,6 +494,41 @@ export async function POST(
         source:
           "public-lead-page",
       });
+
+    /* =====================================================
+       SCHEDULE FIRST FOLLOW-UP FOR NEW LEAD
+
+       New persisted lead starts at count 0.
+
+       If the customer doesn't reply:
+       follow-up #1 becomes due in 1 hour.
+       ===================================================== */
+
+    if (
+      canFollowUp(
+        newLead.status,
+        newLead.phone
+      )
+    ) {
+      newLead.followUp.enabled =
+        true;
+
+      newLead.followUp.count =
+        0;
+
+      newLead.followUp.lastFollowUpAt =
+        null;
+
+      newLead.followUp.nextFollowUpAt =
+        getNextFollowUpAt(0);
+
+      await newLead.save();
+    }
+
+    /* =====================================================
+       NEW LEAD EMAIL
+       ===================================================== */
+
     try {
       const {
         sendNewLeadEmail,
@@ -458,10 +570,9 @@ export async function POST(
         emailError
       );
     }
+
     /* =====================================================
        SAVE ENTIRE ANONYMOUS CONVERSATION
-
-       Up until now it only existed in browser memory.
        ===================================================== */
 
     const conversationMessages =

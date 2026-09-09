@@ -21,6 +21,11 @@ import {
 import { sendAppointmentBookedEmail } from "@/lib/email/send-appointment-booked-email";
 import { sendSmsReply } from "@/lib/sms/send-sms-reply";
 
+import {
+  canFollowUp,
+  getNextFollowUpAt,
+} from "@/lib/follow-up";
+
 import { Lead } from "@/models/Lead";
 import { Business } from "@/models/Business";
 import { Message } from "@/models/Message";
@@ -96,12 +101,6 @@ export async function POST(
 
     /* =====================================================
        TWILIO SIGNATURE VALIDATION
-
-       Local development:
-       TWILIO_SIGNATURE_VALIDATION=false
-
-       Production:
-       TWILIO_SIGNATURE_VALIDATION=true
        ===================================================== */
 
     const signatureValidationEnabled =
@@ -115,10 +114,6 @@ export async function POST(
           "x-twilio-signature"
         );
 
-      /*
-       * Twilio signs the full POST parameter set,
-       * not only From / To / Body / MessageSid.
-       */
       const twilioParams: Record<
         string,
         string
@@ -137,13 +132,6 @@ export async function POST(
         }
       }
 
-      /*
-       * The URL must exactly match the URL
-       * configured in Twilio.
-       *
-       * TWILIO_WEBHOOK_URL can be set in
-       * production if needed.
-       */
       const webhookUrl =
         process.env
           .TWILIO_WEBHOOK_URL
@@ -211,16 +199,6 @@ export async function POST(
 
     /* =====================================================
        MESSAGE SID IDEMPOTENCY
-
-       Twilio may retry the same webhook.
-
-       First request:
-       -> create TwilioInboundEvent
-       -> continue processing
-
-       Duplicate request:
-       -> Mongo unique index throws 11000
-       -> ignore safely
        ===================================================== */
 
     try {
@@ -296,7 +274,7 @@ export async function POST(
       phoneResult.normalized;
 
     /* =====================================================
-       FIND LATEST LEAD FOR THIS BUSINESS + CUSTOMER
+       FIND LATEST LEAD
        ===================================================== */
 
     const latestLead =
@@ -307,7 +285,8 @@ export async function POST(
         phone:
           normalizedPhone,
       }).sort({
-        createdAt: -1,
+        createdAt:
+          -1,
       });
 
     if (!latestLead) {
@@ -388,7 +367,8 @@ export async function POST(
         smsConversationActive:
           true,
       }).sort({
-        updatedAt: -1,
+        updatedAt:
+          -1,
       });
 
     /* =====================================================
@@ -409,7 +389,8 @@ export async function POST(
               ACTIVE_LEAD_STATUSES,
           },
         }).sort({
-          createdAt: -1,
+          createdAt:
+            -1,
         });
 
       /* ===================================================
@@ -539,9 +520,7 @@ export async function POST(
               body:
                 clarification,
             });
-          } catch (
-            smsError
-          ) {
+          } catch (smsError) {
             console.error(
               "SMS lead-selection reply failed:",
               smsError
@@ -696,6 +675,48 @@ export async function POST(
                 true,
             });
 
+          /* ===============================================
+             SCHEDULE FOLLOW-UP FOR NEW SMS LEAD
+             =============================================== */
+
+          if (
+            canFollowUp(
+              lead.status,
+              lead.phone
+            )
+          ) {
+            lead.followUp =
+              lead.followUp ?? {};
+
+            lead.followUp.enabled =
+              true;
+
+            lead.followUp.count =
+              lead.followUp.count ??
+              0;
+
+            lead.followUp.lastFollowUpAt =
+              lead.followUp
+                .lastFollowUpAt ??
+              null;
+
+            lead.followUp.nextFollowUpAt =
+              getNextFollowUpAt(
+                lead.followUp.count
+              );
+          } else {
+            lead.followUp =
+              lead.followUp ?? {};
+
+            lead.followUp.enabled =
+              false;
+
+            lead.followUp.nextFollowUpAt =
+              null;
+          }
+
+          await lead.save();
+
           await Message.create({
             leadId:
               lead._id,
@@ -727,9 +748,7 @@ export async function POST(
               body:
                 newRequestResult.reply,
             });
-          } catch (
-            smsError
-          ) {
+          } catch (smsError) {
             console.error(
               "New service request SMS reply failed:",
               smsError
@@ -753,6 +772,14 @@ export async function POST(
 
               smsConversationActive:
                 lead.smsConversationActive,
+
+              followUpEnabled:
+                lead.followUp
+                  ?.enabled,
+
+              nextFollowUpAt:
+                lead.followUp
+                  ?.nextFollowUpAt,
 
               messageId:
                 aiMessage._id.toString(),
@@ -803,6 +830,21 @@ export async function POST(
     }
 
     /* =====================================================
+       CUSTOMER REPLIED
+
+       Cancel previous follow-up timer.
+       A new one will be scheduled after AI response.
+       ===================================================== */
+
+    lead.followUp =
+      lead.followUp ?? {};
+
+    lead.followUp.nextFollowUpAt =
+      null;
+
+    await lead.save();
+
+    /* =====================================================
        SAVE CUSTOMER MESSAGE
        ===================================================== */
 
@@ -846,6 +888,13 @@ export async function POST(
 
     /* =====================================================
        SMS APPOINTMENT SELECTION
+
+       IMPORTANT:
+       Numeric choices use the exact appointment slots that
+       were previously sent to the customer.
+
+       We never regenerate the array and reinterpret the
+       customer's number.
        ===================================================== */
 
     const selectedOption =
@@ -867,63 +916,107 @@ export async function POST(
           timeline
         )
       ) {
-        const availableSlots =
-          await getSmsAvailableSlots({
-            business,
-            timeline,
-          });
+        /* ===============================================
+           READ EXACT PREVIOUSLY OFFERED SLOT
+           =============================================== */
 
-        const smsSlots =
-          availableSlots.slice(
-            0,
-            3
-          );
+        const storedSlots =
+          lead.smsBookingOptions
+            ?.slots ?? [];
 
-        const selectedSlot =
-          smsSlots[
-            selectedOption -
-              1
+        const storedSlot =
+          storedSlots[
+            selectedOption - 1
           ];
 
-        if (!selectedSlot) {
-          const unavailableReply =
-            "That option is no longer available. Please choose one of the currently available appointment times.";
+        /* ===============================================
+           NO STORED OPTION
 
-          await Message.create({
-            leadId:
-              lead._id,
+           Customer may be replying to an older message.
+           Send a fresh set of appointment options.
+           =============================================== */
 
-            sender:
-              "ai",
+        if (!storedSlot) {
+          await sendFreshSmsAppointmentOptions({
+            lead,
+            business,
+            timeline,
+            normalizedPhone,
 
-            content:
-              unavailableReply,
+            reason:
+              "Those appointment options are no longer current. Here are the latest available times:",
           });
-
-          try {
-            await sendSmsReply({
-              to:
-                normalizedPhone,
-
-              body:
-                unavailableReply,
-            });
-          } catch (
-            smsError
-          ) {
-            console.error(
-              "SMS unavailable-slot reply failed:",
-              smsError
-            );
-          }
 
           return twimlResponse();
         }
 
         const scheduledFor =
           new Date(
-            selectedSlot.scheduledFor
+            storedSlot.scheduledFor
           );
+
+        const selectedLabel =
+          storedSlot.label;
+
+        /* ===============================================
+           REVALIDATE EXACT STORED SLOT
+           =============================================== */
+
+        const currentAvailableSlots =
+          await getSmsAvailableSlots({
+            business,
+            timeline,
+          });
+
+        const exactSlotStillAvailable =
+          currentAvailableSlots.some(
+            (slot) =>
+              new Date(
+                slot.scheduledFor
+              ).getTime() ===
+              scheduledFor.getTime()
+          );
+
+        /* ===============================================
+           EXACT OFFERED SLOT NO LONGER AVAILABLE
+           =============================================== */
+
+        if (
+          !exactSlotStillAvailable
+        ) {
+          console.log(
+            "Previously offered SMS appointment is no longer available:",
+            {
+              leadId:
+                lead._id.toString(),
+
+              option:
+                selectedOption,
+
+              label:
+                selectedLabel,
+
+              scheduledFor:
+                scheduledFor.toISOString(),
+            }
+          );
+
+          await sendFreshSmsAppointmentOptions({
+            lead,
+            business,
+            timeline,
+            normalizedPhone,
+
+            reason:
+              `Sorry, ${selectedLabel} is no longer available. Here are the latest available times:`,
+          });
+
+          return twimlResponse();
+        }
+
+        /* ===============================================
+           SECOND DATABASE CONFLICT CHECK
+           =============================================== */
 
         const existingAppointment =
           await Appointment.findOne({
@@ -943,41 +1036,41 @@ export async function POST(
         if (
           existingAppointment
         ) {
-          const conflictReply =
-            "That appointment time was just taken. Please choose another available time.";
+          console.log(
+            "Stored SMS appointment slot already taken:",
+            {
+              leadId:
+                lead._id.toString(),
 
-          await Message.create({
-            leadId:
-              lead._id,
+              option:
+                selectedOption,
 
-            sender:
-              "ai",
+              label:
+                selectedLabel,
 
-            content:
-              conflictReply,
+              scheduledFor:
+                scheduledFor.toISOString(),
+            }
+          );
+
+          await sendFreshSmsAppointmentOptions({
+            lead,
+            business,
+            timeline,
+            normalizedPhone,
+
+            reason:
+              `Sorry, ${selectedLabel} was just taken. Here are the latest available times:`,
           });
-
-          try {
-            await sendSmsReply({
-              to:
-                normalizedPhone,
-
-              body:
-                conflictReply,
-            });
-          } catch (
-            smsError
-          ) {
-            console.error(
-              "SMS conflict reply failed:",
-              smsError
-            );
-          }
 
           return twimlResponse();
         }
 
         try {
+          /* =============================================
+             CREATE APPOINTMENT
+             ============================================= */
+
           const appointment =
             await Appointment.create({
               leadId:
@@ -987,7 +1080,7 @@ export async function POST(
                 lead.businessId,
 
               label:
-                selectedSlot.label,
+                selectedLabel,
 
               scheduledFor,
 
@@ -995,16 +1088,45 @@ export async function POST(
                 "scheduled",
             });
 
+          /* =============================================
+             BOOK LEAD + STOP FOLLOW-UPS
+             ============================================= */
+
           lead.status =
             "booked";
 
           lead.smsConversationActive =
             false;
 
+          lead.followUp =
+            lead.followUp ?? {};
+
+          lead.followUp.enabled =
+            false;
+
+          lead.followUp.nextFollowUpAt =
+            null;
+
+          /* =============================================
+             CLEAR USED SMS BOOKING OPTIONS
+             ============================================= */
+
+          lead.smsBookingOptions = {
+            offeredAt:
+              null,
+
+            slots:
+              [],
+          };
+
           await lead.save();
 
+          /* =============================================
+             CONFIRMATION MESSAGE
+             ============================================= */
+
           const confirmation =
-            `Perfect! We've reserved ${selectedSlot.label}.`;
+            `Perfect! We've reserved ${selectedLabel}.`;
 
           const aiMessage =
             await Message.create({
@@ -1026,14 +1148,16 @@ export async function POST(
               body:
                 confirmation,
             });
-          } catch (
-            smsError
-          ) {
+          } catch (smsError) {
             console.error(
               "SMS appointment confirmation failed:",
               smsError
             );
           }
+
+          /* =============================================
+             EMAIL BUSINESS
+             ============================================= */
 
           try {
             await sendAppointmentBookedEmail({
@@ -1063,11 +1187,9 @@ export async function POST(
                 null,
 
               appointmentLabel:
-                selectedSlot.label,
+                selectedLabel,
             });
-          } catch (
-            emailError
-          ) {
+          } catch (emailError) {
             console.error(
               "SMS appointment email failed:",
               emailError
@@ -1090,13 +1212,21 @@ export async function POST(
                 selectedOption,
 
               label:
-                selectedSlot.label,
+                selectedLabel,
 
               scheduledFor:
-                selectedSlot.scheduledFor,
+                scheduledFor.toISOString(),
 
               smsConversationActive:
                 lead.smsConversationActive,
+
+              followUpEnabled:
+                lead.followUp
+                  ?.enabled,
+
+              nextFollowUpAt:
+                lead.followUp
+                  ?.nextFollowUpAt,
 
               messageId:
                 aiMessage._id.toString(),
@@ -1105,6 +1235,13 @@ export async function POST(
 
           return twimlResponse();
         } catch (error) {
+          /* =============================================
+             DUPLICATE SLOT INDEX CONFLICT
+
+             Protects against another booking happening
+             between our availability check and create().
+             ============================================= */
+
           if (
             typeof error ===
               "object" &&
@@ -1113,36 +1250,32 @@ export async function POST(
             error.code ===
               11000
           ) {
-            const conflictReply =
-              "That appointment time was just taken. Please choose another available time.";
+            console.log(
+              "SMS appointment duplicate index conflict:",
+              {
+                leadId:
+                  lead._id.toString(),
 
-            await Message.create({
-              leadId:
-                lead._id,
+                option:
+                  selectedOption,
 
-              sender:
-                "ai",
+                label:
+                  selectedLabel,
 
-              content:
-                conflictReply,
+                scheduledFor:
+                  scheduledFor.toISOString(),
+              }
+            );
+
+            await sendFreshSmsAppointmentOptions({
+              lead,
+              business,
+              timeline,
+              normalizedPhone,
+
+              reason:
+                `Sorry, ${selectedLabel} was just taken. Here are the latest available times:`,
             });
-
-            try {
-              await sendSmsReply({
-                to:
-                  normalizedPhone,
-
-                body:
-                  conflictReply,
-              });
-            } catch (
-              smsError
-            ) {
-              console.error(
-                "SMS duplicate-slot reply failed:",
-                smsError
-              );
-            }
 
             return twimlResponse();
           }
@@ -1162,7 +1295,8 @@ export async function POST(
           lead._id,
       })
         .sort({
-          createdAt: 1,
+          createdAt:
+            1,
         })
         .lean();
 
@@ -1171,7 +1305,7 @@ export async function POST(
         (message) => ({
           sender:
             message.sender ===
-            "ai"
+              "ai"
               ? ("ai" as const)
               : ("user" as const),
 
@@ -1229,9 +1363,17 @@ export async function POST(
       );
 
     /* =====================================================
-       QUALIFIED
+       QUALIFIED:
        GENERATE REAL APPOINTMENT OPTIONS
+
+       We will store the EXACT options sent to the customer.
        ===================================================== */
+
+    let offeredSmsSlots:
+      GeneratedSlot[] = [];
+
+    let shouldStoreSmsOptions =
+      false;
 
     if (
       result.readyToBook &&
@@ -1257,6 +1399,12 @@ export async function POST(
             0,
             3
           );
+
+        shouldStoreSmsOptions =
+          true;
+
+        offeredSmsSlots =
+          firstThreeSlots;
 
         if (
           firstThreeSlots.length >
@@ -1348,6 +1496,80 @@ export async function POST(
         true;
     }
 
+    /* =====================================================
+       SCHEDULE FRESH FOLLOW-UP AFTER AI RESPONSE
+       ===================================================== */
+
+    if (
+      canFollowUp(
+        lead.status,
+        lead.phone
+      )
+    ) {
+      lead.followUp =
+        lead.followUp ?? {};
+
+      const followUpCount =
+        lead.followUp.count ??
+        0;
+
+      lead.followUp.enabled =
+        true;
+
+      lead.followUp.nextFollowUpAt =
+        getNextFollowUpAt(
+          followUpCount
+        );
+    } else {
+      lead.followUp =
+        lead.followUp ?? {};
+
+      lead.followUp.enabled =
+        false;
+
+      lead.followUp.nextFollowUpAt =
+        null;
+    }
+
+    /* =====================================================
+       STORE EXACT SMS APPOINTMENT OPTIONS
+
+       These are the exact options shown to the customer.
+       Later 1 / 2 / 3 maps back to these timestamps.
+       ===================================================== */
+
+    if (
+      shouldStoreSmsOptions
+    ) {
+      lead.smsBookingOptions = {
+        offeredAt:
+          new Date(),
+
+        slots:
+          offeredSmsSlots.map(
+            (slot) => ({
+              label:
+                slot.label,
+
+              scheduledFor:
+                new Date(
+                  slot.scheduledFor
+                ),
+            })
+          ),
+      };
+    } else if (
+      !result.readyToBook
+    ) {
+      lead.smsBookingOptions = {
+        offeredAt:
+          null,
+
+        slots:
+          [],
+      };
+    }
+
     await lead.save();
 
     /* =====================================================
@@ -1378,9 +1600,7 @@ export async function POST(
         body:
           result.reply,
       });
-    } catch (
-      smsError
-    ) {
+    } catch (smsError) {
       console.error(
         "SMS AI reply delivery failed:",
         smsError
@@ -1410,6 +1630,39 @@ export async function POST(
 
         smsConversationActive:
           lead.smsConversationActive,
+
+        smsBookingOptions:
+          lead.smsBookingOptions
+            ?.slots?.map(
+              (
+                slot: {
+                  label: string;
+                  scheduledFor: Date;
+                },
+                index: number
+              ) => ({
+                option:
+                  index + 1,
+
+                label:
+                  slot.label,
+
+                scheduledFor:
+                  slot.scheduledFor,
+              })
+            ),
+
+        followUpEnabled:
+          lead.followUp
+            ?.enabled,
+
+        followUpCount:
+          lead.followUp
+            ?.count,
+
+        nextFollowUpAt:
+          lead.followUp
+            ?.nextFollowUpAt,
       }
     );
 
@@ -1532,7 +1785,8 @@ function twimlResponse() {
     `<?xml version="1.0" encoding="UTF-8"?>
 <Response></Response>`,
     {
-      status: 200,
+      status:
+        200,
 
       headers: {
         "Content-Type":
@@ -1550,11 +1804,225 @@ function forbiddenResponse() {
   return new NextResponse(
     "Forbidden",
     {
-      status: 403,
+      status:
+        403,
+
       headers: {
         "Content-Type":
           "text/plain",
       },
+    }
+  );
+}
+
+/* =========================================================
+   SEND FRESH SMS APPOINTMENT OPTIONS
+
+   Used when:
+   - customer replies to an old appointment list
+   - selected slot became unavailable
+   - slot became occupied during booking
+   - MongoDB unique index detects a booking race
+
+   This function:
+   1. generates fresh availability
+   2. stores the exact new slots
+   3. sends the new choices
+   4. reschedules the follow-up
+   ========================================================= */
+
+async function sendFreshSmsAppointmentOptions({
+  lead,
+  business,
+  timeline,
+  normalizedPhone,
+  reason,
+}: {
+  lead: any;
+  business: any;
+  timeline: Timeline;
+  normalizedPhone: string;
+  reason: string;
+}) {
+  const availableSlots =
+    await getSmsAvailableSlots({
+      business,
+      timeline,
+    });
+
+  const firstThreeSlots =
+    availableSlots.slice(
+      0,
+      3
+    );
+
+  let reply =
+    reason;
+
+  if (
+    firstThreeSlots.length >
+    0
+  ) {
+    const slotLines =
+      firstThreeSlots
+        .map(
+          (
+            slot,
+            index
+          ) =>
+            `${index + 1}. ${slot.label}`
+        )
+        .join("\n");
+
+    const optionNumbers =
+      firstThreeSlots
+        .map(
+          (
+            _,
+            index
+          ) =>
+            index + 1
+        )
+        .join(", ");
+
+    reply =
+      `${reason}\n\n${slotLines}\n\nReply with ${optionNumbers}.`;
+  } else {
+    reply =
+      `${reason}\n\nI couldn't find another available appointment time for this timeframe. Please reply with another day or timeframe.`;
+  }
+
+  /* =======================================================
+     STORE NEW EXACT OPTIONS
+     ======================================================= */
+
+  lead.smsBookingOptions = {
+    offeredAt:
+      new Date(),
+
+    slots:
+      firstThreeSlots.map(
+        (slot) => ({
+          label:
+            slot.label,
+
+          scheduledFor:
+            new Date(
+              slot.scheduledFor
+            ),
+        })
+      ),
+  };
+
+  /* =======================================================
+     RESCHEDULE FOLLOW-UP
+     ======================================================= */
+
+  if (
+    canFollowUp(
+      lead.status,
+      lead.phone
+    )
+  ) {
+    lead.followUp =
+      lead.followUp ?? {};
+
+    const followUpCount =
+      lead.followUp.count ??
+      0;
+
+    lead.followUp.enabled =
+      true;
+
+    lead.followUp.nextFollowUpAt =
+      getNextFollowUpAt(
+        followUpCount
+      );
+  } else {
+    lead.followUp =
+      lead.followUp ?? {};
+
+    lead.followUp.enabled =
+      false;
+
+    lead.followUp.nextFollowUpAt =
+      null;
+  }
+
+  await lead.save();
+
+  /* =======================================================
+     SAVE AI MESSAGE
+     ======================================================= */
+
+  const aiMessage =
+    await Message.create({
+      leadId:
+        lead._id,
+
+      sender:
+        "ai",
+
+      content:
+        reply,
+    });
+
+  /* =======================================================
+     SEND SMS
+     ======================================================= */
+
+  try {
+    await sendSmsReply({
+      to:
+        normalizedPhone,
+
+      body:
+        reply,
+    });
+  } catch (smsError) {
+    console.error(
+      "Fresh SMS appointment options delivery failed:",
+      smsError
+    );
+  }
+
+  console.log(
+    "Fresh SMS appointment options sent:",
+    {
+      leadId:
+        lead._id.toString(),
+
+      slots:
+        firstThreeSlots.map(
+          (
+            slot,
+            index
+          ) => ({
+            option:
+              index + 1,
+
+            label:
+              slot.label,
+
+            scheduledFor:
+              slot.scheduledFor,
+          })
+        ),
+
+      followUpEnabled:
+        lead.followUp
+          ?.enabled,
+
+      followUpCount:
+        lead.followUp
+          ?.count,
+
+      nextFollowUpAt:
+        lead.followUp
+          ?.nextFollowUpAt,
+
+      messageId:
+        aiMessage._id.toString(),
     }
   );
 }
@@ -1622,9 +2090,11 @@ async function getSmsAvailableSlots({
       generateSlotsForDate(
         localDate,
         dayAvailability,
-        availability.slotDurationMinutes ??
+        availability
+          .slotDurationMinutes ??
           60,
-        availability.bufferMinutes ??
+        availability
+          .bufferMinutes ??
           0,
         timezone,
         now
@@ -1672,9 +2142,7 @@ async function getSmsAvailableSlots({
   const bookedTimes =
     new Set(
       scheduledAppointments.map(
-        (
-          appointment
-        ) =>
+        (appointment) =>
           new Date(
             appointment.scheduledFor
           ).getTime()
