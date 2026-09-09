@@ -20,6 +20,10 @@ import {
 
 import { sendAppointmentBookedEmail } from "@/lib/email/send-appointment-booked-email";
 import { sendSmsReply } from "@/lib/sms/send-sms-reply";
+import {
+  acquireSmsConversationLock,
+  releaseSmsConversationLock,
+} from "@/lib/sms/sms-conversation-lock";
 
 import {
   canFollowUp,
@@ -54,9 +58,13 @@ const VALID_TIMELINES: Timeline[] = [
    POST
    ========================================================= */
 
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
+  let claimedMessageSid: string | null = null;
+  let conversationLockOwner: string | null = null;
+  let conversationLockBusinessId: any = null;
+  let conversationLockPhone: string | null = null;
+  let processingError: unknown = null;
+
   try {
     /* =====================================================
        READ TWILIO FORM DATA
@@ -145,8 +153,7 @@ export async function POST(
         signatureValid =
           verifyTwilioSignature({
             signature,
-            url:
-              webhookUrl,
+            url: webhookUrl,
             params:
               twilioParams,
           });
@@ -198,36 +205,28 @@ export async function POST(
     await connectDB();
 
     /* =====================================================
-       MESSAGE SID IDEMPOTENCY
+       MESSAGE SID IDEMPOTENCY / RETRY CLAIM
        ===================================================== */
 
-    try {
-      await TwilioInboundEvent.create({
+    const eventClaim =
+      await claimTwilioInboundEvent({
         messageSid,
         from,
         to,
         body,
-        status: "processing",
       });
-    } catch (error) {
-      if (
-        typeof error ===
-          "object" &&
-        error !== null &&
-        "code" in error &&
-        error.code ===
-          11000
-      ) {
-        console.log(
-          "Duplicate Twilio webhook ignored:",
-          messageSid
-        );
 
-        return twimlResponse();
-      }
+    if (!eventClaim.shouldProcess) {
+      console.log(
+        "Twilio webhook already handled or currently processing:",
+        messageSid
+      );
 
-      throw error;
+      return twimlResponse();
     }
+
+    claimedMessageSid =
+      messageSid;
 
     /* =====================================================
        FIND BUSINESS FROM TWILIO TO NUMBER
@@ -272,6 +271,90 @@ export async function POST(
 
     const normalizedPhone =
       phoneResult.normalized;
+
+    /* =====================================================
+       PER-CONVERSATION DISTRIBUTED LOCK
+
+       Everything below this point that reads or changes a
+       lead conversation is serialized by business + phone.
+       ===================================================== */
+
+    const conversationLock =
+      await acquireSmsConversationLock({
+        businessId:
+          business._id,
+
+        phone:
+          normalizedPhone,
+
+        waitMs:
+          15000,
+
+        leaseMs:
+          120000,
+      });
+
+    if (!conversationLock) {
+      processingError =
+        new Error(
+          "SMS conversation is busy. Please retry."
+        );
+
+      console.warn(
+        "Could not acquire SMS conversation lock:",
+        {
+          businessId:
+            business._id.toString(),
+
+          phone:
+            normalizedPhone,
+
+          messageSid,
+        }
+      );
+
+      return retryResponse();
+    }
+
+    conversationLockOwner =
+      conversationLock.ownerToken;
+
+    conversationLockBusinessId =
+      business._id;
+
+    conversationLockPhone =
+      normalizedPhone;
+
+    /*
+     * A stale Twilio event may have been reclaimed while the
+     * original worker still held the conversation lock.
+     *
+     * Once we own the lock, check whether that original
+     * worker already completed the event.
+     */
+    const eventAfterLock =
+      await TwilioInboundEvent.findOne({
+        messageSid,
+      })
+        .select(
+          "status"
+        )
+        .lean();
+
+    if (
+      eventAfterLock?.status ===
+      "processed"
+    ) {
+      console.log(
+        "Twilio webhook completed by another worker while waiting for lock:",
+        messageSid
+      );
+
+      claimedMessageSid =
+        null;
+
+      return twimlResponse();
+    }
 
     /* =====================================================
        FIND LATEST LEAD
@@ -372,6 +455,225 @@ export async function POST(
       });
 
     /* =====================================================
+       EXPLICIT SERVICE SWITCH
+
+       If there is already an active SMS conversation but the
+       customer explicitly names another open service request,
+       switch to that lead before saving or processing this
+       message.
+
+       This is safe because the per-business + phone MongoDB
+       conversation lock is already held at this point.
+       ===================================================== */
+
+    if (lead) {
+      const openLeadsForSwitch =
+        await Lead.find({
+          businessId:
+            business._id,
+
+          phone:
+            normalizedPhone,
+
+          status: {
+            $in:
+              ACTIVE_LEAD_STATUSES,
+          },
+        }).sort({
+          createdAt:
+            -1,
+        });
+
+      const explicitlyMatchedLead =
+        findLeadByService(
+          openLeadsForSwitch,
+          body
+        );
+
+      if (
+        explicitlyMatchedLead &&
+        explicitlyMatchedLead._id.toString() !==
+          lead._id.toString()
+      ) {
+        const previousActiveLead =
+          lead;
+
+        console.log(
+          "Explicit service switch requested:",
+          {
+            fromLeadId:
+              previousActiveLead._id.toString(),
+
+            fromService:
+              previousActiveLead.service,
+
+            toLeadId:
+              explicitlyMatchedLead._id.toString(),
+
+            toService:
+              explicitlyMatchedLead.service,
+          }
+        );
+
+        /*
+         * Deactivate the current lead first so the unique
+         * partial index allows the requested lead to become
+         * active.
+         *
+         * The distributed conversation lock ensures another
+         * webhook for this business + phone cannot interleave
+         * with these two updates.
+         */
+        const deactivated =
+          await Lead.findOneAndUpdate(
+            {
+              _id:
+                previousActiveLead._id,
+
+              businessId:
+                business._id,
+
+              phone:
+                normalizedPhone,
+
+              smsConversationActive:
+                true,
+            },
+            {
+              $set: {
+                smsConversationActive:
+                  false,
+              },
+            },
+            {
+              returnDocument:
+                "after",
+            }
+          );
+
+        if (!deactivated) {
+          console.warn(
+            "Could not deactivate current SMS conversation during service switch:",
+            {
+              leadId:
+                previousActiveLead._id.toString(),
+
+              phone:
+                normalizedPhone,
+            }
+          );
+
+          return twimlResponse();
+        }
+
+        try {
+          const switchedLead =
+            await Lead.findOneAndUpdate(
+              {
+                _id:
+                  explicitlyMatchedLead._id,
+
+                businessId:
+                  business._id,
+
+                phone:
+                  normalizedPhone,
+
+                status: {
+                  $in:
+                    ACTIVE_LEAD_STATUSES,
+                },
+
+                smsConversationActive: {
+                  $ne:
+                    true,
+                },
+              },
+              {
+                $set: {
+                  smsConversationActive:
+                    true,
+                },
+              },
+              {
+                returnDocument:
+                  "after",
+              }
+            );
+
+          if (!switchedLead) {
+            /*
+             * The target lead changed state after we read it.
+             * Restore the previous conversation when possible.
+             */
+            await restorePreviousSmsConversation({
+              leadId:
+                previousActiveLead._id,
+
+              businessId:
+                business._id,
+
+              phone:
+                normalizedPhone,
+            });
+
+            console.warn(
+              "Requested SMS service could not be activated because the lead changed state:",
+              {
+                requestedLeadId:
+                  explicitlyMatchedLead._id.toString(),
+
+                requestedService:
+                  explicitlyMatchedLead.service,
+              }
+            );
+
+            return twimlResponse();
+          }
+
+          lead =
+            switchedLead;
+
+          console.log(
+            "SMS conversation switched by explicit service:",
+            {
+              leadId:
+                lead._id.toString(),
+
+              service:
+                lead.service,
+
+              previousLeadId:
+                previousActiveLead._id.toString(),
+
+              previousService:
+                previousActiveLead.service,
+            }
+          );
+        } catch (error) {
+          /*
+           * Restore the previous conversation if activation
+           * fails unexpectedly. If another active lead now
+           * exists, the unique index will protect us and the
+           * restore helper will simply log the failure.
+           */
+          await restorePreviousSmsConversation({
+            leadId:
+              previousActiveLead._id,
+
+            businessId:
+              business._id,
+
+            phone:
+              normalizedPhone,
+          });
+
+          throw error;
+        }
+      }
+    }
+
+    /* =====================================================
        NO ACTIVE SMS CONVERSATION
        ===================================================== */
 
@@ -402,27 +704,71 @@ export async function POST(
         openLeads.length ===
         1
       ) {
-        lead =
+        const requestedLead =
           openLeads[0];
 
-        lead.smsConversationActive =
-          true;
+        const activation =
+          await activateSmsConversation({
+            targetLeadId:
+              requestedLead._id,
 
-        await lead.save();
+            businessId:
+              business._id,
 
-        console.log(
-          "Automatically activated SMS conversation:",
-          {
-            leadId:
-              lead._id.toString(),
+            phone:
+              normalizedPhone,
+          });
 
-            service:
-              lead.service,
+        if (!activation) {
+          console.warn(
+            "Unable to activate SMS conversation:",
+            {
+              requestedLeadId:
+                requestedLead._id.toString(),
 
-            status:
-              lead.status,
-          }
-        );
+              phone:
+                normalizedPhone,
+            }
+          );
+
+          return twimlResponse();
+        }
+
+        lead =
+          activation.lead;
+
+        if (
+          activation
+            .requestedLeadActivated
+        ) {
+          console.log(
+            "Automatically activated SMS conversation:",
+            {
+              leadId:
+                lead._id.toString(),
+
+              service:
+                lead.service,
+
+              status:
+                lead.status,
+            }
+          );
+        } else {
+          console.log(
+            "SMS activation race resolved to existing active conversation:",
+            {
+              requestedLeadId:
+                requestedLead._id.toString(),
+
+              activeLeadId:
+                lead._id.toString(),
+
+              service:
+                lead.service,
+            }
+          );
+        }
       }
 
       /* ===================================================
@@ -441,40 +787,88 @@ export async function POST(
           );
 
         if (matchedLead) {
-          await Lead.updateMany(
-            {
+          /*
+           * IMPORTANT:
+           *
+           * Do NOT deactivate every lead first.
+           *
+           * The unique partial MongoDB index guarantees that
+           * only one lead for business + phone can become
+           * active.
+           *
+           * activateSmsConversation() handles a concurrent
+           * worker safely.
+           */
+
+          const activation =
+            await activateSmsConversation({
+              targetLeadId:
+                matchedLead._id,
+
               businessId:
                 business._id,
 
               phone:
                 normalizedPhone,
-            },
-            {
-              $set: {
-                smsConversationActive:
-                  false,
-              },
-            }
-          );
+            });
 
-          matchedLead.smsConversationActive =
-            true;
+          if (!activation) {
+            console.warn(
+              "Unable to activate selected SMS conversation:",
+              {
+                requestedLeadId:
+                  matchedLead._id.toString(),
 
-          await matchedLead.save();
+                phone:
+                  normalizedPhone,
+              }
+            );
+
+            return twimlResponse();
+          }
 
           lead =
-            matchedLead;
+            activation.lead;
 
-          console.log(
-            "SMS conversation selected by service:",
-            {
-              leadId:
-                lead._id.toString(),
+          if (
+            activation
+              .requestedLeadActivated
+          ) {
+            console.log(
+              "SMS conversation selected by service:",
+              {
+                leadId:
+                  lead._id.toString(),
 
-              service:
-                lead.service,
-            }
-          );
+                service:
+                  lead.service,
+              }
+            );
+          } else {
+            /*
+             * Another webhook activated a conversation
+             * between our initial lookup and this update.
+             *
+             * Use the database winner instead of disabling
+             * it or causing a 500.
+             */
+            console.log(
+              "SMS service-selection race resolved to existing active conversation:",
+              {
+                requestedLeadId:
+                  matchedLead._id.toString(),
+
+                requestedService:
+                  matchedLead.service,
+
+                activeLeadId:
+                  lead._id.toString(),
+
+                activeService:
+                  lead.service,
+              }
+            );
+          }
         } else {
           const uniqueServices =
             Array.from(
@@ -604,122 +998,270 @@ export async function POST(
           newRequestResult.lead
             .service
         ) {
-          await Lead.updateMany(
-            {
-              businessId:
-                business._id,
+          let createdLead:
+            any = null;
 
-              phone:
-                normalizedPhone,
+          try {
+            /*
+             * Create the new lead directly as the active
+             * conversation.
+             *
+             * The unique partial index protects this from
+             * concurrent creation.
+             */
 
-              smsConversationActive:
-                true,
-            },
-            {
-              $set: {
+            createdLead =
+              await Lead.create({
+                businessId:
+                  business._id,
+
+                phone:
+                  normalizedPhone,
+
+                name:
+                  newRequestResult.lead
+                    .name ??
+                  latestLead.name ??
+                  null,
+
+                industry:
+                  newRequestResult.lead
+                    .industry ??
+                  business.industry,
+
+                service:
+                  newRequestResult.lead
+                    .service,
+
+                location:
+                  newRequestResult.lead
+                    .location ??
+                  null,
+
+                urgency:
+                  newRequestResult.lead
+                    .urgency ??
+                  null,
+
+                timeline:
+                  newRequestResult.lead
+                    .timeline ??
+                  null,
+
+                status:
+                  newRequestResult
+                    .readyToBook
+                    ? "qualified"
+                    : newRequestResult
+                      .status,
+
+                source:
+                  "sms",
+
                 smsConversationActive:
-                  false,
-              },
+                  true,
+              });
+          } catch (error) {
+            if (
+              !isMongoDuplicateKeyError(
+                error
+              )
+            ) {
+              throw error;
             }
-          );
 
-          lead =
-            await Lead.create({
-              businessId:
-                business._id,
+            /*
+             * Another request created / activated a lead for
+             * this business + phone before this request.
+             *
+             * Reload that winner and continue processing the
+             * current inbound SMS against it.
+             */
 
-              phone:
-                normalizedPhone,
+            const activeWinner =
+              await Lead.findOne({
+                businessId:
+                  business._id,
 
-              name:
-                newRequestResult.lead
-                  .name ??
-                latestLead.name ??
-                null,
+                phone:
+                  normalizedPhone,
 
-              industry:
-                newRequestResult.lead
-                  .industry ??
-                business.industry,
+                smsConversationActive:
+                  true,
+              }).sort({
+                updatedAt:
+                  -1,
+              });
 
-              service:
-                newRequestResult.lead
-                  .service,
+            if (!activeWinner) {
+              console.error(
+                "Duplicate active SMS conversation detected but winning lead could not be loaded:",
+                {
+                  businessId:
+                    business._id.toString(),
 
-              location:
-                newRequestResult.lead
-                  .location ??
-                null,
-
-              urgency:
-                newRequestResult.lead
-                  .urgency ??
-                null,
-
-              timeline:
-                newRequestResult.lead
-                  .timeline ??
-                null,
-
-              status:
-                newRequestResult
-                  .readyToBook
-                  ? "qualified"
-                  : newRequestResult
-                    .status,
-
-              source:
-                "sms",
-
-              smsConversationActive:
-                true,
-            });
-
-          /* ===============================================
-             SCHEDULE FOLLOW-UP FOR NEW SMS LEAD
-             =============================================== */
-
-          if (
-            canFollowUp(
-              lead.status,
-              lead.phone
-            )
-          ) {
-            lead.followUp =
-              lead.followUp ?? {};
-
-            lead.followUp.enabled =
-              true;
-
-            lead.followUp.count =
-              lead.followUp.count ??
-              0;
-
-            lead.followUp.lastFollowUpAt =
-              lead.followUp
-                .lastFollowUpAt ??
-              null;
-
-            lead.followUp.nextFollowUpAt =
-              getNextFollowUpAt(
-                lead.followUp.count
+                  phone:
+                    normalizedPhone,
+                }
               );
-          } else {
-            lead.followUp =
-              lead.followUp ?? {};
 
-            lead.followUp.enabled =
-              false;
+              return twimlResponse();
+            }
 
-            lead.followUp.nextFollowUpAt =
-              null;
+            lead =
+              activeWinner;
+
+            console.log(
+              "New SMS lead creation race resolved to existing active conversation:",
+              {
+                activeLeadId:
+                  lead._id.toString(),
+
+                service:
+                  lead.service,
+
+                phone:
+                  normalizedPhone,
+              }
+            );
           }
 
-          await lead.save();
+          /* ===============================================
+             NEW LEAD WAS SUCCESSFULLY CREATED
+             =============================================== */
 
+          if (createdLead) {
+            lead =
+              createdLead;
+
+            /* =============================================
+               SCHEDULE FOLLOW-UP FOR NEW SMS LEAD
+               ============================================= */
+
+            if (
+              canFollowUp(
+                lead.status,
+                lead.phone
+              )
+            ) {
+              lead.followUp =
+                lead.followUp ?? {};
+
+              lead.followUp.enabled =
+                true;
+
+              lead.followUp.count =
+                lead.followUp.count ??
+                0;
+
+              lead.followUp.lastFollowUpAt =
+                lead.followUp
+                  .lastFollowUpAt ??
+                null;
+
+              lead.followUp.nextFollowUpAt =
+                getNextFollowUpAt(
+                  lead.followUp.count
+                );
+            } else {
+              lead.followUp =
+                lead.followUp ?? {};
+
+              lead.followUp.enabled =
+                false;
+
+              lead.followUp.nextFollowUpAt =
+                null;
+            }
+
+            await lead.save();
+
+            await Message.create({
+              leadId:
+                lead._id,
+
+              sender:
+                "lead",
+
+              content:
+                body,
+            });
+
+            const aiMessage =
+              await Message.create({
+                leadId:
+                  lead._id,
+
+                sender:
+                  "ai",
+
+                content:
+                  newRequestResult.reply,
+              });
+
+            try {
+              await sendSmsReply({
+                to:
+                  normalizedPhone,
+
+                body:
+                  newRequestResult.reply,
+              });
+            } catch (smsError) {
+              console.error(
+                "New service request SMS reply failed:",
+                smsError
+              );
+            }
+
+            console.log(
+              "New SMS service request created:",
+              {
+                previousLeadId:
+                  latestLead._id.toString(),
+
+                newLeadId:
+                  lead._id.toString(),
+
+                service:
+                  lead.service,
+
+                status:
+                  lead.status,
+
+                smsConversationActive:
+                  lead.smsConversationActive,
+
+                followUpEnabled:
+                  lead.followUp
+                    ?.enabled,
+
+                nextFollowUpAt:
+                  lead.followUp
+                    ?.nextFollowUpAt,
+
+                messageId:
+                  aiMessage._id.toString(),
+              }
+            );
+
+            return twimlResponse();
+          }
+
+          /*
+           * If we reach here, another concurrent webhook won
+           * creation and "lead" now contains that active
+           * conversation.
+           *
+           * Do NOT return.
+           *
+           * Continue below so this request's SMS is saved and
+           * processed against the winning conversation.
+           */
+        } else {
           await Message.create({
             leadId:
-              lead._id,
+              latestLead._id,
 
             sender:
               "lead",
@@ -728,92 +1270,21 @@ export async function POST(
               body,
           });
 
-          const aiMessage =
-            await Message.create({
-              leadId:
-                lead._id,
-
-              sender:
-                "ai",
-
-              content:
-                newRequestResult.reply,
-            });
-
-          try {
-            await sendSmsReply({
-              to:
-                normalizedPhone,
-
-              body:
-                newRequestResult.reply,
-            });
-          } catch (smsError) {
-            console.error(
-              "New service request SMS reply failed:",
-              smsError
-            );
-          }
-
           console.log(
-            "New SMS service request created:",
+            "SMS attached to latest closed lead:",
             {
-              previousLeadId:
+              leadId:
                 latestLead._id.toString(),
 
-              newLeadId:
-                lead._id.toString(),
-
-              service:
-                lead.service,
-
               status:
-                lead.status,
+                latestLead.status,
 
-              smsConversationActive:
-                lead.smsConversationActive,
-
-              followUpEnabled:
-                lead.followUp
-                  ?.enabled,
-
-              nextFollowUpAt:
-                lead.followUp
-                  ?.nextFollowUpAt,
-
-              messageId:
-                aiMessage._id.toString(),
+              body,
             }
           );
 
           return twimlResponse();
         }
-
-        await Message.create({
-          leadId:
-            latestLead._id,
-
-          sender:
-            "lead",
-
-          content:
-            body,
-        });
-
-        console.log(
-          "SMS attached to latest closed lead:",
-          {
-            leadId:
-              latestLead._id.toString(),
-
-            status:
-              latestLead.status,
-
-            body,
-          }
-        );
-
-        return twimlResponse();
       }
     }
 
@@ -888,13 +1359,6 @@ export async function POST(
 
     /* =====================================================
        SMS APPOINTMENT SELECTION
-
-       IMPORTANT:
-       Numeric choices use the exact appointment slots that
-       were previously sent to the customer.
-
-       We never regenerate the array and reinterpret the
-       customer's number.
        ===================================================== */
 
     const selectedOption =
@@ -931,9 +1395,6 @@ export async function POST(
 
         /* ===============================================
            NO STORED OPTION
-
-           Customer may be replying to an older message.
-           Send a fresh set of appointment options.
            =============================================== */
 
         if (!storedSlot) {
@@ -1237,18 +1698,12 @@ export async function POST(
         } catch (error) {
           /* =============================================
              DUPLICATE SLOT INDEX CONFLICT
-
-             Protects against another booking happening
-             between our availability check and create().
              ============================================= */
 
           if (
-            typeof error ===
-              "object" &&
-            error !== null &&
-            "code" in error &&
-            error.code ===
-              11000
+            isMongoDuplicateKeyError(
+              error
+            )
           ) {
             console.log(
               "SMS appointment duplicate index conflict:",
@@ -1365,8 +1820,6 @@ export async function POST(
     /* =====================================================
        QUALIFIED:
        GENERATE REAL APPOINTMENT OPTIONS
-
-       We will store the EXACT options sent to the customer.
        ===================================================== */
 
     let offeredSmsSlots:
@@ -1533,9 +1986,6 @@ export async function POST(
 
     /* =====================================================
        STORE EXACT SMS APPOINTMENT OPTIONS
-
-       These are the exact options shown to the customer.
-       Later 1 / 2 / 3 maps back to these timestamps.
        ===================================================== */
 
     if (
@@ -1668,13 +2118,485 @@ export async function POST(
 
     return twimlResponse();
   } catch (error) {
+    processingError =
+      error;
+
     console.error(
       "Incoming SMS webhook error:",
       error
     );
 
-    return twimlResponse();
+    /*
+     * Return a retryable error for unexpected failures.
+     * The event is marked failed in finally, so a Twilio
+     * retry can safely claim and process it again.
+     */
+    return retryResponse();
+  } finally {
+    /*
+     * Mark the idempotency event BEFORE releasing the
+     * conversation lock. A waiting retry can then acquire
+     * the lock and see the final event state.
+     */
+    if (claimedMessageSid) {
+      try {
+        if (processingError) {
+          await TwilioInboundEvent.updateOne(
+            {
+              messageSid:
+                claimedMessageSid,
+            },
+            {
+              $set: {
+                status:
+                  "failed",
+
+                error:
+                  getErrorMessage(
+                    processingError
+                  ),
+
+                processedAt:
+                  null,
+              },
+            }
+          );
+        } else {
+          await TwilioInboundEvent.updateOne(
+            {
+              messageSid:
+                claimedMessageSid,
+            },
+            {
+              $set: {
+                status:
+                  "processed",
+
+                processedAt:
+                  new Date(),
+
+                error:
+                  null,
+              },
+            }
+          );
+        }
+      } catch (eventError) {
+        console.error(
+          "Failed to update Twilio inbound event status:",
+          eventError
+        );
+      }
+    }
+
+    if (
+      conversationLockOwner &&
+      conversationLockBusinessId &&
+      conversationLockPhone
+    ) {
+      try {
+        await releaseSmsConversationLock({
+          businessId:
+            conversationLockBusinessId,
+
+          phone:
+            conversationLockPhone,
+
+          ownerToken:
+            conversationLockOwner,
+        });
+      } catch (lockError) {
+        console.error(
+          "Failed to release SMS conversation lock:",
+          lockError
+        );
+      }
+    }
   }
+}
+
+/* =========================================================
+   TWILIO EVENT CLAIM / RETRY
+
+   - first delivery: create "processing"
+   - already processed: ignore
+   - currently processing: ignore duplicate
+   - failed or stale processing: atomically reclaim
+   ========================================================= */
+
+async function claimTwilioInboundEvent({
+  messageSid,
+  from,
+  to,
+  body,
+}: {
+  messageSid: string;
+  from: string;
+  to: string;
+  body: string;
+}) {
+  try {
+    await TwilioInboundEvent.create({
+      messageSid,
+      from,
+      to,
+      body,
+      status:
+        "processing",
+      processedAt:
+        null,
+      error:
+        null,
+    });
+
+    return {
+      shouldProcess:
+        true,
+    };
+  } catch (error) {
+    if (
+      !isMongoDuplicateKeyError(
+        error
+      )
+    ) {
+      throw error;
+    }
+  }
+
+  const existing =
+    await TwilioInboundEvent.findOne({
+      messageSid,
+    }).lean();
+
+  if (!existing) {
+    /*
+     * Extremely small race: the unique insert failed but the
+     * winner is not visible yet. Let Twilio retry.
+     */
+    throw new Error(
+      `Twilio event ${messageSid} exists but could not be loaded.`
+    );
+  }
+
+  if (
+    existing.status ===
+    "processed"
+  ) {
+    return {
+      shouldProcess:
+        false,
+    };
+  }
+
+  /*
+   * A normal in-flight duplicate should not run twice.
+   * Only "processing" rows older than five minutes may be
+   * reclaimed after a crash.
+   */
+  const staleBefore =
+    new Date(
+      Date.now() -
+        5 * 60 * 1000
+    );
+
+  if (
+    existing.status ===
+      "processing" &&
+    existing.updatedAt &&
+    new Date(
+      existing.updatedAt
+    ) >
+      staleBefore
+  ) {
+    return {
+      shouldProcess:
+        false,
+    };
+  }
+
+  const reclaimed =
+    await TwilioInboundEvent.findOneAndUpdate(
+      {
+        messageSid,
+
+        $or: [
+          {
+            status:
+              "failed",
+          },
+          {
+            status:
+              "processing",
+
+            updatedAt: {
+              $lte:
+                staleBefore,
+            },
+          },
+        ],
+      },
+      {
+        $set: {
+          status:
+            "processing",
+
+          processedAt:
+            null,
+
+          error:
+            null,
+
+          from,
+          to,
+          body,
+        },
+      },
+      {
+        returnDocument:
+          "after",
+      }
+    );
+
+  return {
+    shouldProcess:
+      Boolean(
+        reclaimed
+      ),
+  };
+}
+
+/* =========================================================
+   ERROR MESSAGE
+   ========================================================= */
+
+function getErrorMessage(
+  error: unknown
+) {
+  if (
+    error instanceof
+    Error
+  ) {
+    return error.message.slice(
+      0,
+      2000
+    );
+  }
+
+  return String(
+    error
+  ).slice(
+    0,
+    2000
+  );
+}
+
+/* =========================================================
+   RETRY RESPONSE
+   ========================================================= */
+
+function retryResponse() {
+  return new NextResponse(
+    "Temporary webhook processing failure",
+    {
+      status:
+        503,
+
+      headers: {
+        "Content-Type":
+          "text/plain",
+      },
+    }
+  );
+}
+
+/* =========================================================
+   RESTORE PREVIOUS SMS CONVERSATION
+
+   Used only when an explicit service switch deactivated the
+   current lead but could not activate the requested target.
+   ========================================================= */
+
+async function restorePreviousSmsConversation({
+  leadId,
+  businessId,
+  phone,
+}: {
+  leadId: any;
+  businessId: any;
+  phone: string;
+}) {
+  try {
+    await Lead.updateOne(
+      {
+        _id:
+          leadId,
+
+        businessId,
+
+        phone,
+
+        status: {
+          $in:
+            ACTIVE_LEAD_STATUSES,
+        },
+      },
+      {
+        $set: {
+          smsConversationActive:
+            true,
+        },
+      }
+    );
+  } catch (error) {
+    console.error(
+      "Failed to restore previous SMS conversation:",
+      {
+        leadId:
+          leadId.toString(),
+
+        phone,
+
+        error,
+      }
+    );
+  }
+}
+
+/* =========================================================
+   ATOMIC SMS CONVERSATION ACTIVATION
+
+   MongoDB's unique partial index guarantees that only one
+   lead for the same business + phone can have:
+
+   smsConversationActive = true
+
+   If another webhook wins the race, MongoDB throws 11000.
+   We catch that and load the winning conversation instead.
+   ========================================================= */
+
+async function activateSmsConversation({
+  targetLeadId,
+  businessId,
+  phone,
+}: {
+  targetLeadId: any;
+  businessId: any;
+  phone: string;
+}) {
+  try {
+    const activatedLead =
+      await Lead.findOneAndUpdate(
+        {
+          _id:
+            targetLeadId,
+
+          businessId,
+
+          phone,
+
+          status: {
+            $in:
+              ACTIVE_LEAD_STATUSES,
+          },
+        },
+        {
+          $set: {
+            smsConversationActive:
+              true,
+          },
+        },
+        {
+          returnDocument:
+            "after",
+        }
+      );
+
+    if (activatedLead) {
+      return {
+        lead:
+          activatedLead,
+
+        requestedLeadActivated:
+          true,
+      };
+    }
+  } catch (error) {
+    if (
+      !isMongoDuplicateKeyError(
+        error
+      )
+    ) {
+      throw error;
+    }
+
+    console.log(
+      "Active SMS conversation duplicate-key race detected:",
+      {
+        targetLeadId:
+          targetLeadId.toString(),
+
+        phone,
+      }
+    );
+  }
+
+  /*
+   * Either:
+   *
+   * 1. another worker activated a lead first, or
+   * 2. the requested lead changed state before activation.
+   *
+   * Load the current database winner.
+   */
+
+  const activeLead =
+    await Lead.findOne({
+      businessId,
+
+      phone,
+
+      smsConversationActive:
+        true,
+    }).sort({
+      updatedAt:
+        -1,
+    });
+
+  if (!activeLead) {
+    return null;
+  }
+
+  return {
+    lead:
+      activeLead,
+
+    requestedLeadActivated:
+      activeLead._id.toString() ===
+      targetLeadId.toString(),
+  };
+}
+
+/* =========================================================
+   MONGODB DUPLICATE KEY CHECK
+   ========================================================= */
+
+function isMongoDuplicateKeyError(
+  error: unknown
+): error is {
+  code: number;
+} {
+  return (
+    typeof error ===
+      "object" &&
+    error !==
+      null &&
+    "code" in
+      error &&
+    (error as {
+      code?: number;
+    }).code ===
+      11000
+  );
 }
 
 /* =========================================================
@@ -1817,18 +2739,6 @@ function forbiddenResponse() {
 
 /* =========================================================
    SEND FRESH SMS APPOINTMENT OPTIONS
-
-   Used when:
-   - customer replies to an old appointment list
-   - selected slot became unavailable
-   - slot became occupied during booking
-   - MongoDB unique index detects a booking race
-
-   This function:
-   1. generates fresh availability
-   2. stores the exact new slots
-   3. sends the new choices
-   4. reschedules the follow-up
    ========================================================= */
 
 async function sendFreshSmsAppointmentOptions({
