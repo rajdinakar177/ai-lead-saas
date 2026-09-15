@@ -80,8 +80,13 @@ const leadSchema = new Schema(
       index: true,
     },
 
- 
 
+
+    smsFenceToken: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     smsBookingOptions: {
       offeredAt: {
         type: Date,

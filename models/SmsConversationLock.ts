@@ -10,8 +10,10 @@ const smsConversationLockSchema =
       businessId: {
         type:
           Schema.Types.ObjectId,
+
         ref:
           "Business",
+
         required:
           true,
       },
@@ -19,26 +21,83 @@ const smsConversationLockSchema =
       phone: {
         type:
           String,
+
         required:
           true,
+
         trim:
           true,
       },
 
+      /*
+       * Identifies the worker that currently owns the lock.
+       *
+       * null means the lock record exists but is currently
+       * not owned by any worker.
+       */
       ownerToken: {
         type:
           String,
-        required:
-          true,
+
+        default:
+          null,
+
         trim:
           true,
       },
 
+      /*
+       * Monotonically increasing ownership generation.
+       *
+       * Every NEW lock acquisition increments this number.
+       *
+       * Example:
+       *
+       * worker A -> fenceToken 1
+       * worker B -> fenceToken 2
+       * worker C -> fenceToken 3
+       *
+       * This will later allow us to reject work from an old
+       * worker even if its request is still running.
+       */
+      fenceToken: {
+        type:
+          Number,
+
+        default:
+          0,
+
+        min:
+          0,
+
+        required:
+          true,
+      },
+
+      /*
+       * Current lease expiration.
+       *
+       * The document itself is NOT deleted when this expires.
+       * Another worker may atomically reclaim the lock.
+       */
       expiresAt: {
         type:
           Date,
+
         required:
           true,
+      },
+
+      /*
+       * Updated whenever the current owner successfully
+       * renews its lease.
+       */
+      lastRenewedAt: {
+        type:
+          Date,
+
+        default:
+          null,
       },
     },
     {
@@ -50,9 +109,10 @@ const smsConversationLockSchema =
     }
   );
 
-/*
- * Only one lock document may exist for one business + phone.
- */
+/* =========================================================
+   ONE LOCK RECORD PER BUSINESS + CUSTOMER PHONE
+   ========================================================= */
+
 smsConversationLockSchema.index(
   {
     businessId:
@@ -71,25 +131,15 @@ smsConversationLockSchema.index(
 );
 
 /*
- * Cleanup for abandoned locks.
+ * IMPORTANT:
  *
- * TTL cleanup is not used for correctness because MongoDB TTL
- * removal is asynchronous. The acquisition helper can reclaim
- * an expired lock immediately.
+ * Do NOT add a TTL index to expiresAt.
+ *
+ * Expired lock documents intentionally stay in MongoDB so
+ * fenceToken continues increasing across future owners.
+ *
+ * An expired lock is reclaimed atomically by the lock helper.
  */
-smsConversationLockSchema.index(
-  {
-    expiresAt:
-      1,
-  },
-  {
-    expireAfterSeconds:
-      0,
-
-    name:
-      "sms_conversation_lock_ttl",
-  }
-);
 
 export const SmsConversationLock =
   models.SmsConversationLock ||

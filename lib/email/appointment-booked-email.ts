@@ -31,7 +31,8 @@ export function generateAppointmentBookedEmail({
 
   const email = {
     body: {
-      greeting: `Hi ${businessName},`,
+      // Mailgen adds punctuation to the greeting.
+      greeting: `Hi ${businessName}`,
 
       intro: [
         "📅 A customer just booked an appointment.",
@@ -42,28 +43,23 @@ export function generateAppointmentBookedEmail({
         data: [
           {
             item: "Customer",
-            details:
-              name || "Not provided",
+            details: name || "Not provided",
           },
           {
             item: "Phone",
-            details:
-              phone || "Not provided",
+            details: phone || "Not provided",
           },
           {
             item: "Service",
-            details:
-              service || "Not provided",
+            details: service || "Not provided",
           },
           {
             item: "Location",
-            details:
-              location || "Not provided",
+            details: location || "Not provided",
           },
           {
             item: "Appointment",
-            details:
-              appointmentLabel,
+            details: appointmentLabel,
           },
           {
             item: "Status",
@@ -98,7 +94,6 @@ export function generateAppointmentBookedEmail({
       outro: [
         "LeadFlowAI automatically qualified the lead and helped them book this appointment.",
       ],
-
     },
   };
 

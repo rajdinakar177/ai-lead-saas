@@ -674,14 +674,27 @@ function createMockResponse(
     }
 
     /* =========================================================
-       BUILD NEXT QUESTION
-       ========================================================= */
+     BUILD NEXT QUESTION
+  
+     Preferred qualification order:
+  
+     Web/Public Chat:
+     Service → Phone → Name → Location → Urgency → Timeline
+  
+     SMS:
+     Phone is already known from Twilio, so:
+     Service → Name → Location → Urgency → Timeline
+     ========================================================= */
 
     let reply = "";
 
     let options:
         | ChatOption[]
         | undefined;
+
+    /* =========================================================
+       1. SERVICE
+       ========================================================= */
 
     if (
         needs("service") &&
@@ -705,13 +718,51 @@ function createMockResponse(
                     })
                 );
         }
-    } else if (
+    }
+
+    /* =========================================================
+       2. PHONE
+       ========================================================= */
+
+    else if (
+        needs("phone") &&
+        !lead.phone
+    ) {
+        reply =
+            lead.service
+                ? `What's the best phone number to reach you about your ${lead.service}?`
+                : "What's the best phone number to reach you?";
+    }
+
+    /* =========================================================
+       3. NAME
+       ========================================================= */
+
+    else if (
+        needs("name") &&
+        !lead.name
+    ) {
+        reply =
+            "What name should I put on the service request?";
+    }
+
+    /* =========================================================
+       4. LOCATION
+       ========================================================= */
+
+    else if (
         needs("location") &&
         !lead.location
     ) {
         reply =
             "What city, ZIP/postal code, or service location is the property in?";
-    } else if (
+    }
+
+    /* =========================================================
+       5. URGENCY
+       ========================================================= */
+
+    else if (
         needs("urgency") &&
         !lead.urgency
     ) {
@@ -744,7 +795,13 @@ function createMockResponse(
                     "Not urgent",
             },
         ];
-    } else if (
+    }
+
+    /* =========================================================
+       6. TIMELINE
+       ========================================================= */
+
+    else if (
         needs("timeline") &&
         !lead.timeline
     ) {
@@ -777,22 +834,13 @@ function createMockResponse(
                     "Next week",
             },
         ];
-    } else if (
-        needs("name") &&
-        !lead.name
-    ) {
-        reply =
-            "What name should I put on the service request?";
-    } else if (
-        needs("phone") &&
-        !lead.phone
-    ) {
-        reply =
-            `Thanks${lead.name
-                ? ` ${lead.name}`
-                : ""
-            }. What's the best phone number to reach you?`;
-    } else {
+    }
+
+    /* =========================================================
+       COMPLETE
+       ========================================================= */
+
+    else {
         reply =
             "Great — I have everything I need. You can choose an available appointment time below.";
     }
@@ -912,6 +960,14 @@ ${business.aiSettings.additionalInstructions || "None"}
 Rules:
 
 - Ask only ONE question at a time.
+- Follow this qualification order whenever those fields are configured:
+  service → phone → name → location → urgency → timeline.
+- Service must be collected before asking for the phone number.
+- After service is known, ask for phone next if phone is required and not already known.
+- After phone is known, ask for name next if name is required and not already known.
+- Then collect location, urgency, and timeline in that order when required.
+- Skip any field that is already known.
+- If phone is already known, never ask for it again.
 - Keep responses concise and natural.
 - Match the requested conversation tone.
 - Never ask for information already provided.

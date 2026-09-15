@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
-
+import mongoose from "mongoose";
 import { connectDB } from "@/lib/mongodb";
 import { validatePhoneNumber } from "@/lib/phone";
 import { verifyTwilioSignature } from "@/lib/sms/verify-twilio-signature";
-
+import {
+  updateLeadWithSmsFence,
+  findOneAndUpdateLeadWithSmsFence,
+} from "@/lib/sms/sms-fenced-lead";
+import { randomUUID } from "crypto";
 import {
   generateQualificationResponse,
   type AISettings,
 } from "@/lib/ai/qualification";
-
+import { SmsConversationLock } from "@/models/SmsConversationLock";
 import {
   generateSlotsForDate,
   getDatesForTimeline,
@@ -22,9 +26,10 @@ import { sendAppointmentBookedEmail } from "@/lib/email/send-appointment-booked-
 import { sendSmsReply } from "@/lib/sms/send-sms-reply";
 import {
   acquireSmsConversationLock,
+  renewSmsConversationLock,
   releaseSmsConversationLock,
+  checkSmsConversationLock,
 } from "@/lib/sms/sms-conversation-lock";
-
 import {
   canFollowUp,
   getNextFollowUpAt,
@@ -54,16 +59,175 @@ const VALID_TIMELINES: Timeline[] = [
   "Next week",
 ];
 
+/*
+ * Conversation locks use a 120 second lease.
+ * Renew every 40 seconds so a healthy worker refreshes the
+ * lease well before it expires.
+ */
+const SMS_CONVERSATION_LOCK_LEASE_MS =
+  120000;
+
+const SMS_CONVERSATION_LOCK_RENEW_MS =
+  40000;
+
 /* =========================================================
    POST
    ========================================================= */
 
 export async function POST(request: Request) {
   let claimedMessageSid: string | null = null;
+  let claimedProcessingToken: string | null = null;
   let conversationLockOwner: string | null = null;
+  let conversationLockFenceToken: number | null = null;
   let conversationLockBusinessId: any = null;
   let conversationLockPhone: string | null = null;
+
+  let conversationLockLost =
+    false;
+
+  let conversationLockRenewalStopped =
+    false;
+
+  let conversationLockRenewalTimer:
+    ReturnType<typeof setTimeout> | null =
+    null;
+
+  let conversationLockRenewalInFlight:
+    Promise<void> | null =
+    null;
+
   let processingError: unknown = null;
+
+  /*
+   * Use this instead of returning twimlResponse() directly.
+   *
+   * If the heartbeat discovers that this worker lost the
+   * conversation lock, return 503 so Twilio can retry rather
+   * than acknowledging work that may no longer be safe.
+   */
+  const successResponse = () =>
+    conversationLockLost
+      ? retryResponse()
+      : twimlResponse();
+
+  /*
+   * Schedule one renewal at a time. We intentionally use
+   * recursive setTimeout instead of setInterval so renewal
+   * calls can never overlap.
+   */
+  const scheduleConversationLockRenewal =
+    () => {
+      if (
+        conversationLockRenewalStopped ||
+        conversationLockLost ||
+        !conversationLockOwner ||
+        conversationLockFenceToken ===
+        null ||
+        !conversationLockBusinessId ||
+        !conversationLockPhone
+      ) {
+        return;
+      }
+
+      conversationLockRenewalTimer =
+        setTimeout(() => {
+          conversationLockRenewalInFlight =
+            (async () => {
+              try {
+                const renewed =
+                  await renewSmsConversationLock({
+                    businessId:
+                      conversationLockBusinessId,
+
+                    phone:
+                      conversationLockPhone!,
+
+                    ownerToken:
+                      conversationLockOwner!,
+
+                    fenceToken:
+                      conversationLockFenceToken!,
+
+                    leaseMs:
+                      SMS_CONVERSATION_LOCK_LEASE_MS,
+                  });
+
+                if (!renewed) {
+                  conversationLockLost =
+                    true;
+
+                  processingError =
+                    processingError ??
+                    new Error(
+                      "SMS conversation lock ownership was lost."
+                    );
+
+                  console.error(
+                    "SMS conversation lock renewal rejected:",
+                    {
+                      businessId:
+                        conversationLockBusinessId?.toString?.() ??
+                        conversationLockBusinessId,
+
+                      phone:
+                        conversationLockPhone,
+
+                      fenceToken:
+                        conversationLockFenceToken,
+                    }
+                  );
+
+                  return;
+                }
+
+                console.log(
+                  "SMS conversation lock renewed:",
+                  {
+                    businessId:
+                      conversationLockBusinessId?.toString?.() ??
+                      conversationLockBusinessId,
+
+                    phone:
+                      conversationLockPhone,
+
+                    fenceToken:
+                      conversationLockFenceToken,
+
+                    expiresAt:
+                      renewed.expiresAt,
+                  }
+                );
+              } catch (error) {
+                /*
+                 * Be conservative: if MongoDB cannot confirm
+                 * renewal, this worker must no longer assume
+                 * it owns the conversation.
+                 */
+                conversationLockLost =
+                  true;
+
+                processingError =
+                  processingError ??
+                  error;
+
+                console.error(
+                  "SMS conversation lock renewal failed:",
+                  error
+                );
+              } finally {
+                conversationLockRenewalInFlight =
+                  null;
+
+                if (
+                  !conversationLockRenewalStopped &&
+                  !conversationLockLost
+                ) {
+                  scheduleConversationLockRenewal();
+                }
+              }
+            })();
+        }, SMS_CONVERSATION_LOCK_RENEW_MS);
+    };
 
   try {
     /* =====================================================
@@ -199,7 +363,7 @@ export async function POST(request: Request) {
       !to ||
       !body
     ) {
-      return twimlResponse();
+      return successResponse();
     }
 
     await connectDB();
@@ -222,11 +386,14 @@ export async function POST(request: Request) {
         messageSid
       );
 
-      return twimlResponse();
+      return successResponse();
     }
 
     claimedMessageSid =
       messageSid;
+
+    claimedProcessingToken =
+      eventClaim.processingToken;
 
     /* =====================================================
        FIND BUSINESS FROM TWILIO TO NUMBER
@@ -244,7 +411,7 @@ export async function POST(request: Request) {
         to
       );
 
-      return twimlResponse();
+      return successResponse();
     }
 
     /* =====================================================
@@ -266,7 +433,7 @@ export async function POST(request: Request) {
         from
       );
 
-      return twimlResponse();
+      return successResponse();
     }
 
     const normalizedPhone =
@@ -291,7 +458,7 @@ export async function POST(request: Request) {
           15000,
 
         leaseMs:
-          120000,
+          SMS_CONVERSATION_LOCK_LEASE_MS,
       });
 
     if (!conversationLock) {
@@ -319,11 +486,19 @@ export async function POST(request: Request) {
     conversationLockOwner =
       conversationLock.ownerToken;
 
+    conversationLockFenceToken =
+      conversationLock.fenceToken;
+
     conversationLockBusinessId =
       business._id;
 
     conversationLockPhone =
       normalizedPhone;
+
+    /*
+     * Keep the lease alive while this webhook is processing.
+     */
+    scheduleConversationLockRenewal();
 
     /*
      * A stale Twilio event may have been reclaimed while the
@@ -337,7 +512,7 @@ export async function POST(request: Request) {
         messageSid,
       })
         .select(
-          "status"
+          "status processingToken"
         )
         .lean();
 
@@ -353,7 +528,49 @@ export async function POST(request: Request) {
       claimedMessageSid =
         null;
 
-      return twimlResponse();
+      claimedProcessingToken =
+        null;
+
+      return successResponse();
+    }
+
+    /*
+     * We may have claimed the Twilio event and then waited for
+     * the conversation lock long enough for another worker to
+     * reclaim this event.
+     *
+     * If the processing token no longer matches, this worker
+     * must not continue.
+     */
+    if (
+      !eventAfterLock ||
+      eventAfterLock.status !==
+      "processing" ||
+      eventAfterLock.processingToken !==
+      claimedProcessingToken
+    ) {
+      console.warn(
+        "Twilio event ownership lost while waiting for SMS conversation lock:",
+        {
+          messageSid,
+
+          claimedProcessingToken,
+
+          currentProcessingToken:
+            eventAfterLock?.processingToken,
+
+          currentStatus:
+            eventAfterLock?.status,
+        }
+      );
+
+      claimedMessageSid =
+        null;
+
+      claimedProcessingToken =
+        null;
+
+      return successResponse();
     }
 
     /* =====================================================
@@ -384,7 +601,7 @@ export async function POST(request: Request) {
         }
       );
 
-      return twimlResponse();
+      return successResponse();
     }
 
     /* =====================================================
@@ -484,50 +701,193 @@ export async function POST(request: Request) {
             -1,
         });
 
-      const explicitlyMatchedLead =
-        findLeadByService(
-          openLeadsForSwitch,
+      /*
+       * First check whether the customer explicitly named
+       * one of the business's configured services.
+       *
+       * This is important because the requested service may
+       * not have an existing Lead yet.
+       */
+      const requestedService =
+        findConfiguredService(
+          aiSettings.services,
           body
         );
 
-      if (
-        explicitlyMatchedLead &&
-        explicitlyMatchedLead._id.toString() !==
-          lead._id.toString()
-      ) {
-        const previousActiveLead =
-          lead;
-
-        console.log(
-          "Explicit service switch requested:",
-          {
-            fromLeadId:
-              previousActiveLead._id.toString(),
-
-            fromService:
-              previousActiveLead.service,
-
-            toLeadId:
-              explicitlyMatchedLead._id.toString(),
-
-            toService:
-              explicitlyMatchedLead.service,
-          }
-        );
-
+      if (requestedService) {
         /*
-         * Deactivate the current lead first so the unique
-         * partial index allows the requested lead to become
-         * active.
-         *
-         * The distributed conversation lock ensures another
-         * webhook for this business + phone cannot interleave
-         * with these two updates.
+         * Check whether an existing open Lead already represents
+         * this configured service.
          */
-        const deactivated =
-          await Lead.findOneAndUpdate(
+        const requestedServiceNormalized =
+          normalizeText(
+            requestedService
+          );
+
+        const existingRequestedLead =
+          openLeadsForSwitch.find(
+            (item) =>
+              item.service &&
+              normalizeText(
+                item.service
+              ) ===
+              requestedServiceNormalized
+          );
+
+        /* ===================================================
+           CASE 1:
+           REQUESTED SERVICE ALREADY HAS AN OPEN LEAD
+           =================================================== */
+
+        if (
+          existingRequestedLead &&
+          existingRequestedLead._id.toString() !==
+          lead._id.toString()
+        ) {
+          const previousActiveLead =
+            lead;
+
+          console.log(
+            "Explicit service switch requested:",
             {
-              _id:
+              fromLeadId:
+                previousActiveLead._id.toString(),
+
+              fromService:
+                previousActiveLead.service,
+
+              toLeadId:
+                existingRequestedLead._id.toString(),
+
+              toService:
+                existingRequestedLead.service,
+            }
+          );
+
+          const deactivated =
+            await findOneAndUpdateLeadWithSmsFence({
+              filter: {
+                _id:
+                  previousActiveLead._id,
+
+                businessId:
+                  business._id,
+
+                phone:
+                  normalizedPhone,
+
+                smsConversationActive:
+                  true,
+              },
+
+              fenceToken:
+                conversationLockFenceToken!,
+
+              set: {
+                smsConversationActive:
+                  false,
+              },
+            });
+
+          if (!deactivated) {
+            console.warn(
+              "Could not deactivate current SMS conversation during service switch:",
+              {
+                leadId:
+                  previousActiveLead._id.toString(),
+
+                phone:
+                  normalizedPhone,
+              }
+            );
+
+            return successResponse();
+          }
+
+          try {
+            const switchedLead =
+              await findOneAndUpdateLeadWithSmsFence({
+                filter: {
+                  _id:
+                    existingRequestedLead._id,
+
+                  businessId:
+                    business._id,
+
+                  phone:
+                    normalizedPhone,
+
+                  status: {
+                    $in:
+                      ACTIVE_LEAD_STATUSES,
+                  },
+
+                  smsConversationActive: {
+                    $ne:
+                      true,
+                  },
+                },
+
+                fenceToken:
+                  conversationLockFenceToken!,
+
+                set: {
+                  smsConversationActive:
+                    true,
+                },
+              });
+
+            if (!switchedLead) {
+              await restorePreviousSmsConversation({
+                leadId:
+                  previousActiveLead._id,
+
+                businessId:
+                  business._id,
+
+                phone:
+                  normalizedPhone,
+
+                fenceToken:
+                  conversationLockFenceToken!,
+              });
+
+              console.warn(
+                "Requested SMS service could not be activated because the lead changed state:",
+                {
+                  requestedLeadId:
+                    existingRequestedLead._id.toString(),
+
+                  requestedService:
+                    existingRequestedLead.service,
+                }
+              );
+
+              return successResponse();
+            }
+
+            lead =
+              switchedLead;
+
+            console.log(
+              "SMS conversation switched by explicit service:",
+              {
+                leadId:
+                  lead._id.toString(),
+
+                service:
+                  lead.service,
+
+                previousLeadId:
+                  previousActiveLead._id.toString(),
+
+                previousService:
+                  previousActiveLead.service,
+              }
+            );
+          } catch (error) {
+            await restorePreviousSmsConversation({
+              leadId:
                 previousActiveLead._id,
 
               businessId:
@@ -536,42 +896,52 @@ export async function POST(request: Request) {
               phone:
                 normalizedPhone,
 
-              smsConversationActive:
-                true,
-            },
-            {
-              $set: {
-                smsConversationActive:
-                  false,
-              },
-            },
-            {
-              returnDocument:
-                "after",
-            }
-          );
+              fenceToken:
+                conversationLockFenceToken!,
+            });
 
-        if (!deactivated) {
-          console.warn(
-            "Could not deactivate current SMS conversation during service switch:",
-            {
-              leadId:
-                previousActiveLead._id.toString(),
-
-              phone:
-                normalizedPhone,
-            }
-          );
-
-          return twimlResponse();
+            throw error;
+          }
         }
 
-        try {
-          const switchedLead =
-            await Lead.findOneAndUpdate(
-              {
+        /* ===================================================
+           CASE 2:
+           REQUESTED SERVICE DOES NOT HAVE AN OPEN LEAD YET
+           =================================================== */
+
+        else if (
+          !existingRequestedLead &&
+          normalizeText(
+            lead.service ?? ""
+          ) !==
+          requestedServiceNormalized
+        ) {
+          const previousActiveLead =
+            lead;
+
+          console.log(
+            "Explicit new service request detected:",
+            {
+              previousLeadId:
+                previousActiveLead._id.toString(),
+
+              previousService:
+                previousActiveLead.service,
+
+              requestedService,
+            }
+          );
+
+          /*
+           * Deactivate the current conversation first.
+           * The unique partial index then allows the new Lead
+           * to become the active SMS conversation.
+           */
+          const deactivated =
+            await findOneAndUpdateLeadWithSmsFence({
+              filter: {
                 _id:
-                  explicitlyMatchedLead._id,
+                  previousActiveLead._id,
 
                 businessId:
                   business._id,
@@ -579,32 +949,102 @@ export async function POST(request: Request) {
                 phone:
                   normalizedPhone,
 
-                status: {
-                  $in:
-                    ACTIVE_LEAD_STATUSES,
-                },
+                smsConversationActive:
+                  true,
+              },
 
-                smsConversationActive: {
-                  $ne:
-                    true,
-                },
+              fenceToken:
+                conversationLockFenceToken!,
+
+              set: {
+                smsConversationActive:
+                  false,
               },
+            });
+
+          if (!deactivated) {
+            console.warn(
+              "Could not deactivate current SMS conversation before creating new service lead:",
               {
-                $set: {
-                  smsConversationActive:
-                    true,
-                },
-              },
-              {
-                returnDocument:
-                  "after",
+                leadId:
+                  previousActiveLead._id.toString(),
+
+                requestedService,
               }
             );
 
-          if (!switchedLead) {
+            return successResponse();
+          }
+
+          try {
+            const createdLead =
+              await Lead.create({
+                businessId:
+                  business._id,
+
+                phone:
+                  normalizedPhone,
+
+                name:
+                  previousActiveLead.name ??
+                  latestLead.name ??
+                  null,
+
+                industry:
+                  business.industry,
+
+                service:
+                  requestedService,
+
+                location:
+                  null,
+
+                urgency:
+                  null,
+
+                timeline:
+                  null,
+
+                status:
+                  "new",
+
+                source:
+                  "sms",
+
+                smsConversationActive:
+                  true,
+
+                smsFenceToken:
+                  conversationLockFenceToken!,
+              });
+
+            lead =
+              createdLead;
+
+            console.log(
+              "New SMS service conversation created from explicit service switch:",
+              {
+                previousLeadId:
+                  previousActiveLead._id.toString(),
+
+                previousService:
+                  previousActiveLead.service,
+
+                newLeadId:
+                  lead._id.toString(),
+
+                newService:
+                  lead.service,
+
+                fenceToken:
+                  conversationLockFenceToken,
+              }
+            );
+          } catch (error) {
             /*
-             * The target lead changed state after we read it.
-             * Restore the previous conversation when possible.
+             * If creation fails, try to restore the previous
+             * conversation so the customer is not left without
+             * an active SMS Lead.
              */
             await restorePreviousSmsConversation({
               leadId:
@@ -615,60 +1055,167 @@ export async function POST(request: Request) {
 
               phone:
                 normalizedPhone,
+
+              fenceToken:
+                conversationLockFenceToken!,
             });
 
-            console.warn(
-              "Requested SMS service could not be activated because the lead changed state:",
-              {
-                requestedLeadId:
-                  explicitlyMatchedLead._id.toString(),
-
-                requestedService:
-                  explicitlyMatchedLead.service,
-              }
-            );
-
-            return twimlResponse();
+            throw error;
           }
+        }
+      } else {
+        /*
+         * Keep the original existing-lead matcher as a fallback.
+         * This supports historical/open leads whose service may
+         * no longer be present in the current business settings.
+         */
+        const explicitlyMatchedLead =
+          findLeadByService(
+            openLeadsForSwitch,
+            body
+          );
 
-          lead =
-            switchedLead;
+        if (
+          explicitlyMatchedLead &&
+          explicitlyMatchedLead._id.toString() !==
+          lead._id.toString()
+        ) {
+          const previousActiveLead =
+            lead;
 
           console.log(
-            "SMS conversation switched by explicit service:",
+            "Explicit service switch requested:",
             {
-              leadId:
-                lead._id.toString(),
-
-              service:
-                lead.service,
-
-              previousLeadId:
+              fromLeadId:
                 previousActiveLead._id.toString(),
 
-              previousService:
+              fromService:
                 previousActiveLead.service,
+
+              toLeadId:
+                explicitlyMatchedLead._id.toString(),
+
+              toService:
+                explicitlyMatchedLead.service,
             }
           );
-        } catch (error) {
-          /*
-           * Restore the previous conversation if activation
-           * fails unexpectedly. If another active lead now
-           * exists, the unique index will protect us and the
-           * restore helper will simply log the failure.
-           */
-          await restorePreviousSmsConversation({
-            leadId:
-              previousActiveLead._id,
 
-            businessId:
-              business._id,
+          const deactivated =
+            await findOneAndUpdateLeadWithSmsFence({
+              filter: {
+                _id:
+                  previousActiveLead._id,
 
-            phone:
-              normalizedPhone,
-          });
+                businessId:
+                  business._id,
 
-          throw error;
+                phone:
+                  normalizedPhone,
+
+                smsConversationActive:
+                  true,
+              },
+
+              fenceToken:
+                conversationLockFenceToken!,
+
+              set: {
+                smsConversationActive:
+                  false,
+              },
+            });
+
+          if (!deactivated) {
+            return successResponse();
+          }
+
+          try {
+            const switchedLead =
+              await findOneAndUpdateLeadWithSmsFence({
+                filter: {
+                  _id:
+                    explicitlyMatchedLead._id,
+
+                  businessId:
+                    business._id,
+
+                  phone:
+                    normalizedPhone,
+
+                  status: {
+                    $in:
+                      ACTIVE_LEAD_STATUSES,
+                  },
+
+                  smsConversationActive: {
+                    $ne:
+                      true,
+                  },
+                },
+
+                fenceToken:
+                  conversationLockFenceToken!,
+
+                set: {
+                  smsConversationActive:
+                    true,
+                },
+              });
+
+            if (!switchedLead) {
+              await restorePreviousSmsConversation({
+                leadId:
+                  previousActiveLead._id,
+
+                businessId:
+                  business._id,
+
+                phone:
+                  normalizedPhone,
+
+                fenceToken:
+                  conversationLockFenceToken!,
+              });
+
+              return successResponse();
+            }
+
+            lead =
+              switchedLead;
+
+            console.log(
+              "SMS conversation switched by explicit service:",
+              {
+                leadId:
+                  lead._id.toString(),
+
+                service:
+                  lead.service,
+
+                previousLeadId:
+                  previousActiveLead._id.toString(),
+
+                previousService:
+                  previousActiveLead.service,
+              }
+            );
+          } catch (error) {
+            await restorePreviousSmsConversation({
+              leadId:
+                previousActiveLead._id,
+
+              businessId:
+                business._id,
+
+              phone:
+                normalizedPhone,
+
+              fenceToken:
+                conversationLockFenceToken!,
+            });
+
+            throw error;
+          }
         }
       }
     }
@@ -717,6 +1264,8 @@ export async function POST(request: Request) {
 
             phone:
               normalizedPhone,
+            fenceToken:
+              conversationLockFenceToken!,
           });
 
         if (!activation) {
@@ -731,7 +1280,7 @@ export async function POST(request: Request) {
             }
           );
 
-          return twimlResponse();
+          return successResponse();
         }
 
         lead =
@@ -810,6 +1359,8 @@ export async function POST(request: Request) {
 
               phone:
                 normalizedPhone,
+              fenceToken:
+                conversationLockFenceToken!,
             });
 
           if (!activation) {
@@ -824,7 +1375,7 @@ export async function POST(request: Request) {
               }
             );
 
-            return twimlResponse();
+            return successResponse();
           }
 
           lead =
@@ -905,8 +1456,21 @@ export async function POST(request: Request) {
             clarification +=
               " Please tell me which service request you want to continue.";
           }
+          await assertSmsConversationOwnership({
+            businessId:
+              business._id,
 
+            phone:
+              normalizedPhone,
+
+            ownerToken:
+              conversationLockOwner!,
+
+            fenceToken:
+              conversationLockFenceToken!,
+          });
           try {
+
             await sendSmsReply({
               to:
                 normalizedPhone,
@@ -943,7 +1507,7 @@ export async function POST(request: Request) {
             }
           );
 
-          return twimlResponse();
+          return successResponse();
         }
       }
 
@@ -1060,6 +1624,8 @@ export async function POST(request: Request) {
 
                 smsConversationActive:
                   true,
+                smsFenceToken:
+                  conversationLockFenceToken!,
               });
           } catch (error) {
             if (
@@ -1105,7 +1671,7 @@ export async function POST(request: Request) {
                 }
               );
 
-              return twimlResponse();
+              return successResponse();
             }
 
             lead =
@@ -1174,7 +1740,60 @@ export async function POST(request: Request) {
                 null;
             }
 
-            await lead.save();
+            const fencedNewLead =
+              await updateLeadWithSmsFence({
+                leadId:
+                  lead._id,
+
+                businessId:
+                  business._id,
+
+                phone:
+                  normalizedPhone,
+
+                fenceToken:
+                  conversationLockFenceToken!,
+
+                set: {
+                  status:
+                    lead.status,
+
+                  smsConversationActive:
+                    lead.smsConversationActive,
+
+                  "followUp.enabled":
+                    lead.followUp
+                      ?.enabled ??
+                    false,
+
+                  "followUp.count":
+                    lead.followUp
+                      ?.count ??
+                    0,
+
+                  "followUp.nextFollowUpAt":
+                    lead.followUp
+                      ?.nextFollowUpAt ??
+                    null,
+
+                  "followUp.lastFollowUpAt":
+                    lead.followUp
+                      ?.lastFollowUpAt ??
+                    null,
+                },
+              });
+
+            if (!fencedNewLead) {
+              conversationLockLost =
+                true;
+
+              throw new Error(
+                "Stale SMS worker rejected while saving new service lead."
+              );
+            }
+
+            lead =
+              fencedNewLead;
 
             await Message.create({
               leadId:
@@ -1198,8 +1817,21 @@ export async function POST(request: Request) {
                 content:
                   newRequestResult.reply,
               });
+            await assertSmsConversationOwnership({
+              businessId:
+                business._id,
 
+              phone:
+                normalizedPhone,
+
+              ownerToken:
+                conversationLockOwner!,
+
+              fenceToken:
+                conversationLockFenceToken!,
+            });
             try {
+
               await sendSmsReply({
                 to:
                   normalizedPhone,
@@ -1245,7 +1877,7 @@ export async function POST(request: Request) {
               }
             );
 
-            return twimlResponse();
+            return successResponse();
           }
 
           /*
@@ -1283,7 +1915,7 @@ export async function POST(request: Request) {
             }
           );
 
-          return twimlResponse();
+          return successResponse();
         }
       }
     }
@@ -1297,7 +1929,7 @@ export async function POST(request: Request) {
         "Unable to resolve SMS lead."
       );
 
-      return twimlResponse();
+      return successResponse();
     }
 
     /* =====================================================
@@ -1307,13 +1939,50 @@ export async function POST(request: Request) {
        A new one will be scheduled after AI response.
        ===================================================== */
 
-    lead.followUp =
-      lead.followUp ?? {};
+    if (
+      conversationLockFenceToken ===
+      null
+    ) {
+      throw new Error(
+        "Missing SMS conversation fence token."
+      );
+    }
 
-    lead.followUp.nextFollowUpAt =
-      null;
+    const fencedReplyLead =
+      await updateLeadWithSmsFence({
+        leadId:
+          lead._id,
 
-    await lead.save();
+        businessId:
+          business._id,
+
+        phone:
+          normalizedPhone,
+
+        fenceToken:
+          conversationLockFenceToken,
+
+        set: {
+          "followUp.nextFollowUpAt":
+            null,
+        },
+      });
+
+    if (!fencedReplyLead) {
+      conversationLockLost =
+        true;
+
+      throw new Error(
+        "Stale SMS worker rejected while processing customer reply."
+      );
+    }
+
+    /*
+     * Continue using the fresh database document returned by
+     * the fenced update.
+     */
+    lead =
+      fencedReplyLead;
 
     /* =====================================================
        SAVE CUSTOMER MESSAGE
@@ -1370,7 +2039,7 @@ export async function POST(request: Request) {
       selectedOption &&
       lead.timeline &&
       lead.status ===
-        "qualified"
+      "qualified"
     ) {
       const timeline =
         lead.timeline as Timeline;
@@ -1390,7 +2059,7 @@ export async function POST(request: Request) {
 
         const storedSlot =
           storedSlots[
-            selectedOption - 1
+          selectedOption - 1
           ];
 
         /* ===============================================
@@ -1403,12 +2072,16 @@ export async function POST(request: Request) {
             business,
             timeline,
             normalizedPhone,
+            ownerToken:
+              conversationLockOwner!,
+            fenceToken:
+              conversationLockFenceToken!,
 
             reason:
               "Those appointment options are no longer current. Here are the latest available times:",
           });
 
-          return twimlResponse();
+          return successResponse();
         }
 
         const scheduledFor =
@@ -1467,12 +2140,15 @@ export async function POST(request: Request) {
             business,
             timeline,
             normalizedPhone,
-
+            ownerToken:
+              conversationLockOwner!,
+            fenceToken:
+              conversationLockFenceToken!,
             reason:
               `Sorry, ${selectedLabel} is no longer available. Here are the latest available times:`,
           });
 
-          return twimlResponse();
+          return successResponse();
         }
 
         /* ===============================================
@@ -1519,87 +2195,249 @@ export async function POST(request: Request) {
             business,
             timeline,
             normalizedPhone,
-
+            ownerToken:
+              conversationLockOwner!,
+            fenceToken:
+              conversationLockFenceToken!,
             reason:
               `Sorry, ${selectedLabel} was just taken. Here are the latest available times:`,
           });
 
-          return twimlResponse();
+          return successResponse();
         }
 
         try {
           /* =============================================
-             CREATE APPOINTMENT
+             ATOMIC SMS APPOINTMENT BOOKING
+        
+             Transaction guarantees:
+        
+             1. Current worker still owns SMS lock.
+             2. Appointment is created.
+             3. Lead becomes booked.
+             4. Confirmation DB message is created.
+        
+             Either all commit or all roll back.
              ============================================= */
 
-          const appointment =
-            await Appointment.create({
-              leadId:
-                lead._id,
+          const session =
+            await mongoose.startSession();
 
-              businessId:
-                lead.businessId,
+          let appointment:
+            any = null;
 
-              label:
-                selectedLabel,
-
-              scheduledFor,
-
-              status:
-                "scheduled",
-            });
-
-          /* =============================================
-             BOOK LEAD + STOP FOLLOW-UPS
-             ============================================= */
-
-          lead.status =
-            "booked";
-
-          lead.smsConversationActive =
-            false;
-
-          lead.followUp =
-            lead.followUp ?? {};
-
-          lead.followUp.enabled =
-            false;
-
-          lead.followUp.nextFollowUpAt =
-            null;
-
-          /* =============================================
-             CLEAR USED SMS BOOKING OPTIONS
-             ============================================= */
-
-          lead.smsBookingOptions = {
-            offeredAt:
-              null,
-
-            slots:
-              [],
-          };
-
-          await lead.save();
-
-          /* =============================================
-             CONFIRMATION MESSAGE
-             ============================================= */
+          let aiMessage:
+            any = null;
 
           const confirmation =
             `Perfect! We've reserved ${selectedLabel}.`;
 
-          const aiMessage =
-            await Message.create({
-              leadId:
-                lead._id,
+          try {
+            await session.withTransaction(
+              async () => {
+                /* =======================================
+                   VERIFY CURRENT LOCK OWNERSHIP INSIDE TX
+                   ======================================= */
 
-              sender:
-                "ai",
+                const ownedLock =
+                  await SmsConversationLock.findOne({
+                    businessId:
+                      business._id,
 
-              content:
-                confirmation,
-            });
+                    phone:
+                      normalizedPhone,
+
+                    ownerToken:
+                      conversationLockOwner!,
+
+                    fenceToken:
+                      conversationLockFenceToken!,
+
+                    expiresAt: {
+                      $gt:
+                        new Date(),
+                    },
+                  })
+                    .session(
+                      session
+                    )
+                    .lean();
+
+                if (!ownedLock) {
+                  conversationLockLost =
+                    true;
+
+                  throw new Error(
+                    "SMS conversation lock ownership was lost before appointment booking."
+                  );
+                }
+
+                /* =======================================
+                   CREATE APPOINTMENT INSIDE TRANSACTION
+                   ======================================= */
+
+                const createdAppointments =
+                  await Appointment.create(
+                    [
+                      {
+                        leadId:
+                          lead._id,
+
+                        businessId:
+                          lead.businessId,
+
+                        label:
+                          selectedLabel,
+
+                        scheduledFor,
+
+                        status:
+                          "scheduled",
+                      },
+                    ],
+                    {
+                      session,
+                    }
+                  );
+
+                appointment =
+                  createdAppointments[0];
+
+                if (!appointment) {
+                  throw new Error(
+                    "Appointment could not be created."
+                  );
+                }
+
+                /* =======================================
+                   FENCED LEAD BOOKING INSIDE TRANSACTION
+                   ======================================= */
+
+                const fencedBookedLead =
+                  await updateLeadWithSmsFence({
+                    leadId:
+                      lead._id,
+
+                    businessId:
+                      business._id,
+
+                    phone:
+                      normalizedPhone,
+
+                    fenceToken:
+                      conversationLockFenceToken!,
+
+                    session,
+
+                    set: {
+                      status:
+                        "booked",
+
+                      smsConversationActive:
+                        false,
+
+                      "followUp.enabled":
+                        false,
+
+                      "followUp.nextFollowUpAt":
+                        null,
+
+                      smsBookingOptions: {
+                        offeredAt:
+                          null,
+
+                        slots:
+                          [],
+                      },
+                    },
+                  });
+
+                if (!fencedBookedLead) {
+                  conversationLockLost =
+                    true;
+
+                  throw new Error(
+                    "Stale SMS worker rejected while booking appointment."
+                  );
+                }
+
+                lead =
+                  fencedBookedLead;
+
+                /* =======================================
+                   CONFIRMATION MESSAGE INSIDE TRANSACTION
+                   ======================================= */
+
+                const createdMessages =
+                  await Message.create(
+                    [
+                      {
+                        leadId:
+                          lead._id,
+
+                        sender:
+                          "ai",
+
+                        content:
+                          confirmation,
+                      },
+                    ],
+                    {
+                      session,
+                    }
+                  );
+
+                aiMessage =
+                  createdMessages[0];
+
+                if (!aiMessage) {
+                  throw new Error(
+                    "Appointment confirmation message could not be created."
+                  );
+                }
+              }
+            );
+          } finally {
+            await session.endSession();
+          }
+
+          /*
+           * withTransaction() completed successfully.
+           *
+           * Appointment + Lead + confirmation Message now exist
+           * together.
+           */
+
+          if (
+            !appointment ||
+            !aiMessage
+          ) {
+            throw new Error(
+              "Appointment transaction completed without required records."
+            );
+          }
+
+          /* =============================================
+             VERIFY OWNERSHIP BEFORE EXTERNAL SMS
+             ============================================= */
+
+          await assertSmsConversationOwnership({
+            businessId:
+              business._id,
+
+            phone:
+              normalizedPhone,
+
+            ownerToken:
+              conversationLockOwner!,
+
+            fenceToken:
+              conversationLockFenceToken!,
+          });
+
+          /* =============================================
+             SEND CONFIRMATION SMS
+             ============================================= */
 
           try {
             await sendSmsReply({
@@ -1658,7 +2496,7 @@ export async function POST(request: Request) {
           }
 
           console.log(
-            "SMS appointment booked:",
+            "SMS appointment booked atomically:",
             {
               leadId:
                 lead._id.toString(),
@@ -1694,10 +2532,13 @@ export async function POST(request: Request) {
             }
           );
 
-          return twimlResponse();
+          return successResponse();
         } catch (error) {
           /* =============================================
-             DUPLICATE SLOT INDEX CONFLICT
+             DUPLICATE APPOINTMENT SLOT
+        
+             MongoDB transaction automatically rolls back the Lead
+             update and confirmation Message as well.
              ============================================= */
 
           if (
@@ -1728,11 +2569,17 @@ export async function POST(request: Request) {
               timeline,
               normalizedPhone,
 
+              ownerToken:
+                conversationLockOwner!,
+
+              fenceToken:
+                conversationLockFenceToken!,
+
               reason:
                 `Sorry, ${selectedLabel} was just taken. Here are the latest available times:`,
             });
 
-            return twimlResponse();
+            return successResponse();
           }
 
           throw error;
@@ -1939,10 +2786,10 @@ export async function POST(request: Request) {
     if (
       ACTIVE_LEAD_STATUSES.includes(
         lead.status as
-          | "new"
-          | "warm"
-          | "hot"
-          | "qualified"
+        | "new"
+        | "warm"
+        | "hot"
+        | "qualified"
       )
     ) {
       lead.smsConversationActive =
@@ -2019,8 +2866,94 @@ export async function POST(request: Request) {
           [],
       };
     }
+    if (
+      conversationLockFenceToken ===
+      null
+    ) {
+      throw new Error(
+        "Missing SMS conversation fence token."
+      );
+    }
 
-    await lead.save();
+    const fencedAiLead =
+      await updateLeadWithSmsFence({
+        leadId:
+          lead._id,
+
+        businessId:
+          business._id,
+
+        phone:
+          normalizedPhone,
+
+        fenceToken:
+          conversationLockFenceToken,
+
+        set: {
+          industry:
+            lead.industry,
+
+          service:
+            lead.service,
+
+          location:
+            lead.location,
+
+          urgency:
+            lead.urgency,
+
+          timeline:
+            lead.timeline,
+
+          name:
+            lead.name,
+
+          phone:
+            lead.phone,
+
+          status:
+            lead.status,
+
+          smsConversationActive:
+            lead.smsConversationActive,
+
+          "followUp.enabled":
+            lead.followUp
+              ?.enabled ??
+            false,
+
+          "followUp.count":
+            lead.followUp
+              ?.count ??
+            0,
+
+          "followUp.nextFollowUpAt":
+            lead.followUp
+              ?.nextFollowUpAt ??
+            null,
+
+          "followUp.lastFollowUpAt":
+            lead.followUp
+              ?.lastFollowUpAt ??
+            null,
+
+          smsBookingOptions:
+            lead.smsBookingOptions,
+        },
+      });
+
+    if (!fencedAiLead) {
+      conversationLockLost =
+        true;
+
+      throw new Error(
+        "Stale SMS worker rejected while saving AI response."
+      );
+    }
+
+    lead =
+      fencedAiLead;
+
 
     /* =====================================================
        SAVE AI MESSAGE
@@ -2041,8 +2974,21 @@ export async function POST(request: Request) {
     /* =====================================================
        OUTBOUND SMS
        ===================================================== */
+    await assertSmsConversationOwnership({
+      businessId:
+        business._id,
 
+      phone:
+        normalizedPhone,
+
+      ownerToken:
+        conversationLockOwner!,
+
+      fenceToken:
+        conversationLockFenceToken!,
+    });
     try {
+
       await sendSmsReply({
         to:
           normalizedPhone,
@@ -2116,7 +3062,7 @@ export async function POST(request: Request) {
       }
     );
 
-    return twimlResponse();
+    return successResponse();
   } catch (error) {
     processingError =
       error;
@@ -2134,17 +3080,73 @@ export async function POST(request: Request) {
     return retryResponse();
   } finally {
     /*
+     * Stop scheduling new heartbeats before finalizing the
+     * event and releasing the lock.
+     */
+    conversationLockRenewalStopped =
+      true;
+
+    if (
+      conversationLockRenewalTimer
+    ) {
+      clearTimeout(
+        conversationLockRenewalTimer
+      );
+
+      conversationLockRenewalTimer =
+        null;
+    }
+
+    /*
+     * If a renewal request is already in flight, wait for it
+     * to settle before release so renew and release cannot
+     * race each other.
+     */
+    if (
+      conversationLockRenewalInFlight
+    ) {
+      try {
+        await conversationLockRenewalInFlight;
+      } catch {
+        /*
+         * The renewal loop records its own failure state.
+         */
+      }
+    }
+
+    /*
+     * If ownership was lost, never mark this inbound event as
+     * successfully processed.
+     */
+    if (
+      conversationLockLost &&
+      !processingError
+    ) {
+      processingError =
+        new Error(
+          "SMS conversation lock ownership was lost."
+        );
+    }
+
+    /*
      * Mark the idempotency event BEFORE releasing the
      * conversation lock. A waiting retry can then acquire
      * the lock and see the final event state.
      */
-    if (claimedMessageSid) {
+    if (claimedMessageSid &&
+      claimedProcessingToken) {
       try {
         if (processingError) {
           await TwilioInboundEvent.updateOne(
             {
               messageSid:
                 claimedMessageSid,
+
+              processingToken:
+                claimedProcessingToken,
+
+              status:
+                "processing",
             },
             {
               $set: {
@@ -2166,6 +3168,12 @@ export async function POST(request: Request) {
             {
               messageSid:
                 claimedMessageSid,
+
+              processingToken:
+                claimedProcessingToken,
+
+              status:
+                "processing",
             },
             {
               $set: {
@@ -2191,6 +3199,8 @@ export async function POST(request: Request) {
 
     if (
       conversationLockOwner &&
+      conversationLockFenceToken !==
+      null &&
       conversationLockBusinessId &&
       conversationLockPhone
     ) {
@@ -2204,6 +3214,9 @@ export async function POST(request: Request) {
 
           ownerToken:
             conversationLockOwner,
+
+          fenceToken:
+            conversationLockFenceToken,
         });
       } catch (lockError) {
         console.error(
@@ -2235,16 +3248,25 @@ async function claimTwilioInboundEvent({
   to: string;
   body: string;
 }) {
+  const firstProcessingToken =
+    randomUUID();
+
   try {
     await TwilioInboundEvent.create({
       messageSid,
       from,
       to,
       body,
+
       status:
         "processing",
+
+      processingToken:
+        firstProcessingToken,
+
       processedAt:
         null,
+
       error:
         null,
     });
@@ -2252,6 +3274,9 @@ async function claimTwilioInboundEvent({
     return {
       shouldProcess:
         true,
+
+      processingToken:
+        firstProcessingToken,
     };
   } catch (error) {
     if (
@@ -2269,10 +3294,6 @@ async function claimTwilioInboundEvent({
     }).lean();
 
   if (!existing) {
-    /*
-     * Extremely small race: the unique insert failed but the
-     * winner is not visible yet. Let Twilio retry.
-     */
     throw new Error(
       `Twilio event ${messageSid} exists but could not be loaded.`
     );
@@ -2285,34 +3306,41 @@ async function claimTwilioInboundEvent({
     return {
       shouldProcess:
         false,
+
+      processingToken:
+        null,
     };
   }
 
-  /*
-   * A normal in-flight duplicate should not run twice.
-   * Only "processing" rows older than five minutes may be
-   * reclaimed after a crash.
-   */
   const staleBefore =
     new Date(
       Date.now() -
-        5 * 60 * 1000
+      5 * 60 * 1000
     );
 
   if (
     existing.status ===
-      "processing" &&
+    "processing" &&
     existing.updatedAt &&
     new Date(
       existing.updatedAt
     ) >
-      staleBefore
+    staleBefore
   ) {
     return {
       shouldProcess:
         false,
+
+      processingToken:
+        null,
     };
   }
+
+  /*
+   * Every reclaim gets a brand-new ownership token.
+   */
+  const reclaimedProcessingToken =
+    randomUUID();
 
   const reclaimed =
     await TwilioInboundEvent.findOneAndUpdate(
@@ -2335,10 +3363,14 @@ async function claimTwilioInboundEvent({
           },
         ],
       },
+
       {
         $set: {
           status:
             "processing",
+
+          processingToken:
+            reclaimedProcessingToken,
 
           processedAt:
             null,
@@ -2351,17 +3383,32 @@ async function claimTwilioInboundEvent({
           body,
         },
       },
+
       {
         returnDocument:
           "after",
       }
     );
 
+  if (!reclaimed) {
+    /*
+     * Another worker reclaimed the event before us.
+     */
+    return {
+      shouldProcess:
+        false,
+
+      processingToken:
+        null,
+    };
+  }
+
   return {
     shouldProcess:
-      Boolean(
-        reclaimed
-      ),
+      true,
+
+    processingToken:
+      reclaimed.processingToken,
   };
 }
 
@@ -2420,33 +3467,51 @@ async function restorePreviousSmsConversation({
   leadId,
   businessId,
   phone,
+  fenceToken,
 }: {
   leadId: any;
   businessId: any;
   phone: string;
+  fenceToken: number;
 }) {
   try {
-    await Lead.updateOne(
-      {
-        _id:
-          leadId,
+    const restored =
+      await findOneAndUpdateLeadWithSmsFence({
+        filter: {
+          _id:
+            leadId,
 
-        businessId,
+          businessId,
 
-        phone,
+          phone,
 
-        status: {
-          $in:
-            ACTIVE_LEAD_STATUSES,
+          status: {
+            $in:
+              ACTIVE_LEAD_STATUSES,
+          },
         },
-      },
-      {
-        $set: {
+
+        fenceToken,
+
+        set: {
           smsConversationActive:
             true,
         },
-      }
-    );
+      });
+
+    if (!restored) {
+      console.warn(
+        "Previous SMS conversation was not restored because a newer fence exists.",
+        {
+          leadId:
+            leadId.toString(),
+
+          phone,
+
+          fenceToken,
+        }
+      );
+    }
   } catch (error) {
     console.error(
       "Failed to restore previous SMS conversation:",
@@ -2478,15 +3543,17 @@ async function activateSmsConversation({
   targetLeadId,
   businessId,
   phone,
+  fenceToken,
 }: {
   targetLeadId: any;
   businessId: any;
   phone: string;
+  fenceToken: number;
 }) {
   try {
     const activatedLead =
-      await Lead.findOneAndUpdate(
-        {
+      await findOneAndUpdateLeadWithSmsFence({
+        filter: {
           _id:
             targetLeadId,
 
@@ -2499,17 +3566,14 @@ async function activateSmsConversation({
               ACTIVE_LEAD_STATUSES,
           },
         },
-        {
-          $set: {
-            smsConversationActive:
-              true,
-          },
+
+        fenceToken,
+
+        set: {
+          smsConversationActive:
+            true,
         },
-        {
-          returnDocument:
-            "after",
-        }
-      );
+      });
 
     if (activatedLead) {
       return {
@@ -2587,15 +3651,15 @@ function isMongoDuplicateKeyError(
 } {
   return (
     typeof error ===
-      "object" &&
+    "object" &&
     error !==
-      null &&
+    null &&
     "code" in
-      error &&
+    error &&
     (error as {
       code?: number;
     }).code ===
-      11000
+    11000
   );
 }
 
@@ -2746,12 +3810,16 @@ async function sendFreshSmsAppointmentOptions({
   business,
   timeline,
   normalizedPhone,
+  ownerToken,
+  fenceToken,
   reason,
 }: {
   lead: any;
   business: any;
   timeline: Timeline;
   normalizedPhone: string;
+  ownerToken: string;
+  fenceToken: number;
   reason: string;
 }) {
   const availableSlots =
@@ -2859,7 +3927,53 @@ async function sendFreshSmsAppointmentOptions({
       null;
   }
 
-  await lead.save();
+  const fencedLead =
+    await updateLeadWithSmsFence({
+      leadId:
+        lead._id,
+
+      businessId:
+        business._id,
+
+      phone:
+        normalizedPhone,
+
+      fenceToken,
+
+      set: {
+        smsBookingOptions:
+          lead.smsBookingOptions,
+
+        "followUp.enabled":
+          lead.followUp
+            ?.enabled ??
+          false,
+
+        "followUp.count":
+          lead.followUp
+            ?.count ??
+          0,
+
+        "followUp.nextFollowUpAt":
+          lead.followUp
+            ?.nextFollowUpAt ??
+          null,
+
+        "followUp.lastFollowUpAt":
+          lead.followUp
+            ?.lastFollowUpAt ??
+          null,
+      },
+    });
+
+  if (!fencedLead) {
+    throw new Error(
+      "Stale SMS worker rejected while refreshing appointment options."
+    );
+  }
+
+  lead =
+    fencedLead;
 
   /* =======================================================
      SAVE AI MESSAGE
@@ -2876,6 +3990,22 @@ async function sendFreshSmsAppointmentOptions({
       content:
         reply,
     });
+
+  /* =======================================================
+     VERIFY OWNERSHIP BEFORE OUTBOUND SMS
+     ======================================================= */
+
+  await assertSmsConversationOwnership({
+    businessId:
+      business._id,
+
+    phone:
+      normalizedPhone,
+
+    ownerToken,
+
+    fenceToken,
+  });
 
   /* =======================================================
      SEND SMS
@@ -3002,10 +4132,10 @@ async function getSmsAvailableSlots({
         dayAvailability,
         availability
           .slotDurationMinutes ??
-          60,
+        60,
         availability
           .bufferMinutes ??
-          0,
+        0,
         timezone,
         now
       );
@@ -3067,4 +4197,100 @@ async function getSmsAvailableSlots({
         ).getTime()
       )
   );
+}
+
+async function assertSmsConversationOwnership({
+  businessId,
+  phone,
+  ownerToken,
+  fenceToken,
+}: {
+  businessId: any;
+  phone: string;
+  ownerToken: string;
+  fenceToken: number;
+}) {
+  const ownsLock =
+    await checkSmsConversationLock({
+      businessId,
+      phone,
+      ownerToken,
+      fenceToken,
+    });
+
+  if (!ownsLock) {
+    throw new Error(
+      "SMS conversation lock ownership was lost before side effect."
+    );
+  }
+}
+
+
+function findConfiguredService(
+  services: string[],
+  message: string
+): string | null {
+  const normalizedMessage =
+    normalizeText(message);
+
+  if (!normalizedMessage) {
+    return null;
+  }
+
+  const matches =
+    services.filter((service) => {
+      const normalizedService =
+        normalizeText(service);
+
+      if (!normalizedService) {
+        return false;
+      }
+
+      if (
+        normalizedMessage ===
+        normalizedService
+      ) {
+        return true;
+      }
+
+      if (
+        normalizedMessage.includes(
+          normalizedService
+        )
+      ) {
+        return true;
+      }
+
+      const serviceWords =
+        normalizedService
+          .split(" ")
+          .filter(
+            (word) =>
+              word.length >= 2
+          );
+
+      if (
+        serviceWords.length ===
+        0
+      ) {
+        return false;
+      }
+
+      return serviceWords.every(
+        (word) =>
+          normalizedMessage.includes(
+            word
+          )
+      );
+    });
+
+  /*
+   * Do not guess when multiple configured
+   * services match the same message.
+   */
+  if (matches.length !== 1) {
+    return null;
+  }
+
+  return matches[0];
 }
