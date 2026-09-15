@@ -1,5 +1,4 @@
-import { NextResponse } from "next/server";
-import mongoose from "mongoose";
+
 import { connectDB } from "@/lib/mongodb";
 import { validatePhoneNumber } from "@/lib/phone";
 import { verifyTwilioSignature } from "@/lib/sms/verify-twilio-signature";
@@ -7,28 +6,21 @@ import {
   updateLeadWithSmsFence,
   findOneAndUpdateLeadWithSmsFence,
 } from "@/lib/sms/sms-fenced-lead";
-import { randomUUID } from "crypto";
+
 import {
   generateQualificationResponse,
   type AISettings,
 } from "@/lib/ai/qualification";
-import { SmsConversationLock } from "@/models/SmsConversationLock";
+
 import {
-  generateSlotsForDate,
-  getDatesForTimeline,
-  getDayName,
-  type AvailabilityDay,
   type GeneratedSlot,
   type Timeline,
 } from "@/lib/availability";
 
-import { sendAppointmentBookedEmail } from "@/lib/email/send-appointment-booked-email";
 import { sendSmsReply } from "@/lib/sms/send-sms-reply";
 import {
   acquireSmsConversationLock,
-  renewSmsConversationLock,
   releaseSmsConversationLock,
-  checkSmsConversationLock,
 } from "@/lib/sms/sms-conversation-lock";
 import {
   canFollowUp,
@@ -40,17 +32,35 @@ import { Business } from "@/models/Business";
 import { Message } from "@/models/Message";
 import { Appointment } from "@/models/Appointment";
 import { TwilioInboundEvent } from "@/models/TwilioInboundEvent";
+import {
+  ACTIVE_LEAD_STATUSES,
+  findConfiguredService,
+  findLeadByService,
+  forbiddenResponse,
+  getErrorMessage,
+  isMongoDuplicateKeyError,
+  normalizeText,
+  retryResponse,
+  twimlResponse,
+} from "@/lib/sms/incoming/helpers";
+import { claimTwilioInboundEvent } from "@/lib/sms/incoming/claim-twilio-event";
 
-/* =========================================================
-   LEAD STATUS GROUPS
-   ========================================================= */
+import {
+  activateSmsConversation,
+  restorePreviousSmsConversation,
+} from "@/lib/sms/incoming/conversation-lead";
 
-const ACTIVE_LEAD_STATUSES = [
-  "new",
-  "warm",
-  "hot",
-  "qualified",
-] as const;
+import { assertSmsConversationOwnership } from "@/lib/sms/incoming/lock-ownership";
+
+import {
+  createSmsLockHeartbeat,
+  type SmsLockHeartbeat,
+} from "@/lib/sms/incoming/lock-heartbeat";
+
+import { getSmsAvailableSlots } from "@/lib/sms/incoming/appointment-availability";
+import { sendFreshSmsAppointmentOptions } from "@/lib/sms/incoming/appointment-options";
+import { bookSmsAppointmentAtomically } from "@/lib/sms/incoming/appointment-booking";
+import { sendSmsAppointmentNotifications } from "@/lib/sms/incoming/appointment-notifications";
 
 const VALID_TIMELINES: Timeline[] = [
   "Today",
@@ -85,19 +95,10 @@ export async function POST(request: Request) {
   let conversationLockLost =
     false;
 
-  let conversationLockRenewalStopped =
-    false;
-
-  let conversationLockRenewalTimer:
-    ReturnType<typeof setTimeout> | null =
-    null;
-
-  let conversationLockRenewalInFlight:
-    Promise<void> | null =
-    null;
-
   let processingError: unknown = null;
 
+  let conversationLockHeartbeat:
+    SmsLockHeartbeat | null = null;
   /*
    * Use this instead of returning twimlResponse() directly.
    *
@@ -110,124 +111,6 @@ export async function POST(request: Request) {
       ? retryResponse()
       : twimlResponse();
 
-  /*
-   * Schedule one renewal at a time. We intentionally use
-   * recursive setTimeout instead of setInterval so renewal
-   * calls can never overlap.
-   */
-  const scheduleConversationLockRenewal =
-    () => {
-      if (
-        conversationLockRenewalStopped ||
-        conversationLockLost ||
-        !conversationLockOwner ||
-        conversationLockFenceToken ===
-        null ||
-        !conversationLockBusinessId ||
-        !conversationLockPhone
-      ) {
-        return;
-      }
-
-      conversationLockRenewalTimer =
-        setTimeout(() => {
-          conversationLockRenewalInFlight =
-            (async () => {
-              try {
-                const renewed =
-                  await renewSmsConversationLock({
-                    businessId:
-                      conversationLockBusinessId,
-
-                    phone:
-                      conversationLockPhone!,
-
-                    ownerToken:
-                      conversationLockOwner!,
-
-                    fenceToken:
-                      conversationLockFenceToken!,
-
-                    leaseMs:
-                      SMS_CONVERSATION_LOCK_LEASE_MS,
-                  });
-
-                if (!renewed) {
-                  conversationLockLost =
-                    true;
-
-                  processingError =
-                    processingError ??
-                    new Error(
-                      "SMS conversation lock ownership was lost."
-                    );
-
-                  console.error(
-                    "SMS conversation lock renewal rejected:",
-                    {
-                      businessId:
-                        conversationLockBusinessId?.toString?.() ??
-                        conversationLockBusinessId,
-
-                      phone:
-                        conversationLockPhone,
-
-                      fenceToken:
-                        conversationLockFenceToken,
-                    }
-                  );
-
-                  return;
-                }
-
-                console.log(
-                  "SMS conversation lock renewed:",
-                  {
-                    businessId:
-                      conversationLockBusinessId?.toString?.() ??
-                      conversationLockBusinessId,
-
-                    phone:
-                      conversationLockPhone,
-
-                    fenceToken:
-                      conversationLockFenceToken,
-
-                    expiresAt:
-                      renewed.expiresAt,
-                  }
-                );
-              } catch (error) {
-                /*
-                 * Be conservative: if MongoDB cannot confirm
-                 * renewal, this worker must no longer assume
-                 * it owns the conversation.
-                 */
-                conversationLockLost =
-                  true;
-
-                processingError =
-                  processingError ??
-                  error;
-
-                console.error(
-                  "SMS conversation lock renewal failed:",
-                  error
-                );
-              } finally {
-                conversationLockRenewalInFlight =
-                  null;
-
-                if (
-                  !conversationLockRenewalStopped &&
-                  !conversationLockLost
-                ) {
-                  scheduleConversationLockRenewal();
-                }
-              }
-            })();
-        }, SMS_CONVERSATION_LOCK_RENEW_MS);
-    };
 
   try {
     /* =====================================================
@@ -498,7 +381,37 @@ export async function POST(request: Request) {
     /*
      * Keep the lease alive while this webhook is processing.
      */
-    scheduleConversationLockRenewal();
+    conversationLockHeartbeat =
+      createSmsLockHeartbeat({
+        businessId:
+          business._id,
+
+        phone:
+          normalizedPhone,
+
+        ownerToken:
+          conversationLockOwner,
+
+        fenceToken:
+          conversationLockFenceToken!,
+
+        leaseMs:
+          SMS_CONVERSATION_LOCK_LEASE_MS,
+
+        renewEveryMs:
+          SMS_CONVERSATION_LOCK_RENEW_MS,
+
+        onLockLost: (error) => {
+          conversationLockLost =
+            true;
+
+          processingError =
+            processingError ??
+            error;
+        },
+      });
+
+    conversationLockHeartbeat.start();
 
     /*
      * A stale Twilio event may have been reclaimed while the
@@ -2220,280 +2133,57 @@ export async function POST(request: Request) {
              Either all commit or all roll back.
              ============================================= */
 
-          const session =
-            await mongoose.startSession();
+          const bookingResult =
+            await bookSmsAppointmentAtomically({
+              lead,
 
-          let appointment:
-            any = null;
+              businessId:
+                business._id,
 
-          let aiMessage:
-            any = null;
+              normalizedPhone,
+
+              ownerToken:
+                conversationLockOwner!,
+
+              fenceToken:
+                conversationLockFenceToken!,
+
+              selectedLabel,
+
+              scheduledFor,
+
+              onLockLost: () => {
+                conversationLockLost =
+                  true;
+              },
+            });
+
+          const appointment =
+            bookingResult.appointment;
+
+          const aiMessage =
+            bookingResult.aiMessage;
 
           const confirmation =
-            `Perfect! We've reserved ${selectedLabel}.`;
+            bookingResult.confirmation;
 
-          try {
-            await session.withTransaction(
-              async () => {
-                /* =======================================
-                   VERIFY CURRENT LOCK OWNERSHIP INSIDE TX
-                   ======================================= */
+          lead =
+            bookingResult.lead;
+          await sendSmsAppointmentNotifications({
+            business,
+            lead,
+            appointment,
 
-                const ownedLock =
-                  await SmsConversationLock.findOne({
-                    businessId:
-                      business._id,
-
-                    phone:
-                      normalizedPhone,
-
-                    ownerToken:
-                      conversationLockOwner!,
-
-                    fenceToken:
-                      conversationLockFenceToken!,
-
-                    expiresAt: {
-                      $gt:
-                        new Date(),
-                    },
-                  })
-                    .session(
-                      session
-                    )
-                    .lean();
-
-                if (!ownedLock) {
-                  conversationLockLost =
-                    true;
-
-                  throw new Error(
-                    "SMS conversation lock ownership was lost before appointment booking."
-                  );
-                }
-
-                /* =======================================
-                   CREATE APPOINTMENT INSIDE TRANSACTION
-                   ======================================= */
-
-                const createdAppointments =
-                  await Appointment.create(
-                    [
-                      {
-                        leadId:
-                          lead._id,
-
-                        businessId:
-                          lead.businessId,
-
-                        label:
-                          selectedLabel,
-
-                        scheduledFor,
-
-                        status:
-                          "scheduled",
-                      },
-                    ],
-                    {
-                      session,
-                    }
-                  );
-
-                appointment =
-                  createdAppointments[0];
-
-                if (!appointment) {
-                  throw new Error(
-                    "Appointment could not be created."
-                  );
-                }
-
-                /* =======================================
-                   FENCED LEAD BOOKING INSIDE TRANSACTION
-                   ======================================= */
-
-                const fencedBookedLead =
-                  await updateLeadWithSmsFence({
-                    leadId:
-                      lead._id,
-
-                    businessId:
-                      business._id,
-
-                    phone:
-                      normalizedPhone,
-
-                    fenceToken:
-                      conversationLockFenceToken!,
-
-                    session,
-
-                    set: {
-                      status:
-                        "booked",
-
-                      smsConversationActive:
-                        false,
-
-                      "followUp.enabled":
-                        false,
-
-                      "followUp.nextFollowUpAt":
-                        null,
-
-                      smsBookingOptions: {
-                        offeredAt:
-                          null,
-
-                        slots:
-                          [],
-                      },
-                    },
-                  });
-
-                if (!fencedBookedLead) {
-                  conversationLockLost =
-                    true;
-
-                  throw new Error(
-                    "Stale SMS worker rejected while booking appointment."
-                  );
-                }
-
-                lead =
-                  fencedBookedLead;
-
-                /* =======================================
-                   CONFIRMATION MESSAGE INSIDE TRANSACTION
-                   ======================================= */
-
-                const createdMessages =
-                  await Message.create(
-                    [
-                      {
-                        leadId:
-                          lead._id,
-
-                        sender:
-                          "ai",
-
-                        content:
-                          confirmation,
-                      },
-                    ],
-                    {
-                      session,
-                    }
-                  );
-
-                aiMessage =
-                  createdMessages[0];
-
-                if (!aiMessage) {
-                  throw new Error(
-                    "Appointment confirmation message could not be created."
-                  );
-                }
-              }
-            );
-          } finally {
-            await session.endSession();
-          }
-
-          /*
-           * withTransaction() completed successfully.
-           *
-           * Appointment + Lead + confirmation Message now exist
-           * together.
-           */
-
-          if (
-            !appointment ||
-            !aiMessage
-          ) {
-            throw new Error(
-              "Appointment transaction completed without required records."
-            );
-          }
-
-          /* =============================================
-             VERIFY OWNERSHIP BEFORE EXTERNAL SMS
-             ============================================= */
-
-          await assertSmsConversationOwnership({
-            businessId:
-              business._id,
-
-            phone:
-              normalizedPhone,
+            normalizedPhone,
 
             ownerToken:
               conversationLockOwner!,
 
             fenceToken:
               conversationLockFenceToken!,
+
+            confirmation,
           });
-
-          /* =============================================
-             SEND CONFIRMATION SMS
-             ============================================= */
-
-          try {
-            await sendSmsReply({
-              to:
-                normalizedPhone,
-
-              body:
-                confirmation,
-            });
-          } catch (smsError) {
-            console.error(
-              "SMS appointment confirmation failed:",
-              smsError
-            );
-          }
-
-          /* =============================================
-             EMAIL BUSINESS
-             ============================================= */
-
-          try {
-            await sendAppointmentBookedEmail({
-              businessEmail:
-                business.email,
-
-              businessName:
-                business.name,
-
-              appointmentId:
-                appointment._id.toString(),
-
-              name:
-                lead.name ??
-                null,
-
-              phone:
-                lead.phone ??
-                null,
-
-              service:
-                lead.service ??
-                null,
-
-              location:
-                lead.location ??
-                null,
-
-              appointmentLabel:
-                selectedLabel,
-            });
-          } catch (emailError) {
-            console.error(
-              "SMS appointment email failed:",
-              emailError
-            );
-          }
 
           console.log(
             "SMS appointment booked atomically:",
@@ -3083,34 +2773,16 @@ export async function POST(request: Request) {
      * Stop scheduling new heartbeats before finalizing the
      * event and releasing the lock.
      */
-    conversationLockRenewalStopped =
-      true;
-
     if (
-      conversationLockRenewalTimer
+      conversationLockHeartbeat
     ) {
-      clearTimeout(
-        conversationLockRenewalTimer
-      );
+      await conversationLockHeartbeat.stop();
 
-      conversationLockRenewalTimer =
-        null;
-    }
-
-    /*
-     * If a renewal request is already in flight, wait for it
-     * to settle before release so renew and release cannot
-     * race each other.
-     */
-    if (
-      conversationLockRenewalInFlight
-    ) {
-      try {
-        await conversationLockRenewalInFlight;
-      } catch {
-        /*
-         * The renewal loop records its own failure state.
-         */
+      if (
+        conversationLockHeartbeat.hasLostLock()
+      ) {
+        conversationLockLost =
+          true;
       }
     }
 
@@ -3226,1071 +2898,4 @@ export async function POST(request: Request) {
       }
     }
   }
-}
-
-/* =========================================================
-   TWILIO EVENT CLAIM / RETRY
-
-   - first delivery: create "processing"
-   - already processed: ignore
-   - currently processing: ignore duplicate
-   - failed or stale processing: atomically reclaim
-   ========================================================= */
-
-async function claimTwilioInboundEvent({
-  messageSid,
-  from,
-  to,
-  body,
-}: {
-  messageSid: string;
-  from: string;
-  to: string;
-  body: string;
-}) {
-  const firstProcessingToken =
-    randomUUID();
-
-  try {
-    await TwilioInboundEvent.create({
-      messageSid,
-      from,
-      to,
-      body,
-
-      status:
-        "processing",
-
-      processingToken:
-        firstProcessingToken,
-
-      processedAt:
-        null,
-
-      error:
-        null,
-    });
-
-    return {
-      shouldProcess:
-        true,
-
-      processingToken:
-        firstProcessingToken,
-    };
-  } catch (error) {
-    if (
-      !isMongoDuplicateKeyError(
-        error
-      )
-    ) {
-      throw error;
-    }
-  }
-
-  const existing =
-    await TwilioInboundEvent.findOne({
-      messageSid,
-    }).lean();
-
-  if (!existing) {
-    throw new Error(
-      `Twilio event ${messageSid} exists but could not be loaded.`
-    );
-  }
-
-  if (
-    existing.status ===
-    "processed"
-  ) {
-    return {
-      shouldProcess:
-        false,
-
-      processingToken:
-        null,
-    };
-  }
-
-  const staleBefore =
-    new Date(
-      Date.now() -
-      5 * 60 * 1000
-    );
-
-  if (
-    existing.status ===
-    "processing" &&
-    existing.updatedAt &&
-    new Date(
-      existing.updatedAt
-    ) >
-    staleBefore
-  ) {
-    return {
-      shouldProcess:
-        false,
-
-      processingToken:
-        null,
-    };
-  }
-
-  /*
-   * Every reclaim gets a brand-new ownership token.
-   */
-  const reclaimedProcessingToken =
-    randomUUID();
-
-  const reclaimed =
-    await TwilioInboundEvent.findOneAndUpdate(
-      {
-        messageSid,
-
-        $or: [
-          {
-            status:
-              "failed",
-          },
-          {
-            status:
-              "processing",
-
-            updatedAt: {
-              $lte:
-                staleBefore,
-            },
-          },
-        ],
-      },
-
-      {
-        $set: {
-          status:
-            "processing",
-
-          processingToken:
-            reclaimedProcessingToken,
-
-          processedAt:
-            null,
-
-          error:
-            null,
-
-          from,
-          to,
-          body,
-        },
-      },
-
-      {
-        returnDocument:
-          "after",
-      }
-    );
-
-  if (!reclaimed) {
-    /*
-     * Another worker reclaimed the event before us.
-     */
-    return {
-      shouldProcess:
-        false,
-
-      processingToken:
-        null,
-    };
-  }
-
-  return {
-    shouldProcess:
-      true,
-
-    processingToken:
-      reclaimed.processingToken,
-  };
-}
-
-/* =========================================================
-   ERROR MESSAGE
-   ========================================================= */
-
-function getErrorMessage(
-  error: unknown
-) {
-  if (
-    error instanceof
-    Error
-  ) {
-    return error.message.slice(
-      0,
-      2000
-    );
-  }
-
-  return String(
-    error
-  ).slice(
-    0,
-    2000
-  );
-}
-
-/* =========================================================
-   RETRY RESPONSE
-   ========================================================= */
-
-function retryResponse() {
-  return new NextResponse(
-    "Temporary webhook processing failure",
-    {
-      status:
-        503,
-
-      headers: {
-        "Content-Type":
-          "text/plain",
-      },
-    }
-  );
-}
-
-/* =========================================================
-   RESTORE PREVIOUS SMS CONVERSATION
-
-   Used only when an explicit service switch deactivated the
-   current lead but could not activate the requested target.
-   ========================================================= */
-
-async function restorePreviousSmsConversation({
-  leadId,
-  businessId,
-  phone,
-  fenceToken,
-}: {
-  leadId: any;
-  businessId: any;
-  phone: string;
-  fenceToken: number;
-}) {
-  try {
-    const restored =
-      await findOneAndUpdateLeadWithSmsFence({
-        filter: {
-          _id:
-            leadId,
-
-          businessId,
-
-          phone,
-
-          status: {
-            $in:
-              ACTIVE_LEAD_STATUSES,
-          },
-        },
-
-        fenceToken,
-
-        set: {
-          smsConversationActive:
-            true,
-        },
-      });
-
-    if (!restored) {
-      console.warn(
-        "Previous SMS conversation was not restored because a newer fence exists.",
-        {
-          leadId:
-            leadId.toString(),
-
-          phone,
-
-          fenceToken,
-        }
-      );
-    }
-  } catch (error) {
-    console.error(
-      "Failed to restore previous SMS conversation:",
-      {
-        leadId:
-          leadId.toString(),
-
-        phone,
-
-        error,
-      }
-    );
-  }
-}
-
-/* =========================================================
-   ATOMIC SMS CONVERSATION ACTIVATION
-
-   MongoDB's unique partial index guarantees that only one
-   lead for the same business + phone can have:
-
-   smsConversationActive = true
-
-   If another webhook wins the race, MongoDB throws 11000.
-   We catch that and load the winning conversation instead.
-   ========================================================= */
-
-async function activateSmsConversation({
-  targetLeadId,
-  businessId,
-  phone,
-  fenceToken,
-}: {
-  targetLeadId: any;
-  businessId: any;
-  phone: string;
-  fenceToken: number;
-}) {
-  try {
-    const activatedLead =
-      await findOneAndUpdateLeadWithSmsFence({
-        filter: {
-          _id:
-            targetLeadId,
-
-          businessId,
-
-          phone,
-
-          status: {
-            $in:
-              ACTIVE_LEAD_STATUSES,
-          },
-        },
-
-        fenceToken,
-
-        set: {
-          smsConversationActive:
-            true,
-        },
-      });
-
-    if (activatedLead) {
-      return {
-        lead:
-          activatedLead,
-
-        requestedLeadActivated:
-          true,
-      };
-    }
-  } catch (error) {
-    if (
-      !isMongoDuplicateKeyError(
-        error
-      )
-    ) {
-      throw error;
-    }
-
-    console.log(
-      "Active SMS conversation duplicate-key race detected:",
-      {
-        targetLeadId:
-          targetLeadId.toString(),
-
-        phone,
-      }
-    );
-  }
-
-  /*
-   * Either:
-   *
-   * 1. another worker activated a lead first, or
-   * 2. the requested lead changed state before activation.
-   *
-   * Load the current database winner.
-   */
-
-  const activeLead =
-    await Lead.findOne({
-      businessId,
-
-      phone,
-
-      smsConversationActive:
-        true,
-    }).sort({
-      updatedAt:
-        -1,
-    });
-
-  if (!activeLead) {
-    return null;
-  }
-
-  return {
-    lead:
-      activeLead,
-
-    requestedLeadActivated:
-      activeLead._id.toString() ===
-      targetLeadId.toString(),
-  };
-}
-
-/* =========================================================
-   MONGODB DUPLICATE KEY CHECK
-   ========================================================= */
-
-function isMongoDuplicateKeyError(
-  error: unknown
-): error is {
-  code: number;
-} {
-  return (
-    typeof error ===
-    "object" &&
-    error !==
-    null &&
-    "code" in
-    error &&
-    (error as {
-      code?: number;
-    }).code ===
-    11000
-  );
-}
-
-/* =========================================================
-   SERVICE MATCHING
-   ========================================================= */
-
-function findLeadByService(
-  leads: any[],
-  message: string
-) {
-  const normalizedMessage =
-    normalizeText(message);
-
-  if (!normalizedMessage) {
-    return null;
-  }
-
-  const matches =
-    leads.filter((lead) => {
-      if (!lead.service) {
-        return false;
-      }
-
-      const normalizedService =
-        normalizeText(
-          lead.service
-        );
-
-      if (!normalizedService) {
-        return false;
-      }
-
-      if (
-        normalizedMessage ===
-        normalizedService
-      ) {
-        return true;
-      }
-
-      if (
-        normalizedMessage.includes(
-          normalizedService
-        )
-      ) {
-        return true;
-      }
-
-      const serviceWords =
-        normalizedService
-          .split(" ")
-          .filter(
-            (word) =>
-              word.length >=
-              2
-          );
-
-      if (
-        serviceWords.length ===
-        0
-      ) {
-        return false;
-      }
-
-      return serviceWords.every(
-        (word) =>
-          normalizedMessage.includes(
-            word
-          )
-      );
-    });
-
-  if (
-    matches.length !==
-    1
-  ) {
-    return null;
-  }
-
-  return matches[0];
-}
-
-/* =========================================================
-   TEXT NORMALIZATION
-   ========================================================= */
-
-function normalizeText(
-  value: string
-) {
-  return value
-    .toLowerCase()
-    .replace(
-      /[^a-z0-9\s]/g,
-      " "
-    )
-    .replace(
-      /\s+/g,
-      " "
-    )
-    .trim();
-}
-
-/* =========================================================
-   TWIML RESPONSE
-   ========================================================= */
-
-function twimlResponse() {
-  return new NextResponse(
-    `<?xml version="1.0" encoding="UTF-8"?>
-<Response></Response>`,
-    {
-      status:
-        200,
-
-      headers: {
-        "Content-Type":
-          "text/xml",
-      },
-    }
-  );
-}
-
-/* =========================================================
-   FORBIDDEN RESPONSE
-   ========================================================= */
-
-function forbiddenResponse() {
-  return new NextResponse(
-    "Forbidden",
-    {
-      status:
-        403,
-
-      headers: {
-        "Content-Type":
-          "text/plain",
-      },
-    }
-  );
-}
-
-/* =========================================================
-   SEND FRESH SMS APPOINTMENT OPTIONS
-   ========================================================= */
-
-async function sendFreshSmsAppointmentOptions({
-  lead,
-  business,
-  timeline,
-  normalizedPhone,
-  ownerToken,
-  fenceToken,
-  reason,
-}: {
-  lead: any;
-  business: any;
-  timeline: Timeline;
-  normalizedPhone: string;
-  ownerToken: string;
-  fenceToken: number;
-  reason: string;
-}) {
-  const availableSlots =
-    await getSmsAvailableSlots({
-      business,
-      timeline,
-    });
-
-  const firstThreeSlots =
-    availableSlots.slice(
-      0,
-      3
-    );
-
-  let reply =
-    reason;
-
-  if (
-    firstThreeSlots.length >
-    0
-  ) {
-    const slotLines =
-      firstThreeSlots
-        .map(
-          (
-            slot,
-            index
-          ) =>
-            `${index + 1}. ${slot.label}`
-        )
-        .join("\n");
-
-    const optionNumbers =
-      firstThreeSlots
-        .map(
-          (
-            _,
-            index
-          ) =>
-            index + 1
-        )
-        .join(", ");
-
-    reply =
-      `${reason}\n\n${slotLines}\n\nReply with ${optionNumbers}.`;
-  } else {
-    reply =
-      `${reason}\n\nI couldn't find another available appointment time for this timeframe. Please reply with another day or timeframe.`;
-  }
-
-  /* =======================================================
-     STORE NEW EXACT OPTIONS
-     ======================================================= */
-
-  lead.smsBookingOptions = {
-    offeredAt:
-      new Date(),
-
-    slots:
-      firstThreeSlots.map(
-        (slot) => ({
-          label:
-            slot.label,
-
-          scheduledFor:
-            new Date(
-              slot.scheduledFor
-            ),
-        })
-      ),
-  };
-
-  /* =======================================================
-     RESCHEDULE FOLLOW-UP
-     ======================================================= */
-
-  if (
-    canFollowUp(
-      lead.status,
-      lead.phone
-    )
-  ) {
-    lead.followUp =
-      lead.followUp ?? {};
-
-    const followUpCount =
-      lead.followUp.count ??
-      0;
-
-    lead.followUp.enabled =
-      true;
-
-    lead.followUp.nextFollowUpAt =
-      getNextFollowUpAt(
-        followUpCount
-      );
-  } else {
-    lead.followUp =
-      lead.followUp ?? {};
-
-    lead.followUp.enabled =
-      false;
-
-    lead.followUp.nextFollowUpAt =
-      null;
-  }
-
-  const fencedLead =
-    await updateLeadWithSmsFence({
-      leadId:
-        lead._id,
-
-      businessId:
-        business._id,
-
-      phone:
-        normalizedPhone,
-
-      fenceToken,
-
-      set: {
-        smsBookingOptions:
-          lead.smsBookingOptions,
-
-        "followUp.enabled":
-          lead.followUp
-            ?.enabled ??
-          false,
-
-        "followUp.count":
-          lead.followUp
-            ?.count ??
-          0,
-
-        "followUp.nextFollowUpAt":
-          lead.followUp
-            ?.nextFollowUpAt ??
-          null,
-
-        "followUp.lastFollowUpAt":
-          lead.followUp
-            ?.lastFollowUpAt ??
-          null,
-      },
-    });
-
-  if (!fencedLead) {
-    throw new Error(
-      "Stale SMS worker rejected while refreshing appointment options."
-    );
-  }
-
-  lead =
-    fencedLead;
-
-  /* =======================================================
-     SAVE AI MESSAGE
-     ======================================================= */
-
-  const aiMessage =
-    await Message.create({
-      leadId:
-        lead._id,
-
-      sender:
-        "ai",
-
-      content:
-        reply,
-    });
-
-  /* =======================================================
-     VERIFY OWNERSHIP BEFORE OUTBOUND SMS
-     ======================================================= */
-
-  await assertSmsConversationOwnership({
-    businessId:
-      business._id,
-
-    phone:
-      normalizedPhone,
-
-    ownerToken,
-
-    fenceToken,
-  });
-
-  /* =======================================================
-     SEND SMS
-     ======================================================= */
-
-  try {
-    await sendSmsReply({
-      to:
-        normalizedPhone,
-
-      body:
-        reply,
-    });
-  } catch (smsError) {
-    console.error(
-      "Fresh SMS appointment options delivery failed:",
-      smsError
-    );
-  }
-
-  console.log(
-    "Fresh SMS appointment options sent:",
-    {
-      leadId:
-        lead._id.toString(),
-
-      slots:
-        firstThreeSlots.map(
-          (
-            slot,
-            index
-          ) => ({
-            option:
-              index + 1,
-
-            label:
-              slot.label,
-
-            scheduledFor:
-              slot.scheduledFor,
-          })
-        ),
-
-      followUpEnabled:
-        lead.followUp
-          ?.enabled,
-
-      followUpCount:
-        lead.followUp
-          ?.count,
-
-      nextFollowUpAt:
-        lead.followUp
-          ?.nextFollowUpAt,
-
-      messageId:
-        aiMessage._id.toString(),
-    }
-  );
-}
-
-/* =========================================================
-   SMS AVAILABILITY
-   ========================================================= */
-
-async function getSmsAvailableSlots({
-  business,
-  timeline,
-}: {
-  business: any;
-  timeline: Timeline;
-}): Promise<GeneratedSlot[]> {
-  const timezone =
-    business.timezone ??
-    "America/Chicago";
-
-  const availability =
-    business.availability;
-
-  if (
-    !availability ||
-    !availability.days
-      ?.length
-  ) {
-    return [];
-  }
-
-  const dates =
-    getDatesForTimeline(
-      timeline,
-      timezone
-    );
-
-  const now =
-    new Date();
-
-  const slots: GeneratedSlot[] =
-    [];
-
-  for (
-    const localDate of dates
-  ) {
-    const dayName =
-      getDayName(
-        localDate
-      );
-
-    const dayAvailability =
-      availability.days.find(
-        (
-          item: AvailabilityDay
-        ) =>
-          item.day ===
-          dayName
-      );
-
-    if (!dayAvailability) {
-      continue;
-    }
-
-    const generatedSlots =
-      generateSlotsForDate(
-        localDate,
-        dayAvailability,
-        availability
-          .slotDurationMinutes ??
-        60,
-        availability
-          .bufferMinutes ??
-        0,
-        timezone,
-        now
-      );
-
-    slots.push(
-      ...generatedSlots
-    );
-  }
-
-  if (
-    slots.length ===
-    0
-  ) {
-    return [];
-  }
-
-  const scheduledAppointments =
-    await Appointment.find({
-      businessId:
-        business._id,
-
-      status: {
-        $in: [
-          "scheduled",
-          "confirmed",
-        ],
-      },
-
-      scheduledFor: {
-        $in:
-          slots.map(
-            (slot) =>
-              new Date(
-                slot.scheduledFor
-              )
-          ),
-      },
-    })
-      .select(
-        "scheduledFor"
-      )
-      .lean();
-
-  const bookedTimes =
-    new Set(
-      scheduledAppointments.map(
-        (appointment) =>
-          new Date(
-            appointment.scheduledFor
-          ).getTime()
-      )
-    );
-
-  return slots.filter(
-    (slot) =>
-      !bookedTimes.has(
-        new Date(
-          slot.scheduledFor
-        ).getTime()
-      )
-  );
-}
-
-async function assertSmsConversationOwnership({
-  businessId,
-  phone,
-  ownerToken,
-  fenceToken,
-}: {
-  businessId: any;
-  phone: string;
-  ownerToken: string;
-  fenceToken: number;
-}) {
-  const ownsLock =
-    await checkSmsConversationLock({
-      businessId,
-      phone,
-      ownerToken,
-      fenceToken,
-    });
-
-  if (!ownsLock) {
-    throw new Error(
-      "SMS conversation lock ownership was lost before side effect."
-    );
-  }
-}
-
-
-function findConfiguredService(
-  services: string[],
-  message: string
-): string | null {
-  const normalizedMessage =
-    normalizeText(message);
-
-  if (!normalizedMessage) {
-    return null;
-  }
-
-  const matches =
-    services.filter((service) => {
-      const normalizedService =
-        normalizeText(service);
-
-      if (!normalizedService) {
-        return false;
-      }
-
-      if (
-        normalizedMessage ===
-        normalizedService
-      ) {
-        return true;
-      }
-
-      if (
-        normalizedMessage.includes(
-          normalizedService
-        )
-      ) {
-        return true;
-      }
-
-      const serviceWords =
-        normalizedService
-          .split(" ")
-          .filter(
-            (word) =>
-              word.length >= 2
-          );
-
-      if (
-        serviceWords.length ===
-        0
-      ) {
-        return false;
-      }
-
-      return serviceWords.every(
-        (word) =>
-          normalizedMessage.includes(
-            word
-          )
-      );
-    });
-
-  /*
-   * Do not guess when multiple configured
-   * services match the same message.
-   */
-  if (matches.length !== 1) {
-    return null;
-  }
-
-  return matches[0];
 }
