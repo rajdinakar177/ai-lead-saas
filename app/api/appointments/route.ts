@@ -1,20 +1,15 @@
 import { NextResponse } from "next/server";
 
-import {
-  generateSlotsForDate,
-  getDatesForTimeline,
-  getDayName,
-  type AvailabilityDay,
-  type GeneratedSlot,
-  type Timeline,
-} from "@/lib/availability";
+import type { Timeline } from "@/lib/availability";
 
 import { connectDB } from "@/lib/mongodb";
+import { getAvailableAppointmentSlots } from "@/lib/appointments/availability";
+import { bookAppointmentAtomically } from "@/lib/appointments/book-appointment";
+import { sendAppointmentBookedEmail } from "@/lib/email/send-appointment-booked-email";
+
 import { Lead } from "@/models/Lead";
 import { Business } from "@/models/Business";
-import { Appointment } from "@/models/Appointment";
-import { Message } from "@/models/Message";
-import { sendAppointmentBookedEmail } from "@/lib/email/send-appointment-booked-email";
+
 type AppointmentRequest = {
   leadId: string;
   appointment: string;
@@ -32,6 +27,10 @@ export async function POST(
   request: Request
 ) {
   try {
+    /* =========================================
+       READ REQUEST
+       ========================================= */
+
     const body: AppointmentRequest =
       await request.json();
 
@@ -51,8 +50,14 @@ export async function POST(
       );
     }
 
+    /* =========================================
+       VALIDATE DATE
+       ========================================= */
+
     const scheduledFor =
-      new Date(body.scheduledFor);
+      new Date(
+        body.scheduledFor
+      );
 
     if (
       Number.isNaN(
@@ -85,11 +90,15 @@ export async function POST(
       );
     }
 
+    /* =========================================
+       CONNECT DATABASE
+       ========================================= */
+
     await connectDB();
 
-    // ----------------------------
-    // Find lead
-    // ----------------------------
+    /* =========================================
+       FIND LEAD
+       ========================================= */
 
     const lead =
       await Lead.findById(
@@ -108,9 +117,9 @@ export async function POST(
       );
     }
 
-    // ----------------------------
-    // Find business
-    // ----------------------------
+    /* =========================================
+       FIND BUSINESS
+       ========================================= */
 
     const business =
       await Business.findById(
@@ -129,14 +138,14 @@ export async function POST(
       );
     }
 
-    // ----------------------------
-    // Validate lead timeline
-    // ----------------------------
+    /* =========================================
+       VALIDATE LEAD TIMELINE
+       ========================================= */
 
     const timeline =
       lead.timeline as
-      | Timeline
-      | undefined;
+        | Timeline
+        | undefined;
 
     if (
       !timeline ||
@@ -155,9 +164,9 @@ export async function POST(
       );
     }
 
-    // ----------------------------
-    // Validate business availability
-    // ----------------------------
+    /* =========================================
+       VALIDATE BUSINESS AVAILABILITY
+       ========================================= */
 
     const availability =
       business.availability;
@@ -177,73 +186,33 @@ export async function POST(
       );
     }
 
-    const timezone =
-      business.timezone ??
-      "America/Chicago";
+    /* =========================================
+       GET CURRENTLY AVAILABLE SLOTS
 
-    // ----------------------------
-    // Generate real valid slots
-    // ----------------------------
+       Shared helper handles:
+       - business working hours
+       - timezone
+       - slot duration
+       - buffer
+       - scheduled appointments
+       - confirmed appointments
+       ========================================= */
 
-    const dates =
-      getDatesForTimeline(
+    const availableSlots =
+      await getAvailableAppointmentSlots({
+        business,
         timeline,
-        timezone
-      );
+      });
 
-    const now =
-      new Date();
-
-    const validSlots: GeneratedSlot[] =
-      [];
-
-    for (
-      const localDate of dates
-    ) {
-      const dayName =
-        getDayName(
-          localDate
-        );
-
-      const dayAvailability =
-        availability.days.find(
-          (
-            item: AvailabilityDay
-          ) =>
-            item.day ===
-            dayName
-        );
-
-      if (!dayAvailability) {
-        continue;
-      }
-
-      const generatedSlots =
-        generateSlotsForDate(
-          localDate,
-          dayAvailability,
-          availability.slotDurationMinutes ??
-          60,
-          availability.bufferMinutes ??
-          0,
-          timezone,
-          now
-        );
-
-      validSlots.push(
-        ...generatedSlots
-      );
-    }
-
-    // ----------------------------
-    // Verify requested slot exists
-    // ----------------------------
+    /* =========================================
+       VERIFY REQUESTED SLOT
+       ========================================= */
 
     const requestedTime =
       scheduledFor.getTime();
 
     const matchedSlot =
-      validSlots.find(
+      availableSlots.find(
         (slot) =>
           new Date(
             slot.scheduledFor
@@ -255,37 +224,6 @@ export async function POST(
       return NextResponse.json(
         {
           error:
-            "That appointment time is not a valid available slot.",
-        },
-        {
-          status: 400,
-        }
-      );
-    }
-
-    // ----------------------------
-    // Prevent double booking
-    // ----------------------------
-
-    const existingAppointment =
-      await Appointment.findOne({
-        businessId:
-          lead.businessId,
-
-        scheduledFor,
-
-        status: {
-          $in: [
-            "scheduled",
-            "confirmed",
-          ],
-        },
-      }).lean();
-
-    if (existingAppointment) {
-      return NextResponse.json(
-        {
-          error:
             "That appointment time is no longer available. Please choose another time.",
         },
         {
@@ -294,88 +232,47 @@ export async function POST(
       );
     }
 
+    /* =========================================
+       ATOMIC DATABASE BOOKING
 
+       These operations now happen inside
+       one MongoDB transaction:
 
-    // ----------------------------
-    // Create appointment
-    // ----------------------------
+       1. Create appointment
+       2. Update lead → booked
+       3. Save lead booking message
+       4. Save AI confirmation message
+       ========================================= */
 
-    const appointment =
-      await Appointment.create({
-        leadId:
-          lead._id,
+    const booking =
+      await bookAppointmentAtomically({
+        lead,
 
-        businessId:
-          lead.businessId,
-
-        // Use server-generated label.
-        // Do not trust browser label.
         label:
           matchedSlot.label,
 
         scheduledFor,
-
-        status:
-          "scheduled",
       });
 
-    // ----------------------------
-    // Update lead
-    // ----------------------------
-
-   await Lead.findByIdAndUpdate(
-  lead._id,
-  {
-    status:
-      "booked",
-
-    smsConversationActive:
-      false,
-
-    "followUp.enabled":
-      false,
-
-    "followUp.nextFollowUpAt":
-      null,
-  }
-);
-
-    // ----------------------------
-    // Save booking message
-    // ----------------------------
-
-    await Message.create({
-      leadId:
-        lead._id,
-
-      sender:
-        "lead",
-
-      content:
-        matchedSlot.label,
-    });
-
-    // ----------------------------
-    // AI confirmation
-    // ----------------------------
-
-    const confirmation =
-      `Perfect! We've reserved ${matchedSlot.label}.`;
+    const appointment =
+      booking.appointment;
 
     const aiMessage =
-      await Message.create({
-        leadId:
-          lead._id,
+      booking.aiMessage;
 
-        sender:
-          "ai",
+    const confirmation =
+      booking.confirmation;
 
-        content:
-          confirmation,
-      });
-    // ----------------------------
-    // Send appointment notification
-    // ----------------------------
+    /* =========================================
+       SEND EMAIL AFTER TRANSACTION
+
+       Email is intentionally outside the
+       transaction because it is an external
+       side effect.
+
+       A failed email must NOT roll back a
+       successfully booked appointment.
+       ========================================= */
 
     try {
       await sendAppointmentBookedEmail({
@@ -409,6 +306,11 @@ export async function POST(
         emailError
       );
     }
+
+    /* =========================================
+       SUCCESS RESPONSE
+       ========================================= */
+
     return NextResponse.json({
       success:
         true,
@@ -435,10 +337,18 @@ export async function POST(
       error
     );
 
-    // MongoDB unique index protection
+    /* =========================================
+       UNIQUE SLOT CONFLICT
+
+       MongoDB unique index is the final
+       protection against two requests
+       attempting to book the same slot
+       concurrently.
+       ========================================= */
+
     if (
       typeof error ===
-      "object" &&
+        "object" &&
       error !== null &&
       "code" in error &&
       error.code === 11000

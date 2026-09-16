@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
 
-import {
-  generateSlotsForDate,
-  getDatesForTimeline,
-  getDayName,
-  type AvailabilityDay,
-  type GeneratedSlot,
-  type Timeline,
-} from "@/lib/availability";
+import type { Timeline } from "@/lib/availability";
+
+import { getAvailableAppointmentSlots } from "@/lib/appointments/availability";
 
 import { connectDB } from "@/lib/mongodb";
 import { requireBusiness } from "@/lib/auth";
 
 import { Appointment } from "@/models/Appointment";
 import { Business } from "@/models/Business";
+import { Lead } from "@/models/Lead";
 
+import { sendAppointmentRescheduledEmail } from "@/lib/email/send-appointment-rescheduled-email";
+import { sendAppointmentCancelledEmail } from "@/lib/email/send-appointment-cancelled-email";
 type AppointmentStatus =
   | "scheduled"
   | "confirmed"
@@ -31,9 +29,14 @@ type RescheduleRequest = {
   timeline: Timeline;
 };
 
+type NotesUpdateRequest = {
+  notes: string;
+};
+
 type UpdateAppointmentRequest =
   | StatusUpdateRequest
-  | RescheduleRequest;
+  | RescheduleRequest
+  | NotesUpdateRequest;
 
 const allowedStatuses: AppointmentStatus[] = [
   "confirmed",
@@ -70,6 +73,12 @@ export async function PATCH(
 
     await connectDB();
 
+    /*
+     * Business isolation:
+     * only appointments belonging
+     * to the authenticated business
+     * can be updated.
+     */
     const appointment =
       await Appointment.findOne({
         _id: id,
@@ -89,6 +98,65 @@ export async function PATCH(
       );
     }
 
+    // ---------------------------------
+    // NOTES UPDATE
+    // ---------------------------------
+    //
+    // Keep this BEFORE the cancelled /
+    // completed checks so businesses
+    // can still add internal notes to
+    // historical appointments.
+    // ---------------------------------
+
+    if ("notes" in body) {
+      if (
+        typeof body.notes !==
+        "string"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Notes must be a string.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      const notes =
+        body.notes.trim();
+
+      if (
+        notes.length > 2000
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Notes cannot exceed 2000 characters.",
+          },
+          {
+            status: 400,
+          }
+        );
+      }
+
+      appointment.notes =
+        notes || undefined;
+
+      await appointment.save();
+
+      return NextResponse.json({
+        success: true,
+        notes:
+          appointment.notes ?? "",
+      });
+    }
+
+    // ---------------------------------
+    // BLOCK ACTIONS ON CANCELLED
+    // ---------------------------------
+
     if (
       appointment.status ===
       "cancelled"
@@ -103,6 +171,10 @@ export async function PATCH(
         }
       );
     }
+
+    // ---------------------------------
+    // BLOCK ACTIONS ON COMPLETED
+    // ---------------------------------
 
     if (
       appointment.status ===
@@ -229,59 +301,17 @@ export async function PATCH(
         );
       }
 
-      const timezone =
-        businessData.timezone ??
-        "America/Chicago";
+      const validSlots =
+        await getAvailableAppointmentSlots({
+          business:
+            businessData,
 
-      const dates =
-        getDatesForTimeline(
-          body.timeline,
-          timezone
-        );
+          timeline:
+            body.timeline,
 
-      const now =
-        new Date();
-
-      const validSlots: GeneratedSlot[] =
-        [];
-
-      for (
-        const localDate of dates
-      ) {
-        const dayName =
-          getDayName(
-            localDate
-          );
-
-        const dayAvailability =
-          availability.days.find(
-            (
-              item: AvailabilityDay
-            ) =>
-              item.day ===
-              dayName
-          );
-
-        if (!dayAvailability) {
-          continue;
-        }
-
-        const generatedSlots =
-          generateSlotsForDate(
-            localDate,
-            dayAvailability,
-            availability.slotDurationMinutes ??
-              60,
-            availability.bufferMinutes ??
-              0,
-            timezone,
-            now
-          );
-
-        validSlots.push(
-          ...generatedSlots
-        );
-      }
+          excludeAppointmentId:
+            appointment._id.toString(),
+        });
 
       const requestedTime =
         newScheduledFor.getTime();
@@ -306,39 +336,8 @@ export async function PATCH(
           }
         );
       }
-
-      const existingAppointment =
-        await Appointment.findOne({
-          _id: {
-            $ne:
-              appointment._id,
-          },
-
-          businessId:
-            business._id,
-
-          scheduledFor:
-            newScheduledFor,
-
-          status: {
-            $in: [
-              "scheduled",
-              "confirmed",
-            ],
-          },
-        }).lean();
-
-      if (existingAppointment) {
-        return NextResponse.json(
-          {
-            error:
-              "That appointment time is no longer available. Please choose another time.",
-          },
-          {
-            status: 409,
-          }
-        );
-      }
+      const previousAppointmentLabel =
+        appointment.label;
 
       appointment.scheduledFor =
         newScheduledFor;
@@ -347,7 +346,60 @@ export async function PATCH(
         matchedSlot.label;
 
       await appointment.save();
+      /*
+       * Notification happens AFTER the
+       * appointment has been successfully
+       * rescheduled.
+       *
+       * Email failure must never roll back
+       * or fail the appointment update.
+       */
+      try {
+        const lead =
+          await Lead.findOne({
+            _id: appointment.leadId,
+            businessId:
+              business._id,
+          }).lean();
 
+        if (
+          lead &&
+          businessData.email
+        ) {
+          await sendAppointmentRescheduledEmail({
+            businessEmail:
+              businessData.email,
+
+            businessName:
+              businessData.name,
+
+            appointmentId:
+              appointment._id.toString(),
+
+            name:
+              lead.name,
+
+            phone:
+              lead.phone,
+
+            service:
+              lead.service,
+
+            location:
+              lead.location,
+
+            previousAppointmentLabel,
+
+            newAppointmentLabel:
+              matchedSlot.label,
+          });
+        }
+      } catch (emailError) {
+        console.error(
+          "Appointment reschedule email failed:",
+          emailError
+        );
+      }
       return NextResponse.json({
         success: true,
 
@@ -394,6 +446,74 @@ export async function PATCH(
 
     await appointment.save();
 
+    /*
+     * Send cancellation notification
+     * only when the appointment was
+     * changed to cancelled.
+     *
+     * Notification happens AFTER save,
+     * so an email failure cannot undo
+     * the cancellation.
+     */
+    if (
+      body.status === "cancelled"
+    ) {
+      try {
+        const [
+          lead,
+          businessData,
+        ] = await Promise.all([
+          Lead.findOne({
+            _id:
+              appointment.leadId,
+
+            businessId:
+              business._id,
+          }).lean(),
+
+          Business.findById(
+            business._id
+          ).lean(),
+        ]);
+
+        if (
+          lead &&
+          businessData?.email
+        ) {
+          await sendAppointmentCancelledEmail({
+            businessEmail:
+              businessData.email,
+
+            businessName:
+              businessData.name,
+
+            appointmentId:
+              appointment._id.toString(),
+
+            name:
+              lead.name,
+
+            phone:
+              lead.phone,
+
+            service:
+              lead.service,
+
+            location:
+              lead.location,
+
+            appointmentLabel:
+              appointment.label,
+          });
+        }
+      } catch (emailError) {
+        console.error(
+          "Appointment cancellation email failed:",
+          emailError
+        );
+      }
+    }
+
     return NextResponse.json({
       success: true,
 
@@ -411,6 +531,7 @@ export async function PATCH(
           appointment.scheduledFor,
       },
     });
+    
   } catch (error) {
     console.error(
       "Appointment update error:",
@@ -419,7 +540,7 @@ export async function PATCH(
 
     if (
       typeof error ===
-        "object" &&
+      "object" &&
       error !== null &&
       "code" in error &&
       error.code === 11000

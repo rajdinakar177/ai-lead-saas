@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
 
-import {
-  generateSlotsForDate,
-  getDatesForTimeline,
-  getDayName,
-  type AvailabilityDay,
-  type GeneratedSlot,
-  type Timeline,
-} from "@/lib/availability";
-
+import type { Timeline } from "@/lib/availability";
+import { getAvailableAppointmentSlots } from "@/lib/appointments/availability";
 import { connectDB } from "@/lib/mongodb";
+
 import { Business } from "@/models/Business";
 import { Lead } from "@/models/Lead";
 import { Appointment } from "@/models/Appointment";
+
+const VALID_TIMELINES: Timeline[] = [
+  "Today",
+  "Tomorrow",
+  "This week",
+  "Next week",
+];
 
 export async function GET(
   request: Request
@@ -29,7 +30,18 @@ export async function GET(
         "timeline"
       ) as Timeline | null;
 
-
+    /*
+     * Optional.
+     *
+     * Public/web booking does not send this.
+     * Dashboard rescheduling sends the
+     * current appointment ID so that
+     * appointment does not block itself.
+     */
+    const appointmentId =
+      searchParams.get(
+        "appointmentId"
+      );
 
     if (!leadId || !timeline) {
       return NextResponse.json(
@@ -43,16 +55,8 @@ export async function GET(
       );
     }
 
-    const validTimelines: Timeline[] =
-      [
-        "Today",
-        "Tomorrow",
-        "This week",
-        "Next week",
-      ];
-
     if (
-      !validTimelines.includes(
+      !VALID_TIMELINES.includes(
         timeline
       )
     ) {
@@ -68,6 +72,12 @@ export async function GET(
     }
 
     await connectDB();
+
+    /*
+     * ---------------------------------
+     * FIND LEAD
+     * ---------------------------------
+     */
 
     const lead =
       await Lead.findById(
@@ -86,6 +96,12 @@ export async function GET(
       );
     }
 
+    /*
+     * ---------------------------------
+     * FIND BUSINESS
+     * ---------------------------------
+     */
+
     const business =
       await Business.findById(
         lead.businessId
@@ -103,9 +119,56 @@ export async function GET(
       );
     }
 
-    const timezone =
-      business.timezone ??
-      "America/Chicago";
+    /*
+     * ---------------------------------
+     * VALIDATE APPOINTMENT
+     *
+     * Only required during rescheduling.
+     * This also prevents someone from
+     * excluding another business's
+     * appointment.
+     * ---------------------------------
+     */
+
+    let excludeAppointmentId:
+      string | null = null;
+
+    if (appointmentId) {
+      const appointment =
+        await Appointment.findOne({
+          _id:
+            appointmentId,
+
+          leadId:
+            lead._id,
+
+          businessId:
+            business._id,
+        })
+          .select("_id")
+          .lean();
+
+      if (!appointment) {
+        return NextResponse.json(
+          {
+            error:
+              "Appointment not found.",
+          },
+          {
+            status: 404,
+          }
+        );
+      }
+
+      excludeAppointmentId =
+        appointment._id.toString();
+    }
+
+    /*
+     * ---------------------------------
+     * VALIDATE AVAILABILITY
+     * ---------------------------------
+     */
 
     const availability =
       business.availability;
@@ -116,137 +179,37 @@ export async function GET(
     ) {
       return NextResponse.json(
         {
-          timeline,
-          timezone,
-          slots: [],
+          error:
+            "Business availability is not configured.",
         },
         {
-          headers: {
-            "Cache-Control":
-              "no-store, no-cache, must-revalidate",
-          },
+          status: 400,
         }
       );
     }
 
-    const dates =
-      getDatesForTimeline(
+    const timezone =
+      business.timezone ??
+      "America/Chicago";
+
+    /*
+     * ---------------------------------
+     * GET AVAILABLE SLOTS
+     * ---------------------------------
+     */
+
+    const slots =
+      await getAvailableAppointmentSlots({
+        business,
         timeline,
-        timezone
-      );
-
-    const now =
-      new Date();
-
-    const slots: GeneratedSlot[] =
-      [];
-
-    for (
-      const localDate of dates
-    ) {
-      const dayName =
-        getDayName(
-          localDate
-        );
-
-      const dayAvailability =
-        availability.days.find(
-          (
-            item: AvailabilityDay
-          ) =>
-            item.day ===
-            dayName
-        );
-
-      if (!dayAvailability) {
-        continue;
-      }
-
-      const generatedSlots =
-        generateSlotsForDate(
-          localDate,
-          dayAvailability,
-          availability.slotDurationMinutes ??
-          60,
-          availability.bufferMinutes ??
-          0,
-          timezone,
-          now
-        );
-
-      slots.push(
-        ...generatedSlots
-      );
-    }
-
-    if (slots.length === 0) {
-      return NextResponse.json(
-        {
-          timeline,
-          timezone,
-          slots: [],
-        },
-        {
-          headers: {
-            "Cache-Control":
-              "no-store, no-cache, must-revalidate",
-          },
-        }
-      );
-    }
-
-    const scheduledAppointments =
-      await Appointment.find({
-        businessId:
-          business._id,
-
-        status: {
-          $in: [
-            "scheduled",
-            "confirmed",
-          ],
-        },
-
-        scheduledFor: {
-          $in: slots.map(
-            (slot) =>
-              new Date(
-                slot.scheduledFor
-              )
-          ),
-        },
-      })
-        .select(
-          "scheduledFor"
-        )
-        .lean();
-
-    const bookedTimes =
-      new Set(
-        scheduledAppointments.map(
-          (appointment) =>
-            new Date(
-              appointment.scheduledFor
-            ).getTime()
-        )
-      );
-
-    const availableSlots =
-      slots.filter(
-        (slot) =>
-          !bookedTimes.has(
-            new Date(
-              slot.scheduledFor
-            ).getTime()
-          )
-      );
+        excludeAppointmentId,
+      });
 
     return NextResponse.json(
       {
         timeline,
         timezone,
-        slots:
-          availableSlots,
+        slots,
       },
       {
         headers: {

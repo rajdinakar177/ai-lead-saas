@@ -160,13 +160,16 @@ export function AppointmentActions({
 
       setSlots([]);
 
+      const params =
+        new URLSearchParams({
+          leadId,
+          timeline,
+          appointmentId,
+        });
+
       const response =
         await fetch(
-          `/api/availability?leadId=${encodeURIComponent(
-            leadId
-          )}&timeline=${encodeURIComponent(
-            timeline
-          )}`,
+          `/api/availability?${params.toString()}`,
           {
             cache: "no-store",
           }
