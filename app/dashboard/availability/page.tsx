@@ -3,7 +3,12 @@ import { AvailabilitySettingsForm } from "@/components/dashboard/settings/availa
 import { requireBusiness } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
-
+type AvailabilityDay = {
+  day: string;
+  enabled: boolean;
+  startTime: string;
+  endTime: string;
+};
 export default async function AvailabilityPage() {
   const business = await requireBusiness();
 
@@ -39,7 +44,7 @@ export default async function AvailabilityPage() {
               business.availability?.bufferMinutes ?? 0,
 
             days:
-              business.availability?.days?.map((item) => ({
+              business.availability?.days?.map((item: AvailabilityDay) => ({
                 day: item.day,
                 enabled: item.enabled,
                 startTime: item.startTime,
