@@ -6,9 +6,12 @@ import { connectDB } from "@/lib/mongodb";
 import { getAvailableAppointmentSlots } from "@/lib/appointments/availability";
 import { bookAppointmentAtomically } from "@/lib/appointments/book-appointment";
 import { sendAppointmentBookedEmail } from "@/lib/email/send-appointment-booked-email";
+import { createAppointmentGoogleEvent } from "@/lib/google-calendar/create-appointment-event";
 
 import { Lead } from "@/models/Lead";
 import { Business } from "@/models/Business";
+import { Appointment } from "@/models/Appointment";
+import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
 
 type AppointmentRequest = {
   leadId: string;
@@ -188,14 +191,6 @@ export async function POST(
 
     /* =========================================
        GET CURRENTLY AVAILABLE SLOTS
-
-       Shared helper handles:
-       - business working hours
-       - timezone
-       - slot duration
-       - buffer
-       - scheduled appointments
-       - confirmed appointments
        ========================================= */
 
     const availableSlots =
@@ -235,8 +230,7 @@ export async function POST(
     /* =========================================
        ATOMIC DATABASE BOOKING
 
-       These operations now happen inside
-       one MongoDB transaction:
+       Inside one MongoDB transaction:
 
        1. Create appointment
        2. Update lead → booked
@@ -263,15 +257,14 @@ export async function POST(
     const confirmation =
       booking.confirmation;
 
+    const appointmentId =
+      appointment._id.toString();
+
     /* =========================================
        SEND EMAIL AFTER TRANSACTION
 
-       Email is intentionally outside the
-       transaction because it is an external
-       side effect.
-
-       A failed email must NOT roll back a
-       successfully booked appointment.
+       Email failure must never undo a valid
+       Leadquivo booking.
        ========================================= */
 
     try {
@@ -282,8 +275,7 @@ export async function POST(
         businessName:
           business.name,
 
-        appointmentId:
-          appointment._id.toString(),
+        appointmentId,
 
         name:
           lead.name ?? null,
@@ -308,6 +300,174 @@ export async function POST(
     }
 
     /* =========================================
+       GOOGLE CALENDAR SYNC
+
+       This happens AFTER the MongoDB booking
+       transaction has committed.
+
+       Google Calendar is an optional external
+       integration.
+
+       Therefore:
+       - Google success → save event ID
+       - Google failure → keep appointment
+       - Google failure must NEVER roll back
+         the Leadquivo booking
+       ========================================= */
+
+    try {
+      const googleEvent =
+        await createAppointmentGoogleEvent({
+          businessId:
+            business._id.toString(),
+
+          appointmentId,
+
+          businessName:
+            business.name,
+
+          timezone:
+            business.timezone ||
+            "UTC",
+
+          slotDurationMinutes:
+            availability.slotDurationMinutes ||
+            60,
+
+          scheduledFor:
+            appointment.scheduledFor,
+
+          customerName:
+            lead.name ||
+            "Customer",
+
+          customerPhone:
+            lead.phone ?? null,
+
+          customerEmail:
+            lead.email ?? null,
+
+          service:
+            lead.service ?? null,
+
+          location:
+            lead.location ?? null,
+
+          urgency:
+            lead.urgency ?? null,
+
+          timeline:
+            lead.timeline ?? null,
+        });
+
+      /*
+       * null means this business does not
+       * currently have Google Calendar
+       * connected. That is not an error.
+       */
+      if (googleEvent) {
+        await Appointment.updateOne(
+          {
+            _id:
+              appointment._id,
+
+            businessId:
+              business._id,
+          },
+          {
+            $set: {
+              googleCalendarEventId:
+                googleEvent.eventId,
+
+              googleCalendarId:
+                googleEvent.calendarId,
+
+              googleCalendarSyncedAt:
+                new Date(),
+
+              googleCalendarSyncError:
+                null,
+            },
+          }
+        );
+
+        /*
+         * Record successful integration
+         * activity separately as well.
+         */
+        await GoogleCalendarIntegration.updateOne(
+          {
+            businessId:
+              business._id,
+
+            connected:
+              true,
+          },
+          {
+            $set: {
+              lastSyncedAt:
+                new Date(),
+
+              lastSyncError:
+                null,
+            },
+          }
+        );
+      }
+    } catch (googleError) {
+      console.error(
+        "Google Calendar appointment sync failed:",
+        googleError
+      );
+
+      const errorMessage =
+        googleError instanceof Error
+          ? googleError.message
+          : "Google Calendar synchronization failed.";
+
+      /*
+       * Save the sync failure on the
+       * appointment for troubleshooting
+       * and future retry support.
+       */
+      try {
+        await Appointment.updateOne(
+          {
+            _id:
+              appointment._id,
+
+            businessId:
+              business._id,
+          },
+          {
+            $set: {
+              googleCalendarSyncError:
+                errorMessage,
+            },
+          }
+        );
+
+        await GoogleCalendarIntegration.updateOne(
+          {
+            businessId:
+              business._id,
+          },
+          {
+            $set: {
+              lastSyncError:
+                errorMessage,
+            },
+          }
+        );
+      } catch (syncErrorSaveError) {
+        console.error(
+          "Unable to save Google Calendar sync error:",
+          syncErrorSaveError
+        );
+      }
+    }
+
+    /* =========================================
        SUCCESS RESPONSE
        ========================================= */
 
@@ -317,7 +477,7 @@ export async function POST(
 
       appointment: {
         id:
-          appointment._id.toString(),
+          appointmentId,
 
         label:
           appointment.label,
@@ -339,11 +499,6 @@ export async function POST(
 
     /* =========================================
        UNIQUE SLOT CONFLICT
-
-       MongoDB unique index is the final
-       protection against two requests
-       attempting to book the same slot
-       concurrently.
        ========================================= */
 
     if (

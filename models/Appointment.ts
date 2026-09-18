@@ -45,6 +45,35 @@ const appointmentSchema =
       notes: {
         type: String,
       },
+
+      /*
+       * GOOGLE CALENDAR
+       *
+       * These fields allow Leadquivo to keep
+       * this appointment linked to the exact
+       * Google Calendar event.
+       */
+
+      googleCalendarEventId: {
+        type: String,
+        default: null,
+        index: true,
+      },
+
+      googleCalendarId: {
+        type: String,
+        default: null,
+      },
+
+      googleCalendarSyncedAt: {
+        type: Date,
+        default: null,
+      },
+
+      googleCalendarSyncError: {
+        type: String,
+        default: null,
+      },
     },
     {
       timestamps: true,

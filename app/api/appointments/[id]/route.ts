@@ -13,6 +13,9 @@ import { Lead } from "@/models/Lead";
 
 import { sendAppointmentRescheduledEmail } from "@/lib/email/send-appointment-rescheduled-email";
 import { sendAppointmentCancelledEmail } from "@/lib/email/send-appointment-cancelled-email";
+import { updateAppointmentGoogleEvent } from "@/lib/google-calendar/update-appointment-event";
+import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
+import { deleteAppointmentGoogleEvent } from "@/lib/google-calendar/delete-appointment-event";
 type AppointmentStatus =
   | "scheduled"
   | "confirmed"
@@ -400,6 +403,171 @@ export async function PATCH(
           emailError
         );
       }
+
+
+      /* =========================================
+   GOOGLE CALENDAR RESCHEDULE SYNC
+
+   MongoDB has already been updated.
+
+   Google failure must NEVER undo or fail
+   the Leadquivo reschedule.
+   ========================================= */
+
+      if (
+        appointment.googleCalendarEventId
+      ) {
+        try {
+          const lead =
+            await Lead.findOne({
+              _id:
+                appointment.leadId,
+
+              businessId:
+                business._id,
+            }).lean();
+
+          if (lead) {
+            const googleEvent =
+              await updateAppointmentGoogleEvent({
+                businessId:
+                  business._id.toString(),
+
+                eventId:
+                  appointment.googleCalendarEventId,
+
+                calendarId:
+                  appointment.googleCalendarId ??
+                  null,
+
+                appointmentId:
+                  appointment._id.toString(),
+
+                businessName:
+                  businessData.name,
+
+                timezone:
+                  businessData.timezone ||
+                  "UTC",
+
+                slotDurationMinutes:
+                  availability.slotDurationMinutes ||
+                  60,
+
+                scheduledFor:
+                  appointment.scheduledFor,
+
+                customerName:
+                  lead.name ||
+                  "Customer",
+
+                customerPhone:
+                  lead.phone ?? null,
+
+                customerEmail:
+                  lead.email ?? null,
+
+                service:
+                  lead.service ?? null,
+
+                location:
+                  lead.location ?? null,
+
+                urgency:
+                  lead.urgency ?? null,
+
+                timeline:
+                  lead.timeline ?? null,
+              });
+
+            if (googleEvent) {
+              const syncedAt =
+                new Date();
+
+              appointment.googleCalendarEventId =
+                googleEvent.eventId;
+
+              appointment.googleCalendarId =
+                googleEvent.calendarId;
+
+              appointment.googleCalendarSyncedAt =
+                syncedAt;
+
+              appointment.googleCalendarSyncError =
+                null;
+
+              await appointment.save();
+
+              await GoogleCalendarIntegration.updateOne(
+                {
+                  businessId:
+                    business._id,
+
+                  connected:
+                    true,
+                },
+                {
+                  $set: {
+                    lastSyncedAt:
+                      syncedAt,
+
+                    lastSyncError:
+                      null,
+                  },
+                }
+              );
+            }
+          }
+        } catch (googleError) {
+          console.error(
+            "Google Calendar appointment reschedule sync failed:",
+            googleError
+          );
+
+          const errorMessage =
+            googleError instanceof Error
+              ? googleError.message
+              : "Google Calendar reschedule synchronization failed.";
+
+          try {
+            await Appointment.updateOne(
+              {
+                _id:
+                  appointment._id,
+
+                businessId:
+                  business._id,
+              },
+              {
+                $set: {
+                  googleCalendarSyncError:
+                    errorMessage,
+                },
+              }
+            );
+
+            await GoogleCalendarIntegration.updateOne(
+              {
+                businessId:
+                  business._id,
+              },
+              {
+                $set: {
+                  lastSyncError:
+                    errorMessage,
+                },
+              }
+            );
+          } catch (
+          syncErrorSaveError
+          ) {
+            console.error(
+              "Unable to save Google Calendar reschedule sync error:",
+              syncErrorSaveError
+            );
+          }
+        }
+      }
       return NextResponse.json({
         success: true,
 
@@ -512,6 +680,115 @@ export async function PATCH(
           emailError
         );
       }
+
+      /* =========================================
+   GOOGLE CALENDAR CANCELLATION
+
+   The Leadquivo appointment has already
+   been cancelled in MongoDB.
+
+   Google failure must NEVER undo the
+   Leadquivo cancellation.
+   ========================================= */
+
+      if (
+        appointment.googleCalendarEventId
+      ) {
+        try {
+          const googleResult =
+            await deleteAppointmentGoogleEvent({
+              businessId:
+                business._id.toString(),
+
+              eventId:
+                appointment.googleCalendarEventId,
+
+              calendarId:
+                appointment.googleCalendarId ??
+                null,
+            });
+
+          if (googleResult) {
+            const syncedAt =
+              new Date();
+
+            appointment.googleCalendarSyncedAt =
+              syncedAt;
+
+            appointment.googleCalendarSyncError =
+              null;
+
+            await appointment.save();
+
+            await GoogleCalendarIntegration.updateOne(
+              {
+                businessId:
+                  business._id,
+
+                connected:
+                  true,
+              },
+              {
+                $set: {
+                  lastSyncedAt:
+                    syncedAt,
+
+                  lastSyncError:
+                    null,
+                },
+              }
+            );
+          }
+        } catch (googleError) {
+          console.error(
+            "Google Calendar appointment cancellation sync failed:",
+            googleError
+          );
+
+          const errorMessage =
+            googleError instanceof Error
+              ? googleError.message
+              : "Google Calendar cancellation synchronization failed.";
+
+          try {
+            await Appointment.updateOne(
+              {
+                _id:
+                  appointment._id,
+
+                businessId:
+                  business._id,
+              },
+              {
+                $set: {
+                  googleCalendarSyncError:
+                    errorMessage,
+                },
+              }
+            );
+
+            await GoogleCalendarIntegration.updateOne(
+              {
+                businessId:
+                  business._id,
+              },
+              {
+                $set: {
+                  lastSyncError:
+                    errorMessage,
+                },
+              }
+            );
+          } catch (
+          syncErrorSaveError
+          ) {
+            console.error(
+              "Unable to save Google Calendar cancellation sync error:",
+              syncErrorSaveError
+            );
+          }
+        }
+      }
     }
 
     return NextResponse.json({
@@ -531,7 +808,7 @@ export async function PATCH(
           appointment.scheduledFor,
       },
     });
-    
+
   } catch (error) {
     console.error(
       "Appointment update error:",
