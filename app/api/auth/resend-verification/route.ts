@@ -2,19 +2,37 @@ import { NextResponse } from "next/server";
 
 import { connectDB } from "@/lib/mongodb";
 import { Business } from "@/models/Business";
+
 import {
   generateVerificationToken,
   sendVerificationEmail,
 } from "@/lib/email-verification";
-
+import { applyRequestRateLimit } from "@/lib/request-rate-limit";
 type Body = {
   email?: string;
 };
+
+const EMAIL_REGEX =
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(
   request: Request
 ) {
   try {
+
+    const rateLimitResponse =
+      await applyRequestRateLimit({
+        request,
+        action:
+          "auth-resend-verification",
+        limit: 3,
+        windowMs:
+          60 * 60 * 1000,
+      });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
     const body: Body =
       await request.json();
 
@@ -35,6 +53,21 @@ export async function POST(
       );
     }
 
+    if (
+      email.length > 254 ||
+      !EMAIL_REGEX.test(email)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Please enter a valid email address.",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
     await connectDB();
 
     const business =
@@ -42,7 +75,7 @@ export async function POST(
         email,
       });
 
-    // Avoid revealing whether accounts exist.
+
     if (
       !business ||
       business.emailVerified
@@ -52,6 +85,14 @@ export async function POST(
       });
     }
 
+    /*
+     * Generate a completely new
+     * verification token.
+     *
+     * The previous verification token
+     * becomes invalid as soon as the
+     * new hash is stored.
+     */
     const {
       token,
       tokenHash,

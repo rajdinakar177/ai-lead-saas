@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Business } from "@/models/Business";
 import { createSession } from "@/lib/auth";
-
+import { applyRequestRateLimit } from "@/lib/request-rate-limit";
 type LoginBody = {
   email?: string;
   password?: string;
@@ -14,6 +14,18 @@ export async function POST(
   request: Request
 ) {
   try {
+    const rateLimitResponse =
+      await applyRequestRateLimit({
+        request,
+        action: "auth-login",
+        limit: 10,
+        windowMs:
+          15 * 60 * 1000,
+      });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
     const body: LoginBody =
       await request.json();
 
@@ -44,7 +56,10 @@ export async function POST(
         email,
       });
 
-    if (!business) {
+    if (
+      !business ||
+      !business.passwordHash
+    ) {
       return NextResponse.json(
         {
           error:
@@ -73,23 +88,25 @@ export async function POST(
         }
       );
     }
-if (!business.emailVerified) {
-  return NextResponse.json(
-    {
-      error:
-        "Please verify your email before signing in.",
 
-      code:
-        "EMAIL_NOT_VERIFIED",
+    if (!business.emailVerified) {
+      return NextResponse.json(
+        {
+          error:
+            "Please verify your email before signing in.",
 
-      email:
-        business.email,
-    },
-    {
-      status: 403,
+          code:
+            "EMAIL_NOT_VERIFIED",
+
+          email:
+            business.email,
+        },
+        {
+          status: 403,
+        }
+      );
     }
-  );
-}
+
     await createSession(
       business._id.toString()
     );

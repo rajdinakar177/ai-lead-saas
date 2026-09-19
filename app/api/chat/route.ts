@@ -17,6 +17,7 @@ import {
   type ChatMessage,
   type LeadData,
 } from "@/lib/ai/qualification";
+import { applyRequestRateLimit } from "@/lib/request-rate-limit";
 
 /* =========================================================
    TYPES
@@ -37,6 +38,18 @@ export async function POST(
   request: Request
 ) {
   try {
+    const rateLimitResponse =
+      await applyRequestRateLimit({
+        request,
+        action: "public-chat",
+        limit: 60,
+        windowMs:
+          10 * 60 * 1000,
+      });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
     const body: RequestBody =
       await request.json();
 
@@ -412,7 +425,7 @@ export async function POST(
       validatePhoneNumber(
         result.lead.phone,
         business.country ??
-          "US"
+        "US"
       );
 
     if (

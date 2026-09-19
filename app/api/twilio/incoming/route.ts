@@ -158,10 +158,33 @@ export async function POST(request: Request) {
        TWILIO SIGNATURE VALIDATION
        ===================================================== */
 
+    const isProduction =
+      process.env.NODE_ENV ===
+      "production";
+
     const signatureValidationEnabled =
       process.env
         .TWILIO_SIGNATURE_VALIDATION ===
       "true";
+
+    /*
+     * Never allow Twilio signature
+     * validation to be disabled in
+     * production.
+     *
+     * Local development may disable it
+     * explicitly for webhook testing.
+     */
+    if (
+      isProduction &&
+      !signatureValidationEnabled
+    ) {
+      console.error(
+        "TWILIO_SIGNATURE_VALIDATION must be enabled in production."
+      );
+
+      return forbiddenResponse();
+    }
 
     if (signatureValidationEnabled) {
       const signature =

@@ -12,7 +12,7 @@ import { Lead } from "@/models/Lead";
 import { Business } from "@/models/Business";
 import { Appointment } from "@/models/Appointment";
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
-
+import { applyRequestRateLimit } from "@/lib/request-rate-limit";
 type AppointmentRequest = {
   leadId: string;
   appointment: string;
@@ -33,7 +33,19 @@ export async function POST(
     /* =========================================
        READ REQUEST
        ========================================= */
+    const rateLimitResponse =
+      await applyRequestRateLimit({
+        request,
+        action:
+          "public-appointments",
+        limit: 20,
+        windowMs:
+          10 * 60 * 1000,
+      });
 
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
     const body: AppointmentRequest =
       await request.json();
 
@@ -147,8 +159,8 @@ export async function POST(
 
     const timeline =
       lead.timeline as
-        | Timeline
-        | undefined;
+      | Timeline
+      | undefined;
 
     if (
       !timeline ||
@@ -503,7 +515,7 @@ export async function POST(
 
     if (
       typeof error ===
-        "object" &&
+      "object" &&
       error !== null &&
       "code" in error &&
       error.code === 11000

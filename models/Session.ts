@@ -23,7 +23,6 @@ const sessionSchema = new Schema(
     expiresAt: {
       type: Date,
       required: true,
-      index: true,
     },
   },
   {
@@ -31,6 +30,29 @@ const sessionSchema = new Schema(
   }
 );
 
+/*
+ * Automatically remove expired sessions
+ * from MongoDB.
+ *
+ * expireAfterSeconds: 0 means the document
+ * expires when expiresAt is reached.
+ *
+ * Authentication does NOT depend on TTL
+ * cleanup timing. lib/auth.ts still checks
+ * expiresAt on every session lookup.
+ */
+sessionSchema.index(
+  {
+    expiresAt: 1,
+  },
+  {
+    expireAfterSeconds: 0,
+  }
+);
+
 export const Session =
   models.Session ||
-  model("Session", sessionSchema);
+  model(
+    "Session",
+    sessionSchema
+  );

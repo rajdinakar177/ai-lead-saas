@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { connectDB } from "@/lib/mongodb";
 import { Business } from "@/models/Business";
+import { applyRequestRateLimit } from "@/lib/request-rate-limit";
 
 type CreateLeadBody = {
   businessSlug?: string;
@@ -11,6 +12,18 @@ export async function POST(
   request: Request
 ) {
   try {
+    const rateLimitResponse =
+      await applyRequestRateLimit({
+        request,
+        action: "public-leads",
+        limit: 30,
+        windowMs:
+          10 * 60 * 1000,
+      });
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
     const body: CreateLeadBody =
       await request.json();
 
