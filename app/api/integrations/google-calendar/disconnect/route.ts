@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/mongodb";
 import { requireBusiness } from "@/lib/auth";
 
 import { createGoogleOAuthClient } from "@/lib/google-calendar/oauth";
+import { decryptToken } from "@/lib/security/token-encryption";
 
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
 
@@ -33,16 +34,28 @@ export async function POST() {
     /*
      * Try to revoke Google's credentials.
      *
+     * Tokens are encrypted at rest in
+     * MongoDB, so decrypt the selected
+     * token before sending it to Google.
+     *
+     * decryptToken() also supports legacy
+     * plaintext tokens during migration.
+     *
      * Revocation is an external operation,
      * so failure here must not prevent
      * Leadquivo from locally disconnecting.
      */
-    const tokenToRevoke =
+    const storedTokenToRevoke =
       integration.refreshToken ||
       integration.accessToken;
 
-    if (tokenToRevoke) {
+    if (storedTokenToRevoke) {
       try {
+        const tokenToRevoke =
+          decryptToken(
+            storedTokenToRevoke
+          );
+
         const oauthClient =
           createGoogleOAuthClient();
 

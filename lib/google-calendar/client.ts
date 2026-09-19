@@ -3,6 +3,11 @@ import { google } from "googleapis";
 import { connectDB } from "@/lib/mongodb";
 import { createGoogleOAuthClient } from "@/lib/google-calendar/oauth";
 
+import {
+  decryptToken,
+  encryptToken,
+} from "@/lib/security/token-encryption";
+
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
 
 type GetGoogleCalendarClientParams = {
@@ -30,15 +35,38 @@ export async function getGoogleCalendarClient({
     );
   }
 
+  /*
+   * Tokens in MongoDB may be:
+   *
+   * 1. Legacy plaintext tokens
+   * 2. New encrypted enc:v1:... tokens
+   *
+   * decryptToken() supports both during
+   * our migration period.
+   */
+  const accessToken =
+    integration.accessToken
+      ? decryptToken(
+          integration.accessToken
+        )
+      : undefined;
+
+  const refreshToken =
+    decryptToken(
+      integration.refreshToken
+    );
+
   const oauthClient =
     createGoogleOAuthClient();
 
+  /*
+   * Google receives only the real,
+   * decrypted credentials.
+   */
   oauthClient.setCredentials({
-    access_token:
-      integration.accessToken || undefined,
+    access_token: accessToken,
 
-    refresh_token:
-      integration.refreshToken,
+    refresh_token: refreshToken,
 
     expiry_date:
       integration.expiryDate
@@ -48,19 +76,22 @@ export async function getGoogleCalendarClient({
         : undefined,
 
     scope:
-      integration.scope || undefined,
+      integration.scope ||
+      undefined,
 
     token_type:
-      integration.tokenType || undefined,
+      integration.tokenType ||
+      undefined,
   });
 
   /*
-   * Google may refresh the access token
-   * automatically when an API request is
-   * made.
+   * Google may automatically refresh
+   * credentials while making Calendar
+   * API requests.
    *
-   * Save any new credentials Google gives
-   * us back to MongoDB.
+   * Any credentials returned by Google
+   * must be encrypted before they are
+   * written back to MongoDB.
    */
   oauthClient.on(
     "tokens",
@@ -75,12 +106,16 @@ export async function getGoogleCalendarClient({
 
         if (tokens.access_token) {
           update.accessToken =
-            tokens.access_token;
+            encryptToken(
+              tokens.access_token
+            );
         }
 
         if (tokens.refresh_token) {
           update.refreshToken =
-            tokens.refresh_token;
+            encryptToken(
+              tokens.refresh_token
+            );
         }
 
         if (tokens.expiry_date) {
@@ -102,7 +137,8 @@ export async function getGoogleCalendarClient({
 
         await GoogleCalendarIntegration.updateOne(
           {
-            _id: integration._id,
+            _id:
+              integration._id,
           },
           {
             $set: update,
