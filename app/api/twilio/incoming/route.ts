@@ -1,6 +1,7 @@
 import { connectDB } from "@/lib/mongodb";
 import { validatePhoneNumber } from "@/lib/phone";
 import { verifyTwilioSignature } from "@/lib/sms/verify-twilio-signature";
+import { safeLogger } from "@/lib/security/safe-logger";
 import {
   updateLeadWithSmsFence,
   findOneAndUpdateLeadWithSmsFence,
@@ -101,13 +102,6 @@ export async function POST(request: Request) {
 
     const body = formData.get("Body")?.toString().trim();
 
-    console.log("Incoming Twilio SMS:", {
-      messageSid,
-      from,
-      to,
-      body,
-    });
-
     /* =====================================================
        TWILIO SIGNATURE VALIDATION
        ===================================================== */
@@ -152,24 +146,21 @@ export async function POST(request: Request) {
           params: twilioParams,
         });
       } catch (error) {
-        console.error("Twilio signature validation error:", error);
+        safeLogger.error("Twilio signature validation error.", error);
 
         return forbiddenResponse();
       }
 
       if (!signatureValid) {
-        console.warn("Invalid Twilio signature rejected:", {
+        safeLogger.warn("Invalid Twilio signature rejected.", {
           messageSid,
-          from,
-          to,
         });
 
         return forbiddenResponse();
       }
 
-      console.log("Twilio signature verified:", messageSid);
     } else {
-      console.log("Twilio signature validation disabled for local testing.");
+      safeLogger.info("Twilio signature validation disabled for local testing.");
     }
 
     /* =====================================================
@@ -212,7 +203,9 @@ export async function POST(request: Request) {
     }).lean();
 
     if (!business) {
-      console.warn("No business found for Twilio number:", to);
+      safeLogger.warn("No business found for incoming Twilio SMS.", {
+        messageSid,
+      });
 
       return successResponse();
     }
@@ -224,7 +217,9 @@ export async function POST(request: Request) {
     const phoneResult = validatePhoneNumber(from, "US");
 
     if (!phoneResult.valid || !phoneResult.normalized) {
-      console.warn("Invalid incoming phone:", from);
+      safeLogger.warn("Invalid incoming phone number.", {
+        messageSid,
+      });
 
       return successResponse();
     }
@@ -251,11 +246,8 @@ export async function POST(request: Request) {
     if (!conversationLock) {
       processingError = new Error("SMS conversation is busy. Please retry.");
 
-      console.warn("Could not acquire SMS conversation lock:", {
+      safeLogger.warn("Could not acquire SMS conversation lock.", {
         businessId: business._id.toString(),
-
-        phone: normalizedPhone,
-
         messageSid,
       });
 
@@ -361,10 +353,9 @@ export async function POST(request: Request) {
     });
 
     if (!latestLead) {
-      console.warn("No lead found for incoming SMS:", {
+      safeLogger.warn("No lead found for incoming SMS.", {
         businessId: business._id.toString(),
-
-        phone: normalizedPhone,
+        messageSid,
       });
 
       return successResponse();
@@ -493,10 +484,8 @@ export async function POST(request: Request) {
           });
 
           if (!deactivated) {
-            console.warn("Could not deactivate current SMS conversation during service switch:", {
+            safeLogger.warn("Could not deactivate current SMS conversation during service switch.", {
               leadId: previousActiveLead._id.toString(),
-
-              phone: normalizedPhone,
             });
 
             return successResponse();
@@ -834,10 +823,8 @@ export async function POST(request: Request) {
         });
 
         if (!activation) {
-          console.warn("Unable to activate SMS conversation:", {
+          safeLogger.warn("Unable to activate SMS conversation.", {
             requestedLeadId: requestedLead._id.toString(),
-
-            phone: normalizedPhone,
           });
 
           return successResponse();
@@ -895,10 +882,8 @@ export async function POST(request: Request) {
           });
 
           if (!activation) {
-            console.warn("Unable to activate selected SMS conversation:", {
+            safeLogger.warn("Unable to activate selected SMS conversation.", {
               requestedLeadId: matchedLead._id.toString(),
-
-              phone: normalizedPhone,
             });
 
             return successResponse();
@@ -964,12 +949,10 @@ export async function POST(request: Request) {
               body: clarification,
             });
           } catch (smsError) {
-            console.error("SMS lead-selection reply failed:", smsError);
+            safeLogger.error("SMS lead-selection reply failed.", smsError);
           }
 
-          console.log("Multiple active leads require service selection:", {
-            phone: normalizedPhone,
-
+          safeLogger.info("Multiple active leads require service selection.", {
             leads: openLeads.map((item) => ({
               id: item._id.toString(),
 
@@ -1078,12 +1061,11 @@ export async function POST(request: Request) {
             });
 
             if (!activeWinner) {
-              console.error(
-                "Duplicate active SMS conversation detected but winning lead could not be loaded:",
+              safeLogger.error(
+                "Duplicate active SMS conversation detected but winning lead could not be loaded.",
+                undefined,
                 {
                   businessId: business._id.toString(),
-
-                  phone: normalizedPhone,
                 },
               );
 
@@ -1092,12 +1074,9 @@ export async function POST(request: Request) {
 
             lead = activeWinner;
 
-            console.log("New SMS lead creation race resolved to existing active conversation:", {
+            safeLogger.info("New SMS lead creation race resolved to existing active conversation.", {
               activeLeadId: lead._id.toString(),
-
               service: lead.service,
-
-              phone: normalizedPhone,
             });
           }
 
@@ -1193,7 +1172,7 @@ export async function POST(request: Request) {
                 body: newRequestResult.reply,
               });
             } catch (smsError) {
-              console.error("New service request SMS reply failed:", smsError);
+              safeLogger.error("New service request SMS reply failed.", smsError);
             }
 
             console.log("New SMS service request created:", {
@@ -1236,12 +1215,9 @@ export async function POST(request: Request) {
             content: body,
           });
 
-          console.log("SMS attached to latest closed lead:", {
+          safeLogger.info("SMS attached to latest closed lead.", {
             leadId: latestLead._id.toString(),
-
             status: latestLead.status,
-
-            body,
           });
 
           return successResponse();
@@ -1308,19 +1284,10 @@ export async function POST(request: Request) {
       content: body,
     });
 
-    console.log("Incoming SMS saved:", {
-      business: business.name,
-
+    safeLogger.info("Incoming SMS saved.", {
       leadId: lead._id.toString(),
-
       messageId: incomingMessage._id.toString(),
-
-      phone: normalizedPhone,
-
-      service: lead.service,
-
       status: lead.status,
-
       smsConversationActive: lead.smsConversationActive,
     });
 
@@ -1806,18 +1773,13 @@ export async function POST(request: Request) {
         body: result.reply,
       });
     } catch (smsError) {
-      console.error("SMS AI reply delivery failed:", smsError);
+      safeLogger.error("SMS AI reply delivery failed.", smsError);
     }
 
-    console.log("SMS AI response generated:", {
+    safeLogger.info("SMS AI response generated.", {
       leadId: lead._id.toString(),
-
       service: lead.service,
-
       messageId: aiMessage._id.toString(),
-
-      reply: result.reply,
-
       status: lead.status,
 
       readyToBook: result.readyToBook,
@@ -1851,7 +1813,7 @@ export async function POST(request: Request) {
   } catch (error) {
     processingError = error;
 
-    console.error("Incoming SMS webhook error:", error);
+    safeLogger.error("Incoming SMS webhook error.", error);
 
     /*
      * Return a retryable error for unexpected failures.
@@ -1927,7 +1889,7 @@ export async function POST(request: Request) {
           );
         }
       } catch (eventError) {
-        console.error("Failed to update Twilio inbound event status:", eventError);
+        safeLogger.error("Failed to update Twilio inbound event status.", eventError);
       }
     }
 
@@ -1948,7 +1910,7 @@ export async function POST(request: Request) {
           fenceToken: conversationLockFenceToken,
         });
       } catch (lockError) {
-        console.error("Failed to release SMS conversation lock:", lockError);
+        safeLogger.error("Failed to release SMS conversation lock.", lockError);
       }
     }
   }

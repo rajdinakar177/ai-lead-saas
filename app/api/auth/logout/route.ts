@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 
 import { deleteSession } from "@/lib/auth";
+import { validateRequestOrigin } from "@/lib/security/origin-protection";
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const originError = validateRequestOrigin(request);
+
+    if (originError) {
+      return originError;
+    }
+
     await deleteSession();
 
     return NextResponse.json({
