@@ -2,10 +2,7 @@ import { NextResponse } from "next/server";
 
 import { connectDB } from "@/lib/mongodb";
 import { validatePhoneNumber } from "@/lib/phone";
-import {
-  canFollowUp,
-  getNextFollowUpAt,
-} from "@/lib/follow-up";
+import { canFollowUp, getNextFollowUpAt } from "@/lib/follow-up";
 
 import { Business } from "@/models/Business";
 import { Lead } from "@/models/Lead";
@@ -34,45 +31,34 @@ type RequestBody = {
    POST
    ========================================================= */
 
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
   try {
-    const rateLimitResponse =
-      await applyRequestRateLimit({
-        request,
-        action: "public-chat",
-        limit: 60,
-        windowMs:
-          10 * 60 * 1000,
-      });
+    const rateLimitResponse = await applyRequestRateLimit({
+      request,
+      action: "public-chat",
+      limit: 60,
+      windowMs: 10 * 60 * 1000,
+    });
 
     if (rateLimitResponse) {
       return rateLimitResponse;
     }
-    const body: RequestBody =
-      await request.json();
+    const body: RequestBody = await request.json();
 
-    if (
-      !Array.isArray(
-        body.messages
-      )
-    ) {
+    if (!Array.isArray(body.messages)) {
       return NextResponse.json(
         {
-          error:
-            "messages are required.",
+          error: "messages are required.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
     await connectDB();
 
-    let existingLead: any =
-      null;
+    let existingLead: any = null;
 
     let business;
 
@@ -81,37 +67,48 @@ export async function POST(
        ===================================================== */
 
     if (body.leadId) {
-      existingLead =
-        await Lead.findById(
-          body.leadId
-        );
+      const businessSlug = body.businessSlug?.trim().toLowerCase();
 
-      if (!existingLead) {
+      if (!businessSlug) {
         return NextResponse.json(
           {
-            error:
-              "Lead not found.",
+            error: "businessSlug is required.",
           },
           {
-            status: 404,
-          }
+            status: 400,
+          },
         );
       }
 
-      business =
-        await Business.findById(
-          existingLead.businessId
-        );
+      business = await Business.findOne({
+        slug: businessSlug,
+        emailVerified: true,
+      });
 
       if (!business) {
         return NextResponse.json(
           {
-            error:
-              "Business not found.",
+            error: "Business not found.",
           },
           {
             status: 404,
-          }
+          },
+        );
+      }
+
+      existingLead = await Lead.findOne({
+        _id: body.leadId,
+        businessId: business._id,
+      });
+
+      if (!existingLead) {
+        return NextResponse.json(
+          {
+            error: "Lead not found.",
+          },
+          {
+            status: 404,
+          },
         );
       }
     }
@@ -119,43 +116,34 @@ export async function POST(
     /* =====================================================
        ANONYMOUS CHAT
        ===================================================== */
-
     else {
-      const businessSlug =
-        body.businessSlug
-          ?.trim()
-          .toLowerCase();
+      const businessSlug = body.businessSlug?.trim().toLowerCase();
 
       if (!businessSlug) {
         return NextResponse.json(
           {
-            error:
-              "businessSlug is required for anonymous chat.",
+            error: "businessSlug is required for anonymous chat.",
           },
           {
             status: 400,
-          }
+          },
         );
       }
 
-      business =
-        await Business.findOne({
-          slug:
-            businessSlug,
+      business = await Business.findOne({
+        slug: businessSlug,
 
-          emailVerified:
-            true,
-        });
+        emailVerified: true,
+      });
 
       if (!business) {
         return NextResponse.json(
           {
-            error:
-              "Business not found.",
+            error: "Business not found.",
           },
           {
             status: 404,
-          }
+          },
         );
       }
     }
@@ -165,61 +153,35 @@ export async function POST(
        ===================================================== */
 
     const aiSettings: AISettings = {
-      businessDescription:
-        business.aiSettings
-          ?.businessDescription ??
-        "",
+      businessDescription: business.aiSettings?.businessDescription ?? "",
 
-      services:
-        business.aiSettings
-          ?.services ??
-        [],
+      services: business.aiSettings?.services ?? [],
 
-      serviceAreas:
-        business.aiSettings
-          ?.serviceAreas ??
-        [],
+      serviceAreas: business.aiSettings?.serviceAreas ?? [],
 
-      welcomeMessage:
-        business.aiSettings
-          ?.welcomeMessage ??
-        "",
+      welcomeMessage: business.aiSettings?.welcomeMessage ?? "",
 
-      tone:
-        business.aiSettings
-          ?.tone ??
-        "friendly",
+      tone: business.aiSettings?.tone ?? "friendly",
 
-      qualificationFields:
-        business.aiSettings
-          ?.qualificationFields ??
-        [
-          "name",
-          "phone",
-          "service",
-          "location",
-          "urgency",
-          "timeline",
-        ],
+      qualificationFields: business.aiSettings?.qualificationFields ?? [
+        "name",
+        "phone",
+        "service",
+        "location",
+        "urgency",
+        "timeline",
+      ],
 
-      additionalInstructions:
-        business.aiSettings
-          ?.additionalInstructions ??
-        "",
+      additionalInstructions: business.aiSettings?.additionalInstructions ?? "",
     };
 
     /* =====================================================
        LATEST USER MESSAGE
        ===================================================== */
 
-    const latestUserMessage =
-      [...body.messages]
-        .reverse()
-        .find(
-          (message) =>
-            message.sender ===
-            "user"
-        );
+    const latestUserMessage = [...body.messages]
+      .reverse()
+      .find((message) => message.sender === "user");
 
     /* =====================================================
        SAVE USER MESSAGE
@@ -232,27 +194,18 @@ export async function POST(
        A new timer will be scheduled after the AI replies.
        ===================================================== */
 
-    if (
-      existingLead &&
-      latestUserMessage
-    ) {
+    if (existingLead && latestUserMessage) {
       await Message.create({
-        leadId:
-          existingLead._id,
+        leadId: existingLead._id,
 
-        sender:
-          "lead",
+        sender: "lead",
 
-        content:
-          latestUserMessage.text,
+        content: latestUserMessage.text,
       });
 
-      existingLead.followUp =
-        existingLead.followUp ??
-        {};
+      existingLead.followUp = existingLead.followUp ?? {};
 
-      existingLead.followUp.nextFollowUpAt =
-        null;
+      existingLead.followUp.nextFollowUpAt = null;
 
       await existingLead.save();
     }
@@ -261,68 +214,44 @@ export async function POST(
        GENERATE AI RESPONSE
        ===================================================== */
 
-    const result =
-      await generateQualificationResponse(
-        {
-          messages:
-            body.messages,
+    const result = await generateQualificationResponse(
+      {
+        messages: body.messages,
 
-          lead:
-            body.lead,
-        },
+        lead: body.lead,
+      },
 
-        {
-          name:
-            business.name,
+      {
+        name: business.name,
 
-          industry:
-            business.industry,
+        industry: business.industry,
 
-          country:
-            business.country ??
-            "US",
+        country: business.country ?? "US",
 
-          aiSettings,
-        }
-      );
+        aiSettings,
+      },
+    );
 
     /* =====================================================
        EXISTING LEAD
        ===================================================== */
 
     if (existingLead) {
-      existingLead.industry =
-        result.lead.industry ??
-        existingLead.industry;
+      existingLead.industry = result.lead.industry ?? existingLead.industry;
 
-      existingLead.service =
-        result.lead.service ??
-        existingLead.service;
+      existingLead.service = result.lead.service ?? existingLead.service;
 
-      existingLead.location =
-        result.lead.location ??
-        existingLead.location;
+      existingLead.location = result.lead.location ?? existingLead.location;
 
-      existingLead.urgency =
-        result.lead.urgency ??
-        existingLead.urgency;
+      existingLead.urgency = result.lead.urgency ?? existingLead.urgency;
 
-      existingLead.timeline =
-        result.lead.timeline ??
-        existingLead.timeline;
+      existingLead.timeline = result.lead.timeline ?? existingLead.timeline;
 
-      existingLead.name =
-        result.lead.name ??
-        existingLead.name;
+      existingLead.name = result.lead.name ?? existingLead.name;
 
-      existingLead.phone =
-        result.lead.phone ??
-        existingLead.phone;
+      existingLead.phone = result.lead.phone ?? existingLead.phone;
 
-      existingLead.status =
-        result.readyToBook
-          ? "qualified"
-          : result.status;
+      existingLead.status = result.readyToBook ? "qualified" : result.status;
 
       /* ===================================================
          SCHEDULE NEXT FOLLOW-UP
@@ -337,62 +266,38 @@ export async function POST(
          count 2 -> 48 hours
          =================================================== */
 
-      if (
-        canFollowUp(
-          existingLead.status,
-          existingLead.phone
-        )
-      ) {
-        existingLead.followUp =
-          existingLead.followUp ??
-          {};
+      if (canFollowUp(existingLead.status, existingLead.phone)) {
+        existingLead.followUp = existingLead.followUp ?? {};
 
-        const followUpCount =
-          existingLead.followUp
-            .count ??
-          0;
+        const followUpCount = existingLead.followUp.count ?? 0;
 
-        existingLead.followUp.enabled =
-          true;
+        existingLead.followUp.enabled = true;
 
-        existingLead.followUp.nextFollowUpAt =
-          getNextFollowUpAt(
-            followUpCount
-          );
+        existingLead.followUp.nextFollowUpAt = getNextFollowUpAt(followUpCount);
       } else {
-        existingLead.followUp =
-          existingLead.followUp ??
-          {};
+        existingLead.followUp = existingLead.followUp ?? {};
 
-        existingLead.followUp.enabled =
-          false;
+        existingLead.followUp.enabled = false;
 
-        existingLead.followUp.nextFollowUpAt =
-          null;
+        existingLead.followUp.nextFollowUpAt = null;
       }
 
       await existingLead.save();
 
-      const aiMessage =
-        await Message.create({
-          leadId:
-            existingLead._id,
+      const aiMessage = await Message.create({
+        leadId: existingLead._id,
 
-          sender:
-            "ai",
+        sender: "ai",
 
-          content:
-            result.reply,
-        });
+        content: result.reply,
+      });
 
       return NextResponse.json({
         ...result,
 
-        leadId:
-          existingLead._id.toString(),
+        leadId: existingLead._id.toString(),
 
-        messageId:
-          aiMessage._id.toString(),
+        messageId: aiMessage._id.toString(),
       });
     }
 
@@ -409,11 +314,9 @@ export async function POST(
       return NextResponse.json({
         ...result,
 
-        leadId:
-          null,
+        leadId: null,
 
-        messageId:
-          null,
+        messageId: null,
       });
     }
 
@@ -421,45 +324,28 @@ export async function POST(
        RE-VALIDATE PHONE BEFORE CREATING REAL LEAD
        ===================================================== */
 
-    const verifiedPhone =
-      validatePhoneNumber(
-        result.lead.phone,
-        business.country ??
-        "US"
-      );
+    const verifiedPhone = validatePhoneNumber(result.lead.phone, business.country ?? "US");
 
-    if (
-      !verifiedPhone.valid ||
-      !verifiedPhone.normalized
-    ) {
-      return NextResponse.json(
-        {
-          ...result,
+    if (!verifiedPhone.valid || !verifiedPhone.normalized) {
+      return NextResponse.json({
+        ...result,
 
-          reply:
-            verifiedPhone.error ??
-            "Please enter a valid phone number.",
+        reply: verifiedPhone.error ?? "Please enter a valid phone number.",
 
-          lead: {
-            ...result.lead,
-            phone:
-              null,
-          },
+        lead: {
+          ...result.lead,
+          phone: null,
+        },
 
-          leadId:
-            null,
+        leadId: null,
 
-          messageId:
-            null,
+        messageId: null,
 
-          readyToBook:
-            false,
-        }
-      );
+        readyToBook: false,
+      });
     }
 
-    result.lead.phone =
-      verifiedPhone.normalized;
+    result.lead.phone = verifiedPhone.normalized;
 
     /* =====================================================
        PHONE CAPTURED
@@ -467,46 +353,27 @@ export async function POST(
        NOW this becomes a real Lead.
        ===================================================== */
 
-    const newLead =
-      await Lead.create({
-        businessId:
-          business._id,
+    const newLead = await Lead.create({
+      businessId: business._id,
 
-        industry:
-          result.lead.industry ??
-          business.industry,
+      industry: result.lead.industry ?? business.industry,
 
-        service:
-          result.lead.service ??
-          undefined,
+      service: result.lead.service ?? undefined,
 
-        location:
-          result.lead.location ??
-          undefined,
+      location: result.lead.location ?? undefined,
 
-        urgency:
-          result.lead.urgency ??
-          undefined,
+      urgency: result.lead.urgency ?? undefined,
 
-        timeline:
-          result.lead.timeline ??
-          undefined,
+      timeline: result.lead.timeline ?? undefined,
 
-        name:
-          result.lead.name ??
-          undefined,
+      name: result.lead.name ?? undefined,
 
-        phone:
-          result.lead.phone,
+      phone: result.lead.phone,
 
-        status:
-          result.readyToBook
-            ? "qualified"
-            : result.status,
+      status: result.readyToBook ? "qualified" : result.status,
 
-        source:
-          "public-lead-page",
-      });
+      source: "public-lead-page",
+    });
 
     /* =====================================================
        SCHEDULE FIRST FOLLOW-UP FOR NEW LEAD
@@ -517,23 +384,14 @@ export async function POST(
        follow-up #1 becomes due in 1 hour.
        ===================================================== */
 
-    if (
-      canFollowUp(
-        newLead.status,
-        newLead.phone
-      )
-    ) {
-      newLead.followUp.enabled =
-        true;
+    if (canFollowUp(newLead.status, newLead.phone)) {
+      newLead.followUp.enabled = true;
 
-      newLead.followUp.count =
-        0;
+      newLead.followUp.count = 0;
 
-      newLead.followUp.lastFollowUpAt =
-        null;
+      newLead.followUp.lastFollowUpAt = null;
 
-      newLead.followUp.nextFollowUpAt =
-        getNextFollowUpAt(0);
+      newLead.followUp.nextFollowUpAt = getNextFollowUpAt(0);
 
       await newLead.save();
     }
@@ -543,111 +401,74 @@ export async function POST(
        ===================================================== */
 
     try {
-      const {
-        sendNewLeadEmail,
-      } = await import(
-        "@/lib/email/send-new-lead-email"
-      );
+      const { sendNewLeadEmail } = await import("@/lib/email/send-new-lead-email");
 
       await sendNewLeadEmail({
-        businessEmail:
-          business.email,
+        businessEmail: business.email,
 
-        businessName:
-          business.name,
+        businessName: business.name,
 
-        leadId:
-          newLead._id.toString(),
+        leadId: newLead._id.toString(),
 
-        name:
-          result.lead.name,
+        name: result.lead.name,
 
-        phone:
-          result.lead.phone,
+        phone: result.lead.phone,
 
-        service:
-          result.lead.service,
+        service: result.lead.service,
 
-        location:
-          result.lead.location,
+        location: result.lead.location,
 
-        urgency:
-          result.lead.urgency,
+        urgency: result.lead.urgency,
 
-        timeline:
-          result.lead.timeline,
+        timeline: result.lead.timeline,
       });
     } catch (emailError) {
-      console.error(
-        "New lead email notification failed:",
-        emailError
-      );
+      console.error("New lead email notification failed:", emailError);
     }
 
     /* =====================================================
        SAVE ENTIRE ANONYMOUS CONVERSATION
        ===================================================== */
 
-    const conversationMessages =
-      body.messages.map(
-        (message) => ({
-          leadId:
-            newLead._id,
+    const conversationMessages = body.messages.map((message) => ({
+      leadId: newLead._id,
 
-          sender:
-            message.sender ===
-              "user"
-              ? "lead"
-              : "ai",
+      sender: message.sender === "user" ? "lead" : "ai",
 
-          content:
-            message.text,
-        })
-      );
+      content: message.text,
+    }));
 
-    await Message.insertMany(
-      conversationMessages
-    );
+    await Message.insertMany(conversationMessages);
 
     /* =====================================================
        SAVE CURRENT AI RESPONSE
        ===================================================== */
 
-    const aiMessage =
-      await Message.create({
-        leadId:
-          newLead._id,
+    const aiMessage = await Message.create({
+      leadId: newLead._id,
 
-        sender:
-          "ai",
+      sender: "ai",
 
-        content:
-          result.reply,
-      });
+      content: result.reply,
+    });
 
     return NextResponse.json({
       ...result,
 
-      leadId:
-        newLead._id.toString(),
+      leadId: newLead._id.toString(),
 
-      messageId:
-        aiMessage._id.toString(),
+      messageId: aiMessage._id.toString(),
     });
   } catch (error) {
-    console.error(
-      "Chat API error:",
-      error
-    );
+    console.error("Chat API error:", error);
 
     return NextResponse.json(
       {
-        error:
-          "Unable to generate AI response.",
+        error: "Unable to generate AI response.",
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

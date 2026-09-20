@@ -1,27 +1,21 @@
 "use client";
 
-import {
-  LogOut,
-} from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export function LogoutButton() {
   const router = useRouter();
 
-  const [loading, setLoading] =
-    useState(false);
+  const [loading, setLoading] = useState(false);
 
   async function logout() {
     try {
       setLoading(true);
 
-      await fetch(
-        "/api/auth/logout",
-        {
-          method: "POST",
-        }
-      );
+      await fetch("/api/auth/logout", {
+        method: "POST",
+      });
 
       router.push("/login");
       router.refresh();
@@ -38,9 +32,7 @@ export function LogoutButton() {
     >
       <LogOut size={18} />
 
-      {loading
-        ? "Signing out..."
-        : "Sign out"}
+      {loading ? "Signing out..." : "Sign out"}
     </button>
   );
 }

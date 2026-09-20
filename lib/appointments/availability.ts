@@ -24,71 +24,45 @@ export async function getAvailableAppointmentSlots({
   business,
   timeline,
   excludeAppointmentId = null,
-}: GetAvailableAppointmentSlotsParams): Promise<
-  GeneratedSlot[]
-> {
-  const availability =
-    business.availability;
+}: GetAvailableAppointmentSlotsParams): Promise<GeneratedSlot[]> {
+  const availability = business.availability;
 
-  if (
-    !availability ||
-    !availability.days?.length
-  ) {
+  if (!availability || !availability.days?.length) {
     return [];
   }
 
-  const timezone =
-    business.timezone ??
-    "America/Chicago";
+  const timezone = business.timezone ?? "America/Chicago";
 
-  const dates =
-    getDatesForTimeline(
-      timeline,
-      timezone
-    );
+  const dates = getDatesForTimeline(timeline, timezone);
 
-  const now =
-    new Date();
+  const now = new Date();
 
-  const slots: GeneratedSlot[] =
-    [];
+  const slots: GeneratedSlot[] = [];
 
   for (const localDate of dates) {
-    const dayName =
-      getDayName(localDate);
+    const dayName = getDayName(localDate);
 
-    const dayAvailability =
-      availability.days.find(
-        (
-          item: AvailabilityDay
-        ) =>
-          item.day === dayName
-      );
+    const dayAvailability = availability.days.find(
+      (item: AvailabilityDay) => item.day === dayName,
+    );
 
     if (!dayAvailability) {
       continue;
     }
 
-    const generatedSlots =
-      generateSlotsForDate(
-        localDate,
-        dayAvailability,
+    const generatedSlots = generateSlotsForDate(
+      localDate,
+      dayAvailability,
 
-        availability
-          .slotDurationMinutes ??
-          60,
+      availability.slotDurationMinutes ?? 60,
 
-        availability
-          .bufferMinutes ??
-          0,
+      availability.bufferMinutes ?? 0,
 
-        timezone,
-        now
-      );
-
-    slots.push(
-      ...generatedSlots
+      timezone,
+      now,
     );
+
+    slots.push(...generatedSlots);
   }
 
   if (slots.length === 0) {
@@ -96,59 +70,34 @@ export async function getAvailableAppointmentSlots({
   }
 
   const appointmentQuery: any = {
-    businessId:
-      business._id,
+    businessId: business._id,
 
     status: {
-      $in: [
-        "scheduled",
-        "confirmed",
-      ],
+      $in: ["scheduled", "confirmed"],
     },
 
     scheduledFor: {
-      $in:
-        slots.map(
-          (slot) =>
-            new Date(
-              slot.scheduledFor
-            )
-        ),
+      $in: slots.map((slot) => new Date(slot.scheduledFor)),
     },
   };
 
   if (excludeAppointmentId) {
     appointmentQuery._id = {
-      $ne:
-        excludeAppointmentId,
+      $ne: excludeAppointmentId,
     };
   }
 
-  const existingAppointments =
-    await Appointment.find(
-      appointmentQuery
-    )
-      .select(
-        "scheduledFor"
-      )
-      .lean();
+  const existingAppointments = await Appointment.find(appointmentQuery)
+    .select("scheduledFor")
+    .lean();
 
-  const bookedTimes =
-    new Set(
-      existingAppointments.map(
-        (appointment) =>
-          new Date(
-            appointment.scheduledFor
-          ).getTime()
-      )
-    );
+  const bookedTimes = new Set(
+    existingAppointments.map((appointment) =>
+      new Date(appointment.scheduledFor).getTime(),
+    ),
+  );
 
   return slots.filter(
-    (slot) =>
-      !bookedTimes.has(
-        new Date(
-          slot.scheduledFor
-        ).getTime()
-      )
+    (slot) => !bookedTimes.has(new Date(slot.scheduledFor).getTime()),
   );
 }

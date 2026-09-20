@@ -11,12 +11,7 @@ import {
 import { motion } from "motion/react";
 
 type IconName =
-  | "users"
-  | "flame"
-  | "calendar"
-  | "calendar-check"
-  | "check"
-  | "trend";
+  "users" | "flame" | "calendar" | "calendar-check" | "check" | "trend";
 
 type Props = {
   label: string;
@@ -34,12 +29,7 @@ const icons = {
   trend: TrendingUp,
 };
 
-export function StatCard({
-  label,
-  value,
-  description,
-  icon,
-}: Props) {
+export function StatCard({ label, value, description, icon }: Props) {
   const Icon = icons[icon];
 
   return (
@@ -64,9 +54,7 @@ export function StatCard({
 
       <div className="relative flex items-start justify-between">
         <div>
-          <p className="text-sm text-slate-500">
-            {label}
-          </p>
+          <p className="text-sm text-slate-500">{label}</p>
 
           <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-50">
             {value}
@@ -78,9 +66,7 @@ export function StatCard({
         </div>
       </div>
 
-      <p className="relative mt-4 text-xs text-slate-600">
-        {description}
-      </p>
+      <p className="relative mt-4 text-xs text-slate-600">{description}</p>
     </motion.div>
   );
 }

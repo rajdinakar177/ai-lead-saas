@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  CheckCircle2,
-  Clock3,
-  LoaderCircle,
-  Save,
-} from "lucide-react";
+import { CheckCircle2, Clock3, LoaderCircle, Save } from "lucide-react";
 import { useState } from "react";
 
 type AvailabilityDay =
@@ -79,39 +74,26 @@ const defaultDays: DayAvailability[] = [
   },
 ];
 
-export function AvailabilitySettingsForm({
-  initialAvailability,
-}: Props) {
+export function AvailabilitySettingsForm({ initialAvailability }: Props) {
   const [days, setDays] = useState<DayAvailability[]>(
-    initialAvailability?.days?.length
-      ? initialAvailability.days
-      : defaultDays
+    initialAvailability?.days?.length ? initialAvailability.days : defaultDays,
   );
 
-  const [
-    slotDurationMinutes,
-    setSlotDurationMinutes,
-  ] = useState(
-    initialAvailability?.slotDurationMinutes ?? 60
+  const [slotDurationMinutes, setSlotDurationMinutes] = useState(
+    initialAvailability?.slotDurationMinutes ?? 60,
   );
 
-  const [bufferMinutes, setBufferMinutes] =
-    useState(
-      initialAvailability?.bufferMinutes ?? 0
-    );
+  const [bufferMinutes, setBufferMinutes] = useState(
+    initialAvailability?.bufferMinutes ?? 0,
+  );
 
-  const [loading, setLoading] =
-    useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const [success, setSuccess] =
-    useState(false);
+  const [success, setSuccess] = useState(false);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  function toggleDay(
-    day: AvailabilityDay
-  ) {
+  function toggleDay(day: AvailabilityDay) {
     setDays((previous) =>
       previous.map((item) =>
         item.day === day
@@ -119,15 +101,15 @@ export function AvailabilitySettingsForm({
               ...item,
               enabled: !item.enabled,
             }
-          : item
-      )
+          : item,
+      ),
     );
   }
 
   function updateDayTime(
     day: AvailabilityDay,
     field: "startTime" | "endTime",
-    value: string
+    value: string,
   ) {
     setDays((previous) =>
       previous.map((item) =>
@@ -136,14 +118,12 @@ export function AvailabilitySettingsForm({
               ...item,
               [field]: value,
             }
-          : item
-      )
+          : item,
+      ),
     );
   }
 
-  async function handleSubmit(
-    event: React.FormEvent<HTMLFormElement>
-  ) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     try {
@@ -152,44 +132,35 @@ export function AvailabilitySettingsForm({
       setSuccess(false);
 
       const invalidDay = days.find(
-        (day) =>
-          day.enabled &&
-          day.startTime >= day.endTime
+        (day) => day.enabled && day.startTime >= day.endTime,
       );
 
       if (invalidDay) {
         throw new Error(
           `${formatDay(
-            invalidDay.day
-          )}: closing time must be after opening time.`
+            invalidDay.day,
+          )}: closing time must be after opening time.`,
         );
       }
 
-      const response = await fetch(
-        "/api/business/availability",
-        {
-          method: "PATCH",
+      const response = await fetch("/api/business/availability", {
+        method: "PATCH",
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-          body: JSON.stringify({
-            slotDurationMinutes,
-            bufferMinutes,
-            days,
-          }),
-        }
-      );
+        body: JSON.stringify({
+          slotDurationMinutes,
+          bufferMinutes,
+          days,
+        }),
+      });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Unable to save availability."
-        );
+        throw new Error(data.error || "Unable to save availability.");
       }
 
       setSuccess(true);
@@ -197,9 +168,7 @@ export function AvailabilitySettingsForm({
       console.error(error);
 
       setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to save availability."
+        error instanceof Error ? error.message : "Unable to save availability.",
       );
     } finally {
       setLoading(false);
@@ -217,13 +186,10 @@ export function AvailabilitySettingsForm({
         </div>
 
         <div>
-          <h2 className="font-semibold text-white">
-            Business Availability
-          </h2>
+          <h2 className="font-semibold text-white">Business Availability</h2>
 
           <p className="mt-1 text-sm leading-6 text-zinc-500">
-            Set your working hours and appointment
-            slot duration.
+            Set your working hours and appointment slot duration.
           </p>
         </div>
       </div>
@@ -237,7 +203,6 @@ export function AvailabilitySettingsForm({
       {success && (
         <div className="mt-6 flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-400">
           <CheckCircle2 size={17} />
-
           Availability updated.
         </div>
       )}
@@ -256,20 +221,14 @@ export function AvailabilitySettingsForm({
 
             <button
               type="button"
-              onClick={() =>
-                toggleDay(item.day)
-              }
+              onClick={() => toggleDay(item.day)}
               className={`relative h-7 w-12 rounded-full transition ${
-                item.enabled
-                  ? "bg-blue-500"
-                  : "bg-zinc-800"
+                item.enabled ? "bg-blue-500" : "bg-zinc-800"
               }`}
             >
               <span
                 className={`absolute top-1 h-5 w-5 rounded-full bg-white transition ${
-                  item.enabled
-                    ? "left-6"
-                    : "left-1"
+                  item.enabled ? "left-6" : "left-1"
                 }`}
               />
             </button>
@@ -285,11 +244,7 @@ export function AvailabilitySettingsForm({
                     type="time"
                     value={item.startTime}
                     onChange={(event) =>
-                      updateDayTime(
-                        item.day,
-                        "startTime",
-                        event.target.value
-                      )
+                      updateDayTime(item.day, "startTime", event.target.value)
                     }
                     className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500/50"
                   />
@@ -304,20 +259,14 @@ export function AvailabilitySettingsForm({
                     type="time"
                     value={item.endTime}
                     onChange={(event) =>
-                      updateDayTime(
-                        item.day,
-                        "endTime",
-                        event.target.value
-                      )
+                      updateDayTime(item.day, "endTime", event.target.value)
                     }
                     className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500/50"
                   />
                 </div>
               </>
             ) : (
-              <div className="text-sm text-zinc-600 sm:col-span-2">
-                Closed
-              </div>
+              <div className="text-sm text-zinc-600 sm:col-span-2">Closed</div>
             )}
           </div>
         ))}
@@ -327,43 +276,28 @@ export function AvailabilitySettingsForm({
 
       <div className="mt-8 grid gap-5 sm:grid-cols-2">
         <div>
-          <label className="text-sm text-zinc-400">
-            Appointment Duration
-          </label>
+          <label className="text-sm text-zinc-400">Appointment Duration</label>
 
           <select
             value={slotDurationMinutes}
             onChange={(event) =>
-              setSlotDurationMinutes(
-                Number(event.target.value)
-              )
+              setSlotDurationMinutes(Number(event.target.value))
             }
             className="mt-2 w-full rounded-xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500/50"
           >
-            <option value={30}>
-              30 minutes
-            </option>
+            <option value={30}>30 minutes</option>
 
-            <option value={45}>
-              45 minutes
-            </option>
+            <option value={45}>45 minutes</option>
 
-            <option value={60}>
-              60 minutes
-            </option>
+            <option value={60}>60 minutes</option>
 
-            <option value={90}>
-              90 minutes
-            </option>
+            <option value={90}>90 minutes</option>
 
-            <option value={120}>
-              2 hours
-            </option>
+            <option value={120}>2 hours</option>
           </select>
 
           <p className="mt-2 text-xs leading-5 text-zinc-700">
-            How long each customer appointment
-            should last.
+            How long each customer appointment should last.
           </p>
         </div>
 
@@ -374,37 +308,22 @@ export function AvailabilitySettingsForm({
 
           <select
             value={bufferMinutes}
-            onChange={(event) =>
-              setBufferMinutes(
-                Number(event.target.value)
-              )
-            }
+            onChange={(event) => setBufferMinutes(Number(event.target.value))}
             className="mt-2 w-full rounded-xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm text-white outline-none focus:border-blue-500/50"
           >
-            <option value={0}>
-              No buffer
-            </option>
+            <option value={0}>No buffer</option>
 
-            <option value={15}>
-              15 minutes
-            </option>
+            <option value={15}>15 minutes</option>
 
-            <option value={30}>
-              30 minutes
-            </option>
+            <option value={30}>30 minutes</option>
 
-            <option value={45}>
-              45 minutes
-            </option>
+            <option value={45}>45 minutes</option>
 
-            <option value={60}>
-              60 minutes
-            </option>
+            <option value={60}>60 minutes</option>
           </select>
 
           <p className="mt-2 text-xs leading-5 text-zinc-700">
-            Extra time for travel, preparation, or
-            cleanup.
+            Extra time for travel, preparation, or cleanup.
           </p>
         </div>
       </div>
@@ -419,17 +338,12 @@ export function AvailabilitySettingsForm({
         >
           {loading ? (
             <>
-              <LoaderCircle
-                size={17}
-                className="animate-spin"
-              />
-
+              <LoaderCircle size={17} className="animate-spin" />
               Saving...
             </>
           ) : (
             <>
               <Save size={17} />
-
               Save Availability
             </>
           )}
@@ -439,11 +353,6 @@ export function AvailabilitySettingsForm({
   );
 }
 
-function formatDay(
-  day: AvailabilityDay
-) {
-  return (
-    day.charAt(0).toUpperCase() +
-    day.slice(1)
-  );
+function formatDay(day: AvailabilityDay) {
+  return day.charAt(0).toUpperCase() + day.slice(1);
 }

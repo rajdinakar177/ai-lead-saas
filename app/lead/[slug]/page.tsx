@@ -1,7 +1,4 @@
-import {
-  Building2,
-  ShieldCheck,
-} from "lucide-react";
+import { Building2, ShieldCheck } from "lucide-react";
 import { notFound } from "next/navigation";
 
 import { connectDB } from "@/lib/mongodb";
@@ -16,18 +13,15 @@ type PageProps = {
   }>;
 };
 
-export default async function PublicLeadPage({
-  params,
-}: PageProps) {
+export default async function PublicLeadPage({ params }: PageProps) {
   const { slug } = await params;
 
   await connectDB();
 
-  const business =
-    await Business.findOne({
-      slug: slug.toLowerCase(),
-      emailVerified: true,
-    }).lean();
+  const business = await Business.findOne({
+    slug: slug.toLowerCase(),
+    emailVerified: true,
+  }).lean();
 
   if (!business) {
     notFound();
@@ -45,13 +39,9 @@ export default async function PublicLeadPage({
                 </div>
 
                 <div>
-                  <h1 className="text-xl font-semibold text-white">
-                    {business.name}
-                  </h1>
+                  <h1 className="text-xl font-semibold text-white">{business.name}</h1>
 
-                  <p className="mt-1 text-sm text-zinc-500">
-                    {business.industry}
-                  </p>
+                  <p className="mt-1 text-sm text-zinc-500">{business.industry}</p>
                 </div>
               </div>
 
@@ -60,26 +50,19 @@ export default async function PublicLeadPage({
               </h2>
 
               <p className="mt-3 max-w-2xl text-zinc-500">
-                Tell us what you need and our assistant will help gather the
-                details and find the next step.
+                Tell us what you need and our assistant will help gather the details and find the
+                next step.
               </p>
             </div>
 
             <div className="flex items-center gap-2 text-xs text-zinc-600">
-              <ShieldCheck
-                size={15}
-                className="text-emerald-400"
-              />
-
+              <ShieldCheck size={15} className="text-emerald-400" />
               Secure lead intake
             </div>
           </div>
         </div>
 
-        <DemoChat
-          businessSlug={business.slug}
-          businessName={business.name}
-        />
+        <DemoChat businessSlug={business.slug} businessName={business.name} />
       </div>
     </main>
   );

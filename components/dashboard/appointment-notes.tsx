@@ -1,45 +1,26 @@
 "use client";
 
-import {
-  useState,
-} from "react";
+import { useState } from "react";
 
-import {
-  Check,
-  Loader2,
-  Pencil,
-  Save,
-  X,
-} from "lucide-react";
+import { Check, Loader2, Pencil, Save, X } from "lucide-react";
 
 type Props = {
   appointmentId: string;
   initialNotes?: string;
 };
 
-export function AppointmentNotes({
-  appointmentId,
-  initialNotes = "",
-}: Props) {
-  const [notes, setNotes] =
-    useState(initialNotes);
+export function AppointmentNotes({ appointmentId, initialNotes = "" }: Props) {
+  const [notes, setNotes] = useState(initialNotes);
 
-  const [savedNotes, setSavedNotes] =
-    useState(initialNotes);
+  const [savedNotes, setSavedNotes] = useState(initialNotes);
 
-  const [editing, setEditing] =
-    useState(false);
+  const [editing, setEditing] = useState(false);
 
-  const [saving, setSaving] =
-    useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const [saved, setSaved] =
-    useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const [error, setError] =
-    useState<string | null>(
-      null
-    );
+  const [error, setError] = useState<string | null>(null);
 
   async function saveNotes() {
     if (saving) {
@@ -51,40 +32,28 @@ export function AppointmentNotes({
     setSaved(false);
 
     try {
-      const response =
-        await fetch(
-          `/api/appointments/${appointmentId}`,
-          {
-            method: "PATCH",
+      const response = await fetch(`/api/appointments/${appointmentId}`, {
+        method: "PATCH",
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-            body: JSON.stringify({
-              notes,
-            }),
-          }
-        );
+        body: JSON.stringify({
+          notes,
+        }),
+      });
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Unable to save notes."
-        );
+        throw new Error(data.error || "Unable to save notes.");
       }
 
-      const updatedNotes =
-        data.notes ?? "";
+      const updatedNotes = data.notes ?? "";
 
       setNotes(updatedNotes);
-      setSavedNotes(
-        updatedNotes
-      );
+      setSavedNotes(updatedNotes);
 
       setEditing(false);
       setSaved(true);
@@ -94,9 +63,7 @@ export function AppointmentNotes({
       }, 2000);
     } catch (error) {
       setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to save notes."
+        error instanceof Error ? error.message : "Unable to save notes.",
       );
     } finally {
       setSaving(false);
@@ -114,24 +81,19 @@ export function AppointmentNotes({
       <div>
         <div className="rounded-xl border border-white/10 bg-black/20 p-4">
           <p className="whitespace-pre-wrap text-sm leading-6 text-zinc-400">
-            {savedNotes ||
-              "No notes have been added yet."}
+            {savedNotes || "No notes have been added yet."}
           </p>
         </div>
 
         <div className="mt-4 flex items-center gap-3">
           <button
             type="button"
-            onClick={() =>
-              setEditing(true)
-            }
+            onClick={() => setEditing(true)}
             className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-zinc-400 transition hover:border-blue-500/30 hover:bg-blue-500/5 hover:text-blue-400"
           >
             <Pencil size={14} />
 
-            {savedNotes
-              ? "Edit Notes"
-              : "Add Notes"}
+            {savedNotes ? "Edit Notes" : "Add Notes"}
           </button>
 
           {saved && (
@@ -149,11 +111,7 @@ export function AppointmentNotes({
     <div>
       <textarea
         value={notes}
-        onChange={(event) =>
-          setNotes(
-            event.target.value
-          )
-        }
+        onChange={(event) => setNotes(event.target.value)}
         maxLength={2000}
         rows={6}
         placeholder="Add notes about this appointment..."
@@ -164,11 +122,7 @@ export function AppointmentNotes({
         {notes.length}/2000
       </div>
 
-      {error && (
-        <p className="mt-2 text-sm text-red-400">
-          {error}
-        </p>
-      )}
+      {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
 
       <div className="mt-4 flex gap-2">
         <button
@@ -178,25 +132,18 @@ export function AppointmentNotes({
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-xs font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? (
-            <Loader2
-              size={14}
-              className="animate-spin"
-            />
+            <Loader2 size={14} className="animate-spin" />
           ) : (
             <Save size={14} />
           )}
 
-          {saving
-            ? "Saving..."
-            : "Save Notes"}
+          {saving ? "Saving..." : "Save Notes"}
         </button>
 
         <button
           type="button"
           disabled={saving}
-          onClick={
-            cancelEditing
-          }
+          onClick={cancelEditing}
           className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-zinc-400 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
         >
           <X size={14} />

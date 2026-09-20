@@ -26,16 +26,15 @@ export async function sendAppointmentCancelledEmail({
   location,
   appointmentLabel,
 }: SendAppointmentCancelledEmailParams) {
-  const email =
-    generateAppointmentCancelledEmail({
-      businessName,
-      appointmentId,
-      name,
-      phone,
-      service,
-      location,
-      appointmentLabel,
-    });
+  const email = generateAppointmentCancelledEmail({
+    businessName,
+    appointmentId,
+    name,
+    phone,
+    service,
+    location,
+    appointmentLabel,
+  });
 
   return sendEmail({
     toEmail: businessEmail,

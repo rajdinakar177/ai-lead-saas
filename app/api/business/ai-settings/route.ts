@@ -3,12 +3,8 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireBusiness } from "@/lib/auth";
 import { Business } from "@/models/Business";
-
-const allowedTones = [
-  "friendly",
-  "professional",
-  "casual",
-] as const;
+import { validateRequestOrigin } from "@/lib/security/origin-protection";
+const allowedTones = ["friendly", "professional", "casual"] as const;
 
 const allowedQualificationFields = [
   "name",
@@ -18,12 +14,16 @@ const allowedQualificationFields = [
   "urgency",
   "timeline",
 ] as const;
+const MAX_BUSINESS_DESCRIPTION_LENGTH = 2000;
+const MAX_WELCOME_MESSAGE_LENGTH = 500;
+const MAX_ADDITIONAL_INSTRUCTIONS_LENGTH = 3000;
 
-type Tone =
-  (typeof allowedTones)[number];
+const MAX_SERVICES = 50;
+const MAX_SERVICE_AREAS = 100;
+const MAX_ARRAY_ITEM_LENGTH = 100;
+type Tone = (typeof allowedTones)[number];
 
-type QualificationField =
-  (typeof allowedQualificationFields)[number];
+type QualificationField = (typeof allowedQualificationFields)[number];
 
 type RequestBody = {
   businessDescription?: string;
@@ -35,127 +35,147 @@ type RequestBody = {
   additionalInstructions?: string;
 };
 
-export async function PATCH(
-  request: Request
-) {
+export async function PATCH(request: Request) {
   try {
-    const business =
-      await requireBusiness();
+    const originError = validateRequestOrigin(request);
 
-    const body: RequestBody =
-      await request.json();
+    if (originError) {
+      return originError;
+    }
+    const business = await requireBusiness();
 
-    await connectDB();
+    const body: RequestBody = await request.json();
+    const businessDescription = body.businessDescription?.trim() ?? "";
 
-    const tone =
-      allowedTones.includes(
-        body.tone as Tone
-      )
-        ? body.tone
-        : "friendly";
+    const welcomeMessage = body.welcomeMessage?.trim() ?? "";
 
-    const qualificationFields =
-      Array.isArray(
-        body.qualificationFields
-      )
-        ? body.qualificationFields.filter(
-          (
-            field
-          ): field is QualificationField =>
-            allowedQualificationFields.includes(
-              field as QualificationField
-            )
-        )
-        : [];
+    const additionalInstructions = body.additionalInstructions?.trim() ?? "";
 
-    const services =
-      cleanStringArray(
-        body.services
-      );
-
-    const serviceAreas =
-      cleanStringArray(
-        body.serviceAreas
-      );
-
-    const updatedBusiness =
-      await Business.findByIdAndUpdate(
-        business._id,
+    if (businessDescription.length > MAX_BUSINESS_DESCRIPTION_LENGTH) {
+      return NextResponse.json(
         {
-          $set: {
-            "aiSettings.businessDescription":
-              body.businessDescription?.trim() ??
-              "",
-
-            "aiSettings.services":
-              services,
-
-            "aiSettings.serviceAreas":
-              serviceAreas,
-
-            "aiSettings.welcomeMessage":
-              body.welcomeMessage?.trim() ??
-              "",
-
-            "aiSettings.tone":
-              tone,
-
-            "aiSettings.qualificationFields":
-              qualificationFields,
-
-            "aiSettings.additionalInstructions":
-              body.additionalInstructions?.trim() ??
-              "",
-          },
+          error: "Business description cannot exceed 2000 characters.",
         },
         {
-          new: true,
-          runValidators: true,
-        }
+          status: 400,
+        },
       );
+    }
+
+    if (welcomeMessage.length > MAX_WELCOME_MESSAGE_LENGTH) {
+      return NextResponse.json(
+        {
+          error: "Welcome message cannot exceed 500 characters.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    if (additionalInstructions.length > MAX_ADDITIONAL_INSTRUCTIONS_LENGTH) {
+      return NextResponse.json(
+        {
+          error: "Additional instructions cannot exceed 3000 characters.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    if (Array.isArray(body.services) && body.services.length > MAX_SERVICES) {
+      return NextResponse.json(
+        {
+          error: "You can configure up to 50 services.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    if (Array.isArray(body.serviceAreas) && body.serviceAreas.length > MAX_SERVICE_AREAS) {
+      return NextResponse.json(
+        {
+          error: "You can configure up to 100 service areas.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+    await connectDB();
+
+    const tone = allowedTones.includes(body.tone as Tone) ? body.tone : "friendly";
+
+    const qualificationFields = Array.isArray(body.qualificationFields)
+      ? body.qualificationFields.filter((field): field is QualificationField =>
+          allowedQualificationFields.includes(field as QualificationField),
+        )
+      : [];
+
+    const services = cleanStringArray(body.services, MAX_ARRAY_ITEM_LENGTH);
+
+    const serviceAreas = cleanStringArray(body.serviceAreas, MAX_ARRAY_ITEM_LENGTH);
+
+    const updatedBusiness = await Business.findByIdAndUpdate(
+      business._id,
+      {
+        $set: {
+          "aiSettings.businessDescription": businessDescription,
+
+          "aiSettings.services": services,
+
+          "aiSettings.serviceAreas": serviceAreas,
+
+          "aiSettings.welcomeMessage": welcomeMessage,
+          "aiSettings.tone": tone,
+
+          "aiSettings.qualificationFields": qualificationFields,
+
+          "aiSettings.additionalInstructions": additionalInstructions,
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
 
     if (!updatedBusiness) {
       return NextResponse.json(
         {
-          error:
-            "Business not found.",
+          error: "Business not found.",
         },
         {
           status: 404,
-        }
+        },
       );
     }
 
     return NextResponse.json({
       success: true,
 
-      message:
-        "AI settings saved successfully.",
+      message: "AI settings saved successfully.",
 
-      aiSettings:
-        updatedBusiness.aiSettings,
+      aiSettings: updatedBusiness.aiSettings,
     });
   } catch (error) {
-    console.error(
-      "Update AI settings error:",
-      error
-    );
+    console.error("Update AI settings error:", error);
 
     return NextResponse.json(
       {
-        error:
-          "Unable to save AI settings.",
+        error: "Unable to save AI settings.",
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }
 
-function cleanStringArray(
-  values?: string[]
-) {
+function cleanStringArray(values: string[] | undefined, maxItemLength: number) {
   if (!Array.isArray(values)) {
     return [];
   }
@@ -163,10 +183,9 @@ function cleanStringArray(
   return [
     ...new Set(
       values
-        .map((value) =>
-          value.trim()
-        )
-        .filter(Boolean)
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0 && value.length <= maxItemLength),
     ),
   ];
 }

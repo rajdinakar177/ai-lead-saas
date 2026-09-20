@@ -30,24 +30,12 @@ body {
   margin: 0;
 
   background:
-    radial-gradient(
-      circle at 20% 0%,
-      rgba(79, 140, 255, 0.08),
-      transparent 35%
-    ),
-    radial-gradient(
-      circle at 85% 15%,
-      rgba(34, 211, 238, 0.05),
-      transparent 30%
-    ),
-    var(--background);
+    radial-gradient(circle at 20% 0%, rgba(79, 140, 255, 0.08), transparent 35%),
+    radial-gradient(circle at 85% 15%, rgba(34, 211, 238, 0.05), transparent 30%), var(--background);
 
   color: var(--foreground);
 
-  font-family:
-    Arial,
-    Helvetica,
-    sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
 
   min-height: 100vh;
 }
@@ -61,31 +49,18 @@ a {
 }
 
 .glass-card {
-  background:
-    linear-gradient(
-      180deg,
-      rgba(255, 255, 255, 0.045),
-      rgba(255, 255, 255, 0.018)
-    );
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018));
 
-  border:
-    1px solid
-    rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 
-  box-shadow:
-    0 20px 70px
-    rgba(0, 0, 0, 0.28);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.28);
 
-  backdrop-filter:
-    blur(20px);
+  backdrop-filter: blur(20px);
 }
 
 .blue-glow {
-  box-shadow:
-    0 0 60px
-    rgba(79, 140, 255, 0.14);
+  box-shadow: 0 0 60px rgba(79, 140, 255, 0.14);
 }
-
 
 /* ========================================
    LeadFlowAI Appointment Calendar
@@ -235,8 +210,7 @@ a {
   /*
    * Day headings.
    */
-  .appointments-calendar
-    .fc-col-header-cell-cushion {
+  .appointments-calendar .fc-col-header-cell-cushion {
     padding: 8px 2px;
     font-size: 0.68rem;
   }
@@ -244,8 +218,7 @@ a {
   /*
    * Day numbers.
    */
-  .appointments-calendar
-    .fc-daygrid-day-number {
+  .appointments-calendar .fc-daygrid-day-number {
     padding: 5px;
     font-size: 0.7rem;
   }
@@ -260,8 +233,7 @@ a {
     font-size: 0.65rem;
   }
 
-  .appointments-calendar
-    .fc-daygrid-event {
+  .appointments-calendar .fc-daygrid-event {
     margin-left: 1px;
     margin-right: 1px;
   }
@@ -270,14 +242,12 @@ a {
    * Prevent event text from forcing
    * the calendar wider than the screen.
    */
-  .appointments-calendar
-    .fc-event-main {
+  .appointments-calendar .fc-event-main {
     min-width: 0;
     overflow: hidden;
   }
 
-  .appointments-calendar
-    .fc-event-title {
+  .appointments-calendar .fc-event-title {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -288,10 +258,8 @@ a {
    * inside the available dashboard width.
    */
   .appointments-calendar .fc,
-  .appointments-calendar
-    .fc-view-harness,
-  .appointments-calendar
-    .fc-scrollgrid {
+  .appointments-calendar .fc-view-harness,
+  .appointments-calendar .fc-scrollgrid {
     max-width: 100%;
   }
 }
@@ -306,15 +274,11 @@ a {
    * Hide the long appointment title and
    * keep only the appointment time.
    */
-  .appointments-calendar
-    .fc-dayGridMonth-view
-    .fc-event-title {
+  .appointments-calendar .fc-dayGridMonth-view .fc-event-title {
     display: none;
   }
 
-  .appointments-calendar
-    .fc-dayGridMonth-view
-    .fc-event-time {
+  .appointments-calendar .fc-dayGridMonth-view .fc-event-time {
     display: block;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -324,9 +288,7 @@ a {
     font-weight: 600;
   }
 
-  .appointments-calendar
-    .fc-dayGridMonth-view
-    .fc-daygrid-event {
+  .appointments-calendar .fc-dayGridMonth-view .fc-daygrid-event {
     min-width: 0;
     margin: 1px;
     padding: 2px;
@@ -336,12 +298,8 @@ a {
    * Keep fuller appointment information
    * available in Week and Day views.
    */
-  .appointments-calendar
-    .fc-timeGridWeek-view
-    .fc-event-title,
-  .appointments-calendar
-    .fc-timeGridDay-view
-    .fc-event-title {
+  .appointments-calendar .fc-timeGridWeek-view .fc-event-title,
+  .appointments-calendar .fc-timeGridDay-view .fc-event-title {
     white-space: normal;
   }
 }

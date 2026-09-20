@@ -22,17 +22,16 @@ export async function assertSmsConversationOwnership({
   ownerToken: string;
   fenceToken: number;
 }) {
-  const ownsLock =
-    await checkSmsConversationLock({
-      businessId,
-      phone,
-      ownerToken,
-      fenceToken,
-    });
+  const ownsLock = await checkSmsConversationLock({
+    businessId,
+    phone,
+    ownerToken,
+    fenceToken,
+  });
 
   if (!ownsLock) {
     throw new Error(
-      "SMS conversation lock ownership was lost before side effect."
+      "SMS conversation lock ownership was lost before side effect.",
     );
   }
 }

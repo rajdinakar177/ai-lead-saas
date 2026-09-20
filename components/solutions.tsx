@@ -35,8 +35,8 @@ export function Solutions() {
           </h2>
 
           <p className="mx-auto mt-5 max-w-2xl text-lg text-zinc-400">
-            Give every potential customer an immediate response, no matter
-            when they contact you.
+            Give every potential customer an immediate response, no matter when
+            they contact you.
           </p>
         </div>
 

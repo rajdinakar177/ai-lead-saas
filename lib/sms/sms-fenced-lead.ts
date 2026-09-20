@@ -46,21 +46,17 @@ type FencedLeadFindOneAndUpdateParams = {
  * $exists:false is included for old Lead documents created
  * before smsFenceToken was added to the schema.
  */
-export function buildSmsFenceFilter(
-  fenceToken: number
-) {
+export function buildSmsFenceFilter(fenceToken: number) {
   return {
     $or: [
       {
         smsFenceToken: {
-          $lte:
-            fenceToken,
+          $lte: fenceToken,
         },
       },
       {
         smsFenceToken: {
-          $exists:
-            false,
+          $exists: false,
         },
       },
     ],
@@ -83,55 +79,41 @@ export async function updateLeadWithSmsFence({
   unset = {},
   session = null,
 }: FencedLeadUpdateParams) {
-  const update: Record<
-    string,
-    unknown
-  > = {
+  const update: Record<string, unknown> = {
     $set: {
       ...set,
 
-      smsFenceToken:
-        fenceToken,
+      smsFenceToken: fenceToken,
     },
   };
 
-  if (
-    Object.keys(
-      unset
-    ).length > 0
-  ) {
-    update.$unset =
-      unset;
+  if (Object.keys(unset).length > 0) {
+    update.$unset = unset;
   }
 
-  const lead =
-    await Lead.findOneAndUpdate(
-      {
-        _id:
-          leadId,
+  const lead = await Lead.findOneAndUpdate(
+    {
+      _id: leadId,
 
-        businessId,
+      businessId,
 
-        phone,
+      phone,
 
-        ...buildSmsFenceFilter(
-          fenceToken
-        ),
-      },
+      ...buildSmsFenceFilter(fenceToken),
+    },
 
-      update,
+    update,
 
-      {
-        returnDocument:
-          "after",
+    {
+      returnDocument: "after",
 
-        ...(session
-          ? {
-              session,
-            }
-          : {}),
-      }
-    );
+      ...(session
+        ? {
+            session,
+          }
+        : {}),
+    },
+  );
 
   return lead;
 }
@@ -152,50 +134,37 @@ export async function findOneAndUpdateLeadWithSmsFence({
   unset = {},
   session = null,
 }: FencedLeadFindOneAndUpdateParams) {
-  const update: Record<
-    string,
-    unknown
-  > = {
+  const update: Record<string, unknown> = {
     $set: {
       ...set,
 
-      smsFenceToken:
-        fenceToken,
+      smsFenceToken: fenceToken,
     },
   };
 
-  if (
-    Object.keys(
-      unset
-    ).length > 0
-  ) {
-    update.$unset =
-      unset;
+  if (Object.keys(unset).length > 0) {
+    update.$unset = unset;
   }
 
-  const lead =
-    await Lead.findOneAndUpdate(
-      {
-        ...filter,
+  const lead = await Lead.findOneAndUpdate(
+    {
+      ...filter,
 
-        ...buildSmsFenceFilter(
-          fenceToken
-        ),
-      },
+      ...buildSmsFenceFilter(fenceToken),
+    },
 
-      update,
+    update,
 
-      {
-        returnDocument:
-          "after",
+    {
+      returnDocument: "after",
 
-        ...(session
-          ? {
-              session,
-            }
-          : {}),
-      }
-    );
+      ...(session
+        ? {
+            session,
+          }
+        : {}),
+    },
+  );
 
   return lead;
 }

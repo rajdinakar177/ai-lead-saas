@@ -25,16 +25,15 @@ export async function sendAppointmentBookedEmail({
   location,
   appointmentLabel,
 }: SendAppointmentBookedEmailParams) {
-  const email =
-    generateAppointmentBookedEmail({
-      businessName,
-      appointmentId,
-      name,
-      phone,
-      service,
-      location,
-      appointmentLabel,
-    });
+  const email = generateAppointmentBookedEmail({
+    businessName,
+    appointmentId,
+    name,
+    phone,
+    service,
+    location,
+    appointmentLabel,
+  });
 
   return sendEmail({
     toEmail: businessEmail,

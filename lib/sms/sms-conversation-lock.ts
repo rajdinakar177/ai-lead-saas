@@ -65,9 +65,7 @@ export async function acquireSmsConversationLock({
   while (Date.now() <= deadline) {
     const now = new Date();
 
-    const expiresAt = new Date(
-      now.getTime() + leaseMs
-    );
+    const expiresAt = new Date(now.getTime() + leaseMs);
 
     try {
       /*
@@ -79,57 +77,51 @@ export async function acquireSmsConversationLock({
        * Every successful NEW acquisition increments
        * fenceToken.
        */
-      const lock =
-        await SmsConversationLock.findOneAndUpdate(
-          {
+      const lock = await SmsConversationLock.findOneAndUpdate(
+        {
+          businessId,
+          phone,
+
+          $or: [
+            {
+              expiresAt: {
+                $lte: now,
+              },
+            },
+            {
+              ownerToken: null,
+            },
+          ],
+        },
+        {
+          $set: {
+            ownerToken,
+            expiresAt,
+            lastRenewedAt: now,
+          },
+
+          $inc: {
+            fenceToken: 1,
+          },
+
+          $setOnInsert: {
             businessId,
             phone,
-
-            $or: [
-              {
-                expiresAt: {
-                  $lte: now,
-                },
-              },
-              {
-                ownerToken: null,
-              },
-            ],
           },
-          {
-            $set: {
-              ownerToken,
-              expiresAt,
-              lastRenewedAt: now,
-            },
+        },
+        {
+          upsert: true,
+          returnDocument: "after",
+        },
+      ).lean();
 
-            $inc: {
-              fenceToken: 1,
-            },
-
-            $setOnInsert: {
-              businessId,
-              phone,
-            },
-          },
-          {
-            upsert: true,
-            returnDocument: "after",
-          }
-        ).lean();
-
-      if (
-        lock &&
-        lock.ownerToken === ownerToken
-      ) {
+      if (lock && lock.ownerToken === ownerToken) {
         return {
           ownerToken,
 
-          fenceToken:
-            lock.fenceToken,
+          fenceToken: lock.fenceToken,
 
-          expiresAt:
-            lock.expiresAt,
+          expiresAt: lock.expiresAt,
         };
       }
     } catch (error) {
@@ -167,39 +159,36 @@ export async function renewSmsConversationLock({
 }: RenewSmsConversationLockParams) {
   const now = new Date();
 
-  const expiresAt = new Date(
-    now.getTime() + leaseMs
-  );
+  const expiresAt = new Date(now.getTime() + leaseMs);
 
-  const lock =
-    await SmsConversationLock.findOneAndUpdate(
-      {
-        businessId,
-        phone,
-        ownerToken,
-        fenceToken,
+  const lock = await SmsConversationLock.findOneAndUpdate(
+    {
+      businessId,
+      phone,
+      ownerToken,
+      fenceToken,
 
-        /*
-         * Do not allow a worker to renew a lease that
-         * already expired.
-         *
-         * Once expired, ownership must be reacquired and
-         * receive a newer fenceToken.
-         */
-        expiresAt: {
-          $gt: now,
-        },
+      /*
+       * Do not allow a worker to renew a lease that
+       * already expired.
+       *
+       * Once expired, ownership must be reacquired and
+       * receive a newer fenceToken.
+       */
+      expiresAt: {
+        $gt: now,
       },
-      {
-        $set: {
-          expiresAt,
-          lastRenewedAt: now,
-        },
+    },
+    {
+      $set: {
+        expiresAt,
+        lastRenewedAt: now,
       },
-      {
-        returnDocument: "after",
-      }
-    ).lean();
+    },
+    {
+      returnDocument: "after",
+    },
+  ).lean();
 
   if (!lock) {
     return null;
@@ -208,8 +197,7 @@ export async function renewSmsConversationLock({
   return {
     ownerToken,
     fenceToken,
-    expiresAt:
-      lock.expiresAt,
+    expiresAt: lock.expiresAt,
   };
 }
 
@@ -225,21 +213,18 @@ export async function checkSmsConversationLock({
 }: CheckSmsConversationLockParams) {
   const now = new Date();
 
-  const lock =
-    await SmsConversationLock.findOne({
-      businessId,
-      phone,
-      ownerToken,
-      fenceToken,
+  const lock = await SmsConversationLock.findOne({
+    businessId,
+    phone,
+    ownerToken,
+    fenceToken,
 
-      expiresAt: {
-        $gt: now,
-      },
-    })
-      .select(
-        "_id ownerToken fenceToken expiresAt"
-      )
-      .lean();
+    expiresAt: {
+      $gt: now,
+    },
+  })
+    .select("_id ownerToken fenceToken expiresAt")
+    .lean();
 
   return Boolean(lock);
 }
@@ -262,22 +247,21 @@ export async function releaseSmsConversationLock({
    * We only clear ownership if this exact owner still
    * owns this exact fence generation.
    */
-  const result =
-    await SmsConversationLock.updateOne(
-      {
-        businessId,
-        phone,
-        ownerToken,
-        fenceToken,
+  const result = await SmsConversationLock.updateOne(
+    {
+      businessId,
+      phone,
+      ownerToken,
+      fenceToken,
+    },
+    {
+      $set: {
+        ownerToken: null,
+        expiresAt: new Date(0),
+        lastRenewedAt: null,
       },
-      {
-        $set: {
-          ownerToken: null,
-          expiresAt: new Date(0),
-          lastRenewedAt: null,
-        },
-      }
-    );
+    },
+  );
 
   return result.modifiedCount === 1;
 }

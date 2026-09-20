@@ -8,9 +8,7 @@ type SmsLockHeartbeatParams = {
   leaseMs: number;
   renewEveryMs: number;
 
-  onLockLost: (
-    error: unknown
-  ) => void;
+  onLockLost: (error: unknown) => void;
 };
 
 export function createSmsLockHeartbeat({
@@ -24,114 +22,81 @@ export function createSmsLockHeartbeat({
 }: SmsLockHeartbeatParams) {
   let stopped = false;
 
-  let timer:
-    ReturnType<typeof setTimeout> | null =
-    null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
 
-  let renewalInFlight:
-    Promise<void> | null =
-    null;
+  let renewalInFlight: Promise<void> | null = null;
 
   let lockLost = false;
 
   function schedule() {
-    if (
-      stopped ||
-      lockLost
-    ) {
+    if (stopped || lockLost) {
       return;
     }
 
     timer = setTimeout(() => {
-      renewalInFlight =
-        (async () => {
-          try {
-            const renewed =
-              await renewSmsConversationLock({
-                businessId,
-                phone,
-                ownerToken,
-                fenceToken,
-                leaseMs,
-              });
+      renewalInFlight = (async () => {
+        try {
+          const renewed = await renewSmsConversationLock({
+            businessId,
+            phone,
+            ownerToken,
+            fenceToken,
+            leaseMs,
+          });
 
-            if (!renewed) {
-              lockLost = true;
-
-              const error =
-                new Error(
-                  "SMS conversation lock ownership was lost."
-                );
-
-              console.error(
-                "SMS conversation lock renewal rejected:",
-                {
-                  businessId:
-                    businessId?.toString?.() ??
-                    businessId,
-
-                  phone,
-
-                  fenceToken,
-                }
-              );
-
-              onLockLost(error);
-
-              return;
-            }
-
-            console.log(
-              "SMS conversation lock renewed:",
-              {
-                businessId:
-                  businessId?.toString?.() ??
-                  businessId,
-
-                phone,
-
-                fenceToken,
-
-                expiresAt:
-                  renewed.expiresAt,
-              }
-            );
-          } catch (error) {
-            /*
-             * If MongoDB cannot confirm renewal,
-             * the worker must stop assuming it
-             * owns this conversation.
-             */
+          if (!renewed) {
             lockLost = true;
 
-            console.error(
-              "SMS conversation lock renewal failed:",
-              error
+            const error = new Error(
+              "SMS conversation lock ownership was lost.",
             );
 
-            onLockLost(error);
-          } finally {
-            renewalInFlight =
-              null;
+            console.error("SMS conversation lock renewal rejected:", {
+              businessId: businessId?.toString?.() ?? businessId,
 
-            if (
-              !stopped &&
-              !lockLost
-            ) {
-              schedule();
-            }
+              phone,
+
+              fenceToken,
+            });
+
+            onLockLost(error);
+
+            return;
           }
-        })();
+
+          console.log("SMS conversation lock renewed:", {
+            businessId: businessId?.toString?.() ?? businessId,
+
+            phone,
+
+            fenceToken,
+
+            expiresAt: renewed.expiresAt,
+          });
+        } catch (error) {
+          /*
+           * If MongoDB cannot confirm renewal,
+           * the worker must stop assuming it
+           * owns this conversation.
+           */
+          lockLost = true;
+
+          console.error("SMS conversation lock renewal failed:", error);
+
+          onLockLost(error);
+        } finally {
+          renewalInFlight = null;
+
+          if (!stopped && !lockLost) {
+            schedule();
+          }
+        }
+      })();
     }, renewEveryMs);
   }
 
   function start() {
-    if (
-      stopped ||
-      lockLost ||
-      timer ||
-      renewalInFlight
-    ) {
+    if (stopped || lockLost || timer || renewalInFlight) {
       return;
     }
 
@@ -170,7 +135,4 @@ export function createSmsLockHeartbeat({
   };
 }
 
-export type SmsLockHeartbeat =
-  ReturnType<
-    typeof createSmsLockHeartbeat
-  >;
+export type SmsLockHeartbeat = ReturnType<typeof createSmsLockHeartbeat>;

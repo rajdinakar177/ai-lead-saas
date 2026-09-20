@@ -16,11 +16,8 @@ import { sendAppointmentCancelledEmail } from "@/lib/email/send-appointment-canc
 import { updateAppointmentGoogleEvent } from "@/lib/google-calendar/update-appointment-event";
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
 import { deleteAppointmentGoogleEvent } from "@/lib/google-calendar/delete-appointment-event";
-type AppointmentStatus =
-  | "scheduled"
-  | "confirmed"
-  | "completed"
-  | "cancelled";
+import { validateRequestOrigin } from "@/lib/security/origin-protection";
+type AppointmentStatus = "scheduled" | "confirmed" | "completed" | "cancelled";
 
 type StatusUpdateRequest = {
   status: AppointmentStatus;
@@ -36,23 +33,11 @@ type NotesUpdateRequest = {
   notes: string;
 };
 
-type UpdateAppointmentRequest =
-  | StatusUpdateRequest
-  | RescheduleRequest
-  | NotesUpdateRequest;
+type UpdateAppointmentRequest = StatusUpdateRequest | RescheduleRequest | NotesUpdateRequest;
 
-const allowedStatuses: AppointmentStatus[] = [
-  "confirmed",
-  "completed",
-  "cancelled",
-];
+const allowedStatuses: AppointmentStatus[] = ["confirmed", "completed", "cancelled"];
 
-const validTimelines: Timeline[] = [
-  "Today",
-  "Tomorrow",
-  "This week",
-  "Next week",
-];
+const validTimelines: Timeline[] = ["Today", "Tomorrow", "This week", "Next week"];
 
 export async function PATCH(
   request: Request,
@@ -62,17 +47,19 @@ export async function PATCH(
     params: Promise<{
       id: string;
     }>;
-  }
+  },
 ) {
   try {
-    const business =
-      await requireBusiness();
+    const originError = validateRequestOrigin(request);
 
-    const { id } =
-      await params;
+    if (originError) {
+      return originError;
+    }
+    const business = await requireBusiness();
 
-    const body: UpdateAppointmentRequest =
-      await request.json();
+    const { id } = await params;
+
+    const body: UpdateAppointmentRequest = await request.json();
 
     await connectDB();
 
@@ -82,22 +69,19 @@ export async function PATCH(
      * to the authenticated business
      * can be updated.
      */
-    const appointment =
-      await Appointment.findOne({
-        _id: id,
-        businessId:
-          business._id,
-      });
+    const appointment = await Appointment.findOne({
+      _id: id,
+      businessId: business._id,
+    });
 
     if (!appointment) {
       return NextResponse.json(
         {
-          error:
-            "Appointment not found.",
+          error: "Appointment not found.",
         },
         {
           status: 404,
-        }
+        },
       );
     }
 
@@ -112,47 +96,37 @@ export async function PATCH(
     // ---------------------------------
 
     if ("notes" in body) {
-      if (
-        typeof body.notes !==
-        "string"
-      ) {
+      if (typeof body.notes !== "string") {
         return NextResponse.json(
           {
-            error:
-              "Notes must be a string.",
+            error: "Notes must be a string.",
           },
           {
             status: 400,
-          }
+          },
         );
       }
 
-      const notes =
-        body.notes.trim();
+      const notes = body.notes.trim();
 
-      if (
-        notes.length > 2000
-      ) {
+      if (notes.length > 2000) {
         return NextResponse.json(
           {
-            error:
-              "Notes cannot exceed 2000 characters.",
+            error: "Notes cannot exceed 2000 characters.",
           },
           {
             status: 400,
-          }
+          },
         );
       }
 
-      appointment.notes =
-        notes || undefined;
+      appointment.notes = notes || undefined;
 
       await appointment.save();
 
       return NextResponse.json({
         success: true,
-        notes:
-          appointment.notes ?? "",
+        notes: appointment.notes ?? "",
       });
     }
 
@@ -160,18 +134,14 @@ export async function PATCH(
     // BLOCK ACTIONS ON CANCELLED
     // ---------------------------------
 
-    if (
-      appointment.status ===
-      "cancelled"
-    ) {
+    if (appointment.status === "cancelled") {
       return NextResponse.json(
         {
-          error:
-            "Cancelled appointments cannot be updated.",
+          error: "Cancelled appointments cannot be updated.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
@@ -179,18 +149,14 @@ export async function PATCH(
     // BLOCK ACTIONS ON COMPLETED
     // ---------------------------------
 
-    if (
-      appointment.status ===
-      "completed"
-    ) {
+    if (appointment.status === "completed") {
       return NextResponse.json(
         {
-          error:
-            "Completed appointments cannot be updated.",
+          error: "Completed appointments cannot be updated.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
@@ -198,155 +164,108 @@ export async function PATCH(
     // RESCHEDULE
     // ---------------------------------
 
-    if (
-      "action" in body &&
-      body.action === "reschedule"
-    ) {
-      if (
-        !body.scheduledFor ||
-        !body.timeline
-      ) {
+    if ("action" in body && body.action === "reschedule") {
+      if (!body.scheduledFor || !body.timeline) {
         return NextResponse.json(
           {
-            error:
-              "scheduledFor and timeline are required.",
+            error: "scheduledFor and timeline are required.",
           },
           {
             status: 400,
-          }
+          },
         );
       }
 
-      if (
-        !validTimelines.includes(
-          body.timeline
-        )
-      ) {
+      if (!validTimelines.includes(body.timeline)) {
         return NextResponse.json(
           {
-            error:
-              "Invalid timeline.",
+            error: "Invalid timeline.",
           },
           {
             status: 400,
-          }
+          },
         );
       }
 
-      const newScheduledFor =
-        new Date(
-          body.scheduledFor
-        );
+      const newScheduledFor = new Date(body.scheduledFor);
 
-      if (
-        Number.isNaN(
-          newScheduledFor.getTime()
-        )
-      ) {
+      if (Number.isNaN(newScheduledFor.getTime())) {
         return NextResponse.json(
           {
-            error:
-              "Invalid appointment date.",
+            error: "Invalid appointment date.",
           },
           {
             status: 400,
-          }
+          },
         );
       }
 
-      if (
-        newScheduledFor.getTime() <=
-        Date.now()
-      ) {
+      if (newScheduledFor.getTime() <= Date.now()) {
         return NextResponse.json(
           {
-            error:
-              "That appointment time has already passed.",
+            error: "That appointment time has already passed.",
           },
           {
             status: 400,
-          }
+          },
         );
       }
 
-      const businessData =
-        await Business.findById(
-          business._id
-        ).lean();
+      const businessData = await Business.findById(business._id).lean();
 
       if (!businessData) {
         return NextResponse.json(
           {
-            error:
-              "Business not found.",
+            error: "Business not found.",
           },
           {
             status: 404,
-          }
+          },
         );
       }
 
-      const availability =
-        businessData.availability;
+      const availability = businessData.availability;
 
-      if (
-        !availability ||
-        !availability.days?.length
-      ) {
+      if (!availability || !availability.days?.length) {
         return NextResponse.json(
           {
-            error:
-              "Business availability is not configured.",
+            error: "Business availability is not configured.",
           },
           {
             status: 400,
-          }
+          },
         );
       }
 
-      const validSlots =
-        await getAvailableAppointmentSlots({
-          business:
-            businessData,
+      const validSlots = await getAvailableAppointmentSlots({
+        business: businessData,
 
-          timeline:
-            body.timeline,
+        timeline: body.timeline,
 
-          excludeAppointmentId:
-            appointment._id.toString(),
-        });
+        excludeAppointmentId: appointment._id.toString(),
+      });
 
-      const requestedTime =
-        newScheduledFor.getTime();
+      const requestedTime = newScheduledFor.getTime();
 
-      const matchedSlot =
-        validSlots.find(
-          (slot) =>
-            new Date(
-              slot.scheduledFor
-            ).getTime() ===
-            requestedTime
-        );
+      const matchedSlot = validSlots.find(
+        (slot) => new Date(slot.scheduledFor).getTime() === requestedTime,
+      );
 
       if (!matchedSlot) {
         return NextResponse.json(
           {
-            error:
-              "That appointment time is not a valid available slot.",
+            error: "That appointment time is not a valid available slot.",
           },
           {
             status: 400,
-          }
+          },
         );
       }
-      const previousAppointmentLabel =
-        appointment.label;
+      const previousAppointmentLabel = appointment.label;
 
-      appointment.scheduledFor =
-        newScheduledFor;
+      appointment.scheduledFor = newScheduledFor;
 
-      appointment.label =
-        matchedSlot.label;
+      appointment.label = matchedSlot.label;
 
       await appointment.save();
       /*
@@ -358,52 +277,35 @@ export async function PATCH(
        * or fail the appointment update.
        */
       try {
-        const lead =
-          await Lead.findOne({
-            _id: appointment.leadId,
-            businessId:
-              business._id,
-          }).lean();
+        const lead = await Lead.findOne({
+          _id: appointment.leadId,
+          businessId: business._id,
+        }).lean();
 
-        if (
-          lead &&
-          businessData.email
-        ) {
+        if (lead && businessData.email) {
           await sendAppointmentRescheduledEmail({
-            businessEmail:
-              businessData.email,
+            businessEmail: businessData.email,
 
-            businessName:
-              businessData.name,
+            businessName: businessData.name,
 
-            appointmentId:
-              appointment._id.toString(),
+            appointmentId: appointment._id.toString(),
 
-            name:
-              lead.name,
+            name: lead.name,
 
-            phone:
-              lead.phone,
+            phone: lead.phone,
 
-            service:
-              lead.service,
+            service: lead.service,
 
-            location:
-              lead.location,
+            location: lead.location,
 
             previousAppointmentLabel,
 
-            newAppointmentLabel:
-              matchedSlot.label,
+            newAppointmentLabel: matchedSlot.label,
           });
         }
       } catch (emailError) {
-        console.error(
-          "Appointment reschedule email failed:",
-          emailError
-        );
+        console.error("Appointment reschedule email failed:", emailError);
       }
-
 
       /* =========================================
    GOOGLE CALENDAR RESCHEDULE SYNC
@@ -414,115 +316,78 @@ export async function PATCH(
    the Leadquivo reschedule.
    ========================================= */
 
-      if (
-        appointment.googleCalendarEventId
-      ) {
+      if (appointment.googleCalendarEventId) {
         try {
-          const lead =
-            await Lead.findOne({
-              _id:
-                appointment.leadId,
+          const lead = await Lead.findOne({
+            _id: appointment.leadId,
 
-              businessId:
-                business._id,
-            }).lean();
+            businessId: business._id,
+          }).lean();
 
           if (lead) {
-            const googleEvent =
-              await updateAppointmentGoogleEvent({
-                businessId:
-                  business._id.toString(),
+            const googleEvent = await updateAppointmentGoogleEvent({
+              businessId: business._id.toString(),
 
-                eventId:
-                  appointment.googleCalendarEventId,
+              eventId: appointment.googleCalendarEventId,
 
-                calendarId:
-                  appointment.googleCalendarId ??
-                  null,
+              calendarId: appointment.googleCalendarId ?? null,
 
-                appointmentId:
-                  appointment._id.toString(),
+              appointmentId: appointment._id.toString(),
 
-                businessName:
-                  businessData.name,
+              businessName: businessData.name,
 
-                timezone:
-                  businessData.timezone ||
-                  "UTC",
+              timezone: businessData.timezone || "UTC",
 
-                slotDurationMinutes:
-                  availability.slotDurationMinutes ||
-                  60,
+              slotDurationMinutes: availability.slotDurationMinutes || 60,
 
-                scheduledFor:
-                  appointment.scheduledFor,
+              scheduledFor: appointment.scheduledFor,
 
-                customerName:
-                  lead.name ||
-                  "Customer",
+              customerName: lead.name || "Customer",
 
-                customerPhone:
-                  lead.phone ?? null,
+              customerPhone: lead.phone ?? null,
 
-                customerEmail:
-                  lead.email ?? null,
+              customerEmail: lead.email ?? null,
 
-                service:
-                  lead.service ?? null,
+              service: lead.service ?? null,
 
-                location:
-                  lead.location ?? null,
+              location: lead.location ?? null,
 
-                urgency:
-                  lead.urgency ?? null,
+              urgency: lead.urgency ?? null,
 
-                timeline:
-                  lead.timeline ?? null,
-              });
+              timeline: lead.timeline ?? null,
+            });
 
             if (googleEvent) {
-              const syncedAt =
-                new Date();
+              const syncedAt = new Date();
 
-              appointment.googleCalendarEventId =
-                googleEvent.eventId;
+              appointment.googleCalendarEventId = googleEvent.eventId;
 
-              appointment.googleCalendarId =
-                googleEvent.calendarId;
+              appointment.googleCalendarId = googleEvent.calendarId;
 
-              appointment.googleCalendarSyncedAt =
-                syncedAt;
+              appointment.googleCalendarSyncedAt = syncedAt;
 
-              appointment.googleCalendarSyncError =
-                null;
+              appointment.googleCalendarSyncError = null;
 
               await appointment.save();
 
               await GoogleCalendarIntegration.updateOne(
                 {
-                  businessId:
-                    business._id,
+                  businessId: business._id,
 
-                  connected:
-                    true,
+                  connected: true,
                 },
                 {
                   $set: {
-                    lastSyncedAt:
-                      syncedAt,
+                    lastSyncedAt: syncedAt,
 
-                    lastSyncError:
-                      null,
+                    lastSyncError: null,
                   },
-                }
+                },
               );
             }
           }
         } catch (googleError) {
-          console.error(
-            "Google Calendar appointment reschedule sync failed:",
-            googleError
-          );
+          console.error("Google Calendar appointment reschedule sync failed:", googleError);
 
           const errorMessage =
             googleError instanceof Error
@@ -532,38 +397,31 @@ export async function PATCH(
           try {
             await Appointment.updateOne(
               {
-                _id:
-                  appointment._id,
+                _id: appointment._id,
 
-                businessId:
-                  business._id,
+                businessId: business._id,
               },
               {
                 $set: {
-                  googleCalendarSyncError:
-                    errorMessage,
+                  googleCalendarSyncError: errorMessage,
                 },
-              }
+              },
             );
 
             await GoogleCalendarIntegration.updateOne(
               {
-                businessId:
-                  business._id,
+                businessId: business._id,
               },
               {
                 $set: {
-                  lastSyncError:
-                    errorMessage,
+                  lastSyncError: errorMessage,
                 },
-              }
+              },
             );
-          } catch (
-          syncErrorSaveError
-          ) {
+          } catch (syncErrorSaveError) {
             console.error(
               "Unable to save Google Calendar reschedule sync error:",
-              syncErrorSaveError
+              syncErrorSaveError,
             );
           }
         }
@@ -572,17 +430,13 @@ export async function PATCH(
         success: true,
 
         appointment: {
-          id:
-            appointment._id.toString(),
+          id: appointment._id.toString(),
 
-          status:
-            appointment.status,
+          status: appointment.status,
 
-          label:
-            appointment.label,
+          label: appointment.label,
 
-          scheduledFor:
-            appointment.scheduledFor,
+          scheduledFor: appointment.scheduledFor,
         },
       });
     }
@@ -591,26 +445,18 @@ export async function PATCH(
     // NORMAL STATUS UPDATE
     // ---------------------------------
 
-    if (
-      !("status" in body) ||
-      !body.status ||
-      !allowedStatuses.includes(
-        body.status
-      )
-    ) {
+    if (!("status" in body) || !body.status || !allowedStatuses.includes(body.status)) {
       return NextResponse.json(
         {
-          error:
-            "Invalid appointment status.",
+          error: "Invalid appointment status.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
-    appointment.status =
-      body.status;
+    appointment.status = body.status;
 
     await appointment.save();
 
@@ -623,62 +469,39 @@ export async function PATCH(
      * so an email failure cannot undo
      * the cancellation.
      */
-    if (
-      body.status === "cancelled"
-    ) {
+    if (body.status === "cancelled") {
       try {
-        const [
-          lead,
-          businessData,
-        ] = await Promise.all([
+        const [lead, businessData] = await Promise.all([
           Lead.findOne({
-            _id:
-              appointment.leadId,
+            _id: appointment.leadId,
 
-            businessId:
-              business._id,
+            businessId: business._id,
           }).lean(),
 
-          Business.findById(
-            business._id
-          ).lean(),
+          Business.findById(business._id).lean(),
         ]);
 
-        if (
-          lead &&
-          businessData?.email
-        ) {
+        if (lead && businessData?.email) {
           await sendAppointmentCancelledEmail({
-            businessEmail:
-              businessData.email,
+            businessEmail: businessData.email,
 
-            businessName:
-              businessData.name,
+            businessName: businessData.name,
 
-            appointmentId:
-              appointment._id.toString(),
+            appointmentId: appointment._id.toString(),
 
-            name:
-              lead.name,
+            name: lead.name,
 
-            phone:
-              lead.phone,
+            phone: lead.phone,
 
-            service:
-              lead.service,
+            service: lead.service,
 
-            location:
-              lead.location,
+            location: lead.location,
 
-            appointmentLabel:
-              appointment.label,
+            appointmentLabel: appointment.label,
           });
         }
       } catch (emailError) {
-        console.error(
-          "Appointment cancellation email failed:",
-          emailError
-        );
+        console.error("Appointment cancellation email failed:", emailError);
       }
 
       /* =========================================
@@ -691,59 +514,42 @@ export async function PATCH(
    Leadquivo cancellation.
    ========================================= */
 
-      if (
-        appointment.googleCalendarEventId
-      ) {
+      if (appointment.googleCalendarEventId) {
         try {
-          const googleResult =
-            await deleteAppointmentGoogleEvent({
-              businessId:
-                business._id.toString(),
+          const googleResult = await deleteAppointmentGoogleEvent({
+            businessId: business._id.toString(),
 
-              eventId:
-                appointment.googleCalendarEventId,
+            eventId: appointment.googleCalendarEventId,
 
-              calendarId:
-                appointment.googleCalendarId ??
-                null,
-            });
+            calendarId: appointment.googleCalendarId ?? null,
+          });
 
           if (googleResult) {
-            const syncedAt =
-              new Date();
+            const syncedAt = new Date();
 
-            appointment.googleCalendarSyncedAt =
-              syncedAt;
+            appointment.googleCalendarSyncedAt = syncedAt;
 
-            appointment.googleCalendarSyncError =
-              null;
+            appointment.googleCalendarSyncError = null;
 
             await appointment.save();
 
             await GoogleCalendarIntegration.updateOne(
               {
-                businessId:
-                  business._id,
+                businessId: business._id,
 
-                connected:
-                  true,
+                connected: true,
               },
               {
                 $set: {
-                  lastSyncedAt:
-                    syncedAt,
+                  lastSyncedAt: syncedAt,
 
-                  lastSyncError:
-                    null,
+                  lastSyncError: null,
                 },
-              }
+              },
             );
           }
         } catch (googleError) {
-          console.error(
-            "Google Calendar appointment cancellation sync failed:",
-            googleError
-          );
+          console.error("Google Calendar appointment cancellation sync failed:", googleError);
 
           const errorMessage =
             googleError instanceof Error
@@ -753,38 +559,31 @@ export async function PATCH(
           try {
             await Appointment.updateOne(
               {
-                _id:
-                  appointment._id,
+                _id: appointment._id,
 
-                businessId:
-                  business._id,
+                businessId: business._id,
               },
               {
                 $set: {
-                  googleCalendarSyncError:
-                    errorMessage,
+                  googleCalendarSyncError: errorMessage,
                 },
-              }
+              },
             );
 
             await GoogleCalendarIntegration.updateOne(
               {
-                businessId:
-                  business._id,
+                businessId: business._id,
               },
               {
                 $set: {
-                  lastSyncError:
-                    errorMessage,
+                  lastSyncError: errorMessage,
                 },
-              }
+              },
             );
-          } catch (
-          syncErrorSaveError
-          ) {
+          } catch (syncErrorSaveError) {
             console.error(
               "Unable to save Google Calendar cancellation sync error:",
-              syncErrorSaveError
+              syncErrorSaveError,
             );
           }
         }
@@ -795,52 +594,36 @@ export async function PATCH(
       success: true,
 
       appointment: {
-        id:
-          appointment._id.toString(),
+        id: appointment._id.toString(),
 
-        status:
-          appointment.status,
+        status: appointment.status,
 
-        label:
-          appointment.label,
+        label: appointment.label,
 
-        scheduledFor:
-          appointment.scheduledFor,
+        scheduledFor: appointment.scheduledFor,
       },
     });
-
   } catch (error) {
-    console.error(
-      "Appointment update error:",
-      error
-    );
+    console.error("Appointment update error:", error);
 
-    if (
-      typeof error ===
-      "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === 11000
-    ) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
       return NextResponse.json(
         {
-          error:
-            "That appointment time is no longer available. Please choose another time.",
+          error: "That appointment time is no longer available. Please choose another time.",
         },
         {
           status: 409,
-        }
+        },
       );
     }
 
     return NextResponse.json(
       {
-        error:
-          "Unable to update appointment.",
+        error: "Unable to update appointment.",
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

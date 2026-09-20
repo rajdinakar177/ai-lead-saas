@@ -1,8 +1,4 @@
-import {
-  Schema,
-  model,
-  models,
-} from "mongoose";
+import { Schema, model, models } from "mongoose";
 export type AvailabilityDay =
   | "monday"
   | "tuesday"
@@ -225,11 +221,7 @@ const businessSchema = new Schema(
 
       tone: {
         type: String,
-        enum: [
-          "friendly",
-          "professional",
-          "casual",
-        ],
+        enum: ["friendly", "professional", "casual"],
         default: "friendly",
       },
 
@@ -254,9 +246,7 @@ const businessSchema = new Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
-export const Business =
-  models.Business ||
-  model("Business", businessSchema);
+export const Business = models.Business || model("Business", businessSchema);

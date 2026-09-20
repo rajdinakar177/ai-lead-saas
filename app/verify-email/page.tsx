@@ -6,15 +6,8 @@ type PageProps = {
   }>;
 };
 
-export default async function VerifyEmailPage({
-  searchParams,
-}: PageProps) {
-  const { token } =
-    await searchParams;
+export default async function VerifyEmailPage({ searchParams }: PageProps) {
+  const { token } = await searchParams;
 
-  return (
-    <VerifyEmail
-      token={token ?? ""}
-    />
-  );
+  return <VerifyEmail token={token ?? ""} />;
 }

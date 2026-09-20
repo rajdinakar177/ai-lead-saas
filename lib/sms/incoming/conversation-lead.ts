@@ -1,6 +1,4 @@
-import {
-  findOneAndUpdateLeadWithSmsFence,
-} from "@/lib/sms/sms-fenced-lead";
+import { findOneAndUpdateLeadWithSmsFence } from "@/lib/sms/sms-fenced-lead";
 
 import { Lead } from "@/models/Lead";
 
@@ -28,54 +26,46 @@ export async function restorePreviousSmsConversation({
   fenceToken: number;
 }) {
   try {
-    const restored =
-      await findOneAndUpdateLeadWithSmsFence({
-        filter: {
-          _id: leadId,
+    const restored = await findOneAndUpdateLeadWithSmsFence({
+      filter: {
+        _id: leadId,
 
-          businessId,
+        businessId,
 
-          phone,
+        phone,
 
-          status: {
-            $in:
-              ACTIVE_LEAD_STATUSES,
-          },
+        status: {
+          $in: ACTIVE_LEAD_STATUSES,
         },
+      },
 
-        fenceToken,
+      fenceToken,
 
-        set: {
-          smsConversationActive:
-            true,
-        },
-      });
+      set: {
+        smsConversationActive: true,
+      },
+    });
 
     if (!restored) {
       console.warn(
         "Previous SMS conversation was not restored because a newer fence exists.",
         {
-          leadId:
-            leadId.toString(),
+          leadId: leadId.toString(),
 
           phone,
 
           fenceToken,
-        }
+        },
       );
     }
   } catch (error) {
-    console.error(
-      "Failed to restore previous SMS conversation:",
-      {
-        leadId:
-          leadId.toString(),
+    console.error("Failed to restore previous SMS conversation:", {
+      leadId: leadId.toString(),
 
-        phone,
+      phone,
 
-        error,
-      }
-    );
+      error,
+    });
   }
 }
 
@@ -103,57 +93,43 @@ export async function activateSmsConversation({
   fenceToken: number;
 }) {
   try {
-    const activatedLead =
-      await findOneAndUpdateLeadWithSmsFence({
-        filter: {
-          _id:
-            targetLeadId,
+    const activatedLead = await findOneAndUpdateLeadWithSmsFence({
+      filter: {
+        _id: targetLeadId,
 
-          businessId,
+        businessId,
 
-          phone,
+        phone,
 
-          status: {
-            $in:
-              ACTIVE_LEAD_STATUSES,
-          },
+        status: {
+          $in: ACTIVE_LEAD_STATUSES,
         },
+      },
 
-        fenceToken,
+      fenceToken,
 
-        set: {
-          smsConversationActive:
-            true,
-        },
-      });
+      set: {
+        smsConversationActive: true,
+      },
+    });
 
     if (activatedLead) {
       return {
-        lead:
-          activatedLead,
+        lead: activatedLead,
 
-        requestedLeadActivated:
-          true,
+        requestedLeadActivated: true,
       };
     }
   } catch (error) {
-    if (
-      !isMongoDuplicateKeyError(
-        error
-      )
-    ) {
+    if (!isMongoDuplicateKeyError(error)) {
       throw error;
     }
 
-    console.log(
-      "Active SMS conversation duplicate-key race detected:",
-      {
-        targetLeadId:
-          targetLeadId.toString(),
+    console.log("Active SMS conversation duplicate-key race detected:", {
+      targetLeadId: targetLeadId.toString(),
 
-        phone,
-      }
-    );
+      phone,
+    });
   }
 
   /*
@@ -165,29 +141,24 @@ export async function activateSmsConversation({
    * Load the current database winner.
    */
 
-  const activeLead =
-    await Lead.findOne({
-      businessId,
+  const activeLead = await Lead.findOne({
+    businessId,
 
-      phone,
+    phone,
 
-      smsConversationActive:
-        true,
-    }).sort({
-      updatedAt:
-        -1,
-    });
+    smsConversationActive: true,
+  }).sort({
+    updatedAt: -1,
+  });
 
   if (!activeLead) {
     return null;
   }
 
   return {
-    lead:
-      activeLead,
+    lead: activeLead,
 
     requestedLeadActivated:
-      activeLead._id.toString() ===
-      targetLeadId.toString(),
+      activeLead._id.toString() === targetLeadId.toString(),
   };
 }

@@ -11,23 +11,15 @@ export function verifyTwilioSignature({
   url,
   params,
 }: VerifyTwilioSignatureParams) {
-  const authToken =
-    process.env.TWILIO_AUTH_TOKEN;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
 
   if (!authToken) {
-    throw new Error(
-      "TWILIO_AUTH_TOKEN is not configured."
-    );
+    throw new Error("TWILIO_AUTH_TOKEN is not configured.");
   }
 
   if (!signature) {
     return false;
   }
 
-  return twilio.validateRequest(
-    authToken,
-    signature,
-    url,
-    params
-  );
+  return twilio.validateRequest(authToken, signature, url, params);
 }

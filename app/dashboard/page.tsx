@@ -1,9 +1,4 @@
-import {
-  CalendarDays,
-  CircleCheckBig,
-  Flame,
-  Users,
-} from "lucide-react";
+import { CalendarDays, CircleCheckBig, Flame, Users } from "lucide-react";
 import Link from "next/link";
 
 import { connectDB } from "@/lib/mongodb";
@@ -20,23 +15,12 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   await connectDB();
 
-  const business =
-    await requireBusiness();
+  const business = await requireBusiness();
 
   if (!business) {
-    return (
-      <div>
-        Business not found.
-      </div>
-    );
+    return <div>Business not found.</div>;
   }
-  const [
-    totalLeads,
-    hotLeads,
-    bookedLeads,
-    appointmentCount,
-    recentLeads,
-  ] = await Promise.all([
+  const [totalLeads, hotLeads, bookedLeads, appointmentCount, recentLeads] = await Promise.all([
     Lead.countDocuments({
       businessId: business._id,
     }),
@@ -67,11 +51,7 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <DashboardHeader
-        title="Overview"
-        description="Here's what's happening with your leads."
-
-      />
+      <DashboardHeader title="Overview" description="Here's what's happening with your leads." />
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -105,9 +85,7 @@ export default async function DashboardPage() {
       <div className="mt-8 rounded-3xl border border-white/10 bg-white/[0.03]">
         <div className="flex items-center justify-between border-b border-white/10 p-6">
           <div>
-            <h2 className="font-semibold text-white">
-              Recent Leads
-            </h2>
+            <h2 className="font-semibold text-white">Recent Leads</h2>
 
             <p className="mt-1 text-sm text-zinc-600">
               Latest leads captured by your AI assistant.
@@ -131,81 +109,48 @@ export default async function DashboardPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wider text-zinc-600">
-                  <th className="px-6 py-4 font-medium">
-                    Lead
-                  </th>
+                  <th className="px-6 py-4 font-medium">Lead</th>
 
-                  <th className="px-6 py-4 font-medium">
-                    Service
-                  </th>
+                  <th className="px-6 py-4 font-medium">Service</th>
 
-                  <th className="px-6 py-4 font-medium">
-                    Urgency
-                  </th>
+                  <th className="px-6 py-4 font-medium">Urgency</th>
 
-                  <th className="px-6 py-4 font-medium">
-                    Status
-                  </th>
+                  <th className="px-6 py-4 font-medium">Status</th>
 
-                  <th className="px-6 py-4 font-medium">
-                    Created
-                  </th>
+                  <th className="px-6 py-4 font-medium">Created</th>
                 </tr>
               </thead>
 
               <tbody>
-                {recentLeads.map(
-                  (lead) => (
-                    <tr
-                      key={lead._id.toString()}
-                      className="border-b border-white/5 last:border-0"
-                    >
-                      <td className="px-6 py-5">
-                        <Link
-                          href={`/dashboard/leads/${lead._id.toString()}`}
-                          className="text-sm font-medium text-white transition hover:text-blue-400"
-                        >
-                          {lead.name || "Anonymous Lead"}
-                        </Link>
+                {recentLeads.map((lead) => (
+                  <tr key={lead._id.toString()} className="border-b border-white/5 last:border-0">
+                    <td className="px-6 py-5">
+                      <Link
+                        href={`/dashboard/leads/${lead._id.toString()}`}
+                        className="text-sm font-medium text-white transition hover:text-blue-400"
+                      >
+                        {lead.name || "Anonymous Lead"}
+                      </Link>
 
-                        <p className="mt-1 text-xs text-zinc-600">
-                          {lead.phone ||
-                            "No phone yet"}
-                        </p>
-                      </td>
+                      <p className="mt-1 text-xs text-zinc-600">{lead.phone || "No phone yet"}</p>
+                    </td>
 
-                      <td className="px-6 py-5 text-sm text-zinc-400">
-                        {lead.service ||
-                          "—"}
-                      </td>
+                    <td className="px-6 py-5 text-sm text-zinc-400">{lead.service || "—"}</td>
 
-                      <td className="px-6 py-5 text-sm text-zinc-400">
-                        {lead.urgency ||
-                          "—"}
-                      </td>
+                    <td className="px-6 py-5 text-sm text-zinc-400">{lead.urgency || "—"}</td>
 
-                      <td className="px-6 py-5">
-                        <StatusBadge
-                          status={
-                            lead.status
-                          }
-                        />
-                      </td>
+                    <td className="px-6 py-5">
+                      <StatusBadge status={lead.status} />
+                    </td>
 
-                      <td className="px-6 py-5 text-sm text-zinc-500">
-                        {new Date(
-                          lead.createdAt
-                        ).toLocaleDateString(
-                          "en-US",
-                          {
-                            month: "short",
-                            day: "numeric",
-                          }
-                        )}
-                      </td>
-                    </tr>
-                  )
-                )}
+                    <td className="px-6 py-5 text-sm text-zinc-500">
+                      {new Date(lead.createdAt).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

@@ -1,4 +1,3 @@
-
 import { mailGenerator } from "@/lib/email/mailgen";
 
 type GenerateAppointmentRescheduledEmailParams = {
@@ -24,28 +23,19 @@ export function generateAppointmentRescheduledEmail({
   previousAppointmentLabel,
   newAppointmentLabel,
 }: GenerateAppointmentRescheduledEmailParams) {
- 
+  const customerName = name || "Not provided";
 
+  const customerPhone = phone || "Not provided";
 
-  const customerName =
-    name || "Not provided";
+  const requestedService = service || "Not provided";
 
-  const customerPhone =
-    phone || "Not provided";
-
-  const requestedService =
-    service || "Not provided";
-
-  const customerLocation =
-    location || "Not provided";
+  const customerLocation = location || "Not provided";
 
   const email = {
     body: {
-      greeting:
-        `Hi ${businessName},`,
+      greeting: `Hi ${businessName},`,
 
-      intro:
-        "An appointment has been rescheduled.",
+      intro: "An appointment has been rescheduled.",
 
       table: {
         data: [
@@ -67,13 +57,11 @@ export function generateAppointmentRescheduledEmail({
           },
           {
             item: "Previous appointment",
-            value:
-              previousAppointmentLabel,
+            value: previousAppointmentLabel,
           },
           {
             item: "New appointment",
-            value:
-              newAppointmentLabel,
+            value: newAppointmentLabel,
           },
           {
             item: "Appointment ID",
@@ -99,17 +87,10 @@ export function generateAppointmentRescheduledEmail({
   };
 
   return {
-    subject:
-      `Appointment rescheduled — ${customerName}`,
+    subject: `Appointment rescheduled — ${customerName}`,
 
-    html:
-      mailGenerator.generate(
-        email
-      ),
+    html: mailGenerator.generate(email),
 
-    text:
-      mailGenerator.generatePlaintext(
-        email
-      ),
+    text: mailGenerator.generatePlaintext(email),
   };
 }

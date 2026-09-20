@@ -28,187 +28,151 @@ export async function bookSmsAppointmentAtomically({
   scheduledFor,
   onLockLost,
 }: BookSmsAppointmentParams) {
-  const session =
-    await mongoose.startSession();
+  const session = await mongoose.startSession();
 
   let appointment: any = null;
   let aiMessage: any = null;
   let bookedLead: any = null;
 
-  const confirmation =
-    `Perfect! We've reserved ${selectedLabel}.`;
+  const confirmation = `Perfect! We've reserved ${selectedLabel}.`;
 
   try {
-    await session.withTransaction(
-      async () => {
-        /* ===============================================
+    await session.withTransaction(async () => {
+      /* ===============================================
            VERIFY LOCK OWNERSHIP INSIDE TRANSACTION
            =============================================== */
 
-        const ownedLock =
-          await SmsConversationLock.findOne({
-            businessId,
+      const ownedLock = await SmsConversationLock.findOne({
+        businessId,
 
-            phone:
-              normalizedPhone,
+        phone: normalizedPhone,
 
-            ownerToken,
+        ownerToken,
 
-            fenceToken,
+        fenceToken,
 
-            expiresAt: {
-              $gt:
-                new Date(),
-            },
-          })
-            .session(session)
-            .lean();
+        expiresAt: {
+          $gt: new Date(),
+        },
+      })
+        .session(session)
+        .lean();
 
-        if (!ownedLock) {
-          onLockLost?.();
+      if (!ownedLock) {
+        onLockLost?.();
 
-          throw new Error(
-            "SMS conversation lock ownership was lost before appointment booking."
-          );
-        }
+        throw new Error(
+          "SMS conversation lock ownership was lost before appointment booking.",
+        );
+      }
 
-        /* ===============================================
+      /* ===============================================
            CREATE APPOINTMENT
            =============================================== */
 
-        const createdAppointments =
-          await Appointment.create(
-            [
-              {
-                leadId:
-                  lead._id,
+      const createdAppointments = await Appointment.create(
+        [
+          {
+            leadId: lead._id,
 
-                businessId:
-                  lead.businessId,
+            businessId: lead.businessId,
 
-                label:
-                  selectedLabel,
+            label: selectedLabel,
 
-                scheduledFor,
+            scheduledFor,
 
-                status:
-                  "scheduled",
-              },
-            ],
-            {
-              session,
-            }
-          );
+            status: "scheduled",
+          },
+        ],
+        {
+          session,
+        },
+      );
 
-        appointment =
-          createdAppointments[0];
+      appointment = createdAppointments[0];
 
-        if (!appointment) {
-          throw new Error(
-            "Appointment could not be created."
-          );
-        }
+      if (!appointment) {
+        throw new Error("Appointment could not be created.");
+      }
 
-        /* ===============================================
+      /* ===============================================
            FENCED LEAD BOOKING
            =============================================== */
 
-        bookedLead =
-          await updateLeadWithSmsFence({
-            leadId:
-              lead._id,
+      bookedLead = await updateLeadWithSmsFence({
+        leadId: lead._id,
 
-            businessId,
+        businessId,
 
-            phone:
-              normalizedPhone,
+        phone: normalizedPhone,
 
-            fenceToken,
+        fenceToken,
 
-            session,
+        session,
 
-            set: {
-              status:
-                "booked",
+        set: {
+          status: "booked",
 
-              smsConversationActive:
-                false,
+          smsConversationActive: false,
 
-              "followUp.enabled":
-                false,
+          "followUp.enabled": false,
 
-              "followUp.nextFollowUpAt":
-                null,
+          "followUp.nextFollowUpAt": null,
 
-              smsBookingOptions: {
-                offeredAt:
-                  null,
+          smsBookingOptions: {
+            offeredAt: null,
 
-                slots:
-                  [],
-              },
-            },
-          });
+            slots: [],
+          },
+        },
+      });
 
-        if (!bookedLead) {
-          onLockLost?.();
+      if (!bookedLead) {
+        onLockLost?.();
 
-          throw new Error(
-            "Stale SMS worker rejected while booking appointment."
-          );
-        }
+        throw new Error("Stale SMS worker rejected while booking appointment.");
+      }
 
-        /* ===============================================
+      /* ===============================================
            CONFIRMATION MESSAGE
            =============================================== */
 
-        const createdMessages =
-          await Message.create(
-            [
-              {
-                leadId:
-                  bookedLead._id,
+      const createdMessages = await Message.create(
+        [
+          {
+            leadId: bookedLead._id,
 
-                sender:
-                  "ai",
+            sender: "ai",
 
-                content:
-                  confirmation,
-              },
-            ],
-            {
-              session,
-            }
-          );
+            content: confirmation,
+          },
+        ],
+        {
+          session,
+        },
+      );
 
-        aiMessage =
-          createdMessages[0];
+      aiMessage = createdMessages[0];
 
-        if (!aiMessage) {
-          throw new Error(
-            "Appointment confirmation message could not be created."
-          );
-        }
+      if (!aiMessage) {
+        throw new Error(
+          "Appointment confirmation message could not be created.",
+        );
       }
-    );
+    });
   } finally {
     await session.endSession();
   }
 
-  if (
-    !appointment ||
-    !aiMessage ||
-    !bookedLead
-  ) {
+  if (!appointment || !aiMessage || !bookedLead) {
     throw new Error(
-      "Appointment transaction completed without required records."
+      "Appointment transaction completed without required records.",
     );
   }
 
   return {
     appointment,
-    lead:
-      bookedLead,
+    lead: bookedLead,
     aiMessage,
     confirmation,
   };

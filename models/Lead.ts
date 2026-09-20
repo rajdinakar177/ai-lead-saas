@@ -1,8 +1,4 @@
-import {
-  Schema,
-  model,
-  models,
-} from "mongoose";
+import { Schema, model, models } from "mongoose";
 
 const leadSchema = new Schema(
   {
@@ -57,15 +53,7 @@ const leadSchema = new Schema(
 
     status: {
       type: String,
-      enum: [
-        "new",
-        "warm",
-        "hot",
-        "qualified",
-        "booked",
-        "won",
-        "lost",
-      ],
+      enum: ["new", "warm", "hot", "qualified", "booked", "won", "lost"],
       default: "new",
     },
 
@@ -79,8 +67,6 @@ const leadSchema = new Schema(
       default: false,
       index: true,
     },
-
-
 
     smsFenceToken: {
       type: Number,
@@ -147,7 +133,7 @@ const leadSchema = new Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 /* =========================================================
@@ -173,8 +159,6 @@ leadSchema.index(
       },
     },
     name: "unique_active_sms_conversation_per_business_phone",
-  }
+  },
 );
-export const Lead =
-  models.Lead ||
-  model("Lead", leadSchema);
+export const Lead = models.Lead || model("Lead", leadSchema);

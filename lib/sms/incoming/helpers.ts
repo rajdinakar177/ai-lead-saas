@@ -15,38 +15,30 @@ export const ACTIVE_LEAD_STATUSES = [
    ERROR MESSAGE
    ========================================================= */
 
-export function getErrorMessage(
-  error: unknown
-) {
+export function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
-    return error.message.slice(
-      0,
-      2000
-    );
+    return error.message.slice(0, 2000);
   }
 
-  return String(error).slice(
-    0,
-    2000
-  );
+  return String(error).slice(0, 2000);
 }
 
 /* =========================================================
    MONGODB DUPLICATE KEY CHECK
    ========================================================= */
 
-export function isMongoDuplicateKeyError(
-  error: unknown
-): error is {
+export function isMongoDuplicateKeyError(error: unknown): error is {
   code: number;
 } {
   return (
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
-    (error as {
-      code?: number;
-    }).code === 11000
+    (
+      error as {
+        code?: number;
+      }
+    ).code === 11000
   );
 }
 
@@ -54,19 +46,11 @@ export function isMongoDuplicateKeyError(
    TEXT NORMALIZATION
    ========================================================= */
 
-export function normalizeText(
-  value: string
-) {
+export function normalizeText(value: string) {
   return value
     .toLowerCase()
-    .replace(
-      /[^a-z0-9\s]/g,
-      " "
-    )
-    .replace(
-      /\s+/g,
-      " "
-    )
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -77,69 +61,43 @@ export function normalizeText(
 export function findLeadByService<
   T extends {
     service?: string | null;
-  }
->(
-  leads: T[],
-  message: string
-): T | null {
-  const normalizedMessage =
-    normalizeText(message);
+  },
+>(leads: T[], message: string): T | null {
+  const normalizedMessage = normalizeText(message);
 
   if (!normalizedMessage) {
     return null;
   }
 
-  const matches =
-    leads.filter((lead) => {
-      if (!lead.service) {
-        return false;
-      }
+  const matches = leads.filter((lead) => {
+    if (!lead.service) {
+      return false;
+    }
 
-      const normalizedService =
-        normalizeText(
-          lead.service
-        );
+    const normalizedService = normalizeText(lead.service);
 
-      if (!normalizedService) {
-        return false;
-      }
+    if (!normalizedService) {
+      return false;
+    }
 
-      if (
-        normalizedMessage ===
-        normalizedService
-      ) {
-        return true;
-      }
+    if (normalizedMessage === normalizedService) {
+      return true;
+    }
 
-      if (
-        normalizedMessage.includes(
-          normalizedService
-        )
-      ) {
-        return true;
-      }
+    if (normalizedMessage.includes(normalizedService)) {
+      return true;
+    }
 
-      const serviceWords =
-        normalizedService
-          .split(" ")
-          .filter(
-            (word) =>
-              word.length >= 2
-          );
+    const serviceWords = normalizedService
+      .split(" ")
+      .filter((word) => word.length >= 2);
 
-      if (
-        serviceWords.length === 0
-      ) {
-        return false;
-      }
+    if (serviceWords.length === 0) {
+      return false;
+    }
 
-      return serviceWords.every(
-        (word) =>
-          normalizedMessage.includes(
-            word
-          )
-      );
-    });
+    return serviceWords.every((word) => normalizedMessage.includes(word));
+  });
 
   /*
    * Do not guess when multiple services match.
@@ -157,60 +115,39 @@ export function findLeadByService<
 
 export function findConfiguredService(
   services: string[],
-  message: string
+  message: string,
 ): string | null {
-  const normalizedMessage =
-    normalizeText(message);
+  const normalizedMessage = normalizeText(message);
 
   if (!normalizedMessage) {
     return null;
   }
 
-  const matches =
-    services.filter((service) => {
-      const normalizedService =
-        normalizeText(service);
+  const matches = services.filter((service) => {
+    const normalizedService = normalizeText(service);
 
-      if (!normalizedService) {
-        return false;
-      }
+    if (!normalizedService) {
+      return false;
+    }
 
-      if (
-        normalizedMessage ===
-        normalizedService
-      ) {
-        return true;
-      }
+    if (normalizedMessage === normalizedService) {
+      return true;
+    }
 
-      if (
-        normalizedMessage.includes(
-          normalizedService
-        )
-      ) {
-        return true;
-      }
+    if (normalizedMessage.includes(normalizedService)) {
+      return true;
+    }
 
-      const serviceWords =
-        normalizedService
-          .split(" ")
-          .filter(
-            (word) =>
-              word.length >= 2
-          );
+    const serviceWords = normalizedService
+      .split(" ")
+      .filter((word) => word.length >= 2);
 
-      if (
-        serviceWords.length === 0
-      ) {
-        return false;
-      }
+    if (serviceWords.length === 0) {
+      return false;
+    }
 
-      return serviceWords.every(
-        (word) =>
-          normalizedMessage.includes(
-            word
-          )
-      );
-    });
+    return serviceWords.every((word) => normalizedMessage.includes(word));
+  });
 
   /*
    * Do not guess when multiple configured
@@ -235,10 +172,9 @@ export function twimlResponse() {
       status: 200,
 
       headers: {
-        "Content-Type":
-          "text/xml",
+        "Content-Type": "text/xml",
       },
-    }
+    },
   );
 }
 
@@ -247,17 +183,13 @@ export function twimlResponse() {
    ========================================================= */
 
 export function retryResponse() {
-  return new NextResponse(
-    "Temporary webhook processing failure",
-    {
-      status: 503,
+  return new NextResponse("Temporary webhook processing failure", {
+    status: 503,
 
-      headers: {
-        "Content-Type":
-          "text/plain",
-      },
-    }
-  );
+    headers: {
+      "Content-Type": "text/plain",
+    },
+  });
 }
 
 /* =========================================================
@@ -265,15 +197,11 @@ export function retryResponse() {
    ========================================================= */
 
 export function forbiddenResponse() {
-  return new NextResponse(
-    "Forbidden",
-    {
-      status: 403,
+  return new NextResponse("Forbidden", {
+    status: 403,
 
-      headers: {
-        "Content-Type":
-          "text/plain",
-      },
-    }
-  );
+    headers: {
+      "Content-Type": "text/plain",
+    },
+  });
 }

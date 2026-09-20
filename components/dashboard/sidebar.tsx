@@ -63,28 +63,19 @@ type SidebarContentProps = {
   onNavigate?: () => void;
 };
 
-function SidebarContent({
-  pathname,
-  onNavigate,
-}: SidebarContentProps) {
+function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
   return (
     <>
       {/* Logo */}
       <div className="flex h-16 items-center border-b border-white/10 px-6">
-        <Link
-          href="/"
-          onClick={onNavigate}
-          className="flex items-center gap-2"
-        >
+        <Link href="/" onClick={onNavigate} className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-sm font-bold text-black">
             L
           </div>
 
           <span className="font-semibold text-white">
             LeadFlow
-            <span className="text-blue-400">
-              AI
-            </span>
+            <span className="text-blue-400">AI</span>
           </span>
         </Link>
       </div>
@@ -101,12 +92,8 @@ function SidebarContent({
 
             const active =
               pathname === item.href ||
-              (
-                item.href !== "/dashboard" &&
-                pathname.startsWith(
-                  `${item.href}/`
-                )
-              );
+              (item.href !== "/dashboard" &&
+                pathname.startsWith(`${item.href}/`));
 
             return (
               <Link
@@ -140,7 +127,6 @@ function SidebarContent({
           }`}
         >
           <Settings size={18} />
-
           Business Settings
         </Link>
 
@@ -153,8 +139,7 @@ function SidebarContent({
 export function Sidebar() {
   const pathname = usePathname();
 
-  const [mobileOpen, setMobileOpen] =
-    useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   /*
    * Close the mobile sidebar whenever
@@ -173,15 +158,12 @@ export function Sidebar() {
       return;
     }
 
-    const previousOverflow =
-      document.body.style.overflow;
+    const previousOverflow = document.body.style.overflow;
 
-    document.body.style.overflow =
-      "hidden";
+    document.body.style.overflow = "hidden";
 
     return () => {
-      document.body.style.overflow =
-        previousOverflow;
+      document.body.style.overflow = previousOverflow;
     };
   }, [mobileOpen]);
 
@@ -193,9 +175,7 @@ export function Sidebar() {
       <div className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-white/10 bg-zinc-950/95 px-4 backdrop-blur lg:hidden">
         <button
           type="button"
-          onClick={() =>
-            setMobileOpen(true)
-          }
+          onClick={() => setMobileOpen(true)}
           aria-label="Open navigation menu"
           aria-expanded={mobileOpen}
           className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-zinc-300 transition hover:bg-white/5 hover:text-white"
@@ -203,36 +183,26 @@ export function Sidebar() {
           <Menu size={21} />
         </button>
 
-        <Link
-          href="/"
-          className="flex items-center gap-2"
-        >
+        <Link href="/" className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-sm font-bold text-black">
             L
           </div>
 
           <span className="font-semibold text-white">
             LeadFlow
-            <span className="text-blue-400">
-              AI
-            </span>
+            <span className="text-blue-400">AI</span>
           </span>
         </Link>
 
         {/* Keeps logo centered */}
-        <div
-          className="h-10 w-10"
-          aria-hidden="true"
-        />
+        <div className="h-10 w-10" aria-hidden="true" />
       </div>
 
       {/* =========================
           Desktop sidebar
       ========================== */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/10 bg-zinc-950 lg:flex">
-        <SidebarContent
-          pathname={pathname}
-        />
+        <SidebarContent pathname={pathname} />
       </aside>
 
       {/* =========================
@@ -242,9 +212,7 @@ export function Sidebar() {
         <button
           type="button"
           aria-label="Close navigation menu"
-          onClick={() =>
-            setMobileOpen(false)
-          }
+          onClick={() => setMobileOpen(false)}
           className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm lg:hidden"
         />
       )}
@@ -254,17 +222,13 @@ export function Sidebar() {
       ========================== */}
       <aside
         className={`fixed inset-y-0 left-0 z-[60] flex w-[85%] max-w-72 flex-col border-r border-white/10 bg-zinc-950 shadow-2xl transition-transform duration-300 lg:hidden ${
-          mobileOpen
-            ? "translate-x-0"
-            : "-translate-x-full"
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="absolute right-3 top-3 z-10">
           <button
             type="button"
-            onClick={() =>
-              setMobileOpen(false)
-            }
+            onClick={() => setMobileOpen(false)}
             aria-label="Close navigation menu"
             className="flex h-10 w-10 items-center justify-center rounded-xl text-zinc-400 transition hover:bg-white/5 hover:text-white"
           >
@@ -274,9 +238,7 @@ export function Sidebar() {
 
         <SidebarContent
           pathname={pathname}
-          onNavigate={() =>
-            setMobileOpen(false)
-          }
+          onNavigate={() => setMobileOpen(false)}
         />
       </aside>
     </>

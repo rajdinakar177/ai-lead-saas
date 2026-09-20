@@ -1,15 +1,11 @@
-import {
-  Bot,
-  CheckCircle2,
-} from "lucide-react";
+import { Bot, CheckCircle2 } from "lucide-react";
 
 import { LoginForm } from "@/components/auth/login-form";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentBusiness } from "@/lib/auth";
 export default async function LoginPage() {
-  const business =
-    await getCurrentBusiness();
+  const business = await getCurrentBusiness();
 
   if (business) {
     redirect("/dashboard");
@@ -18,19 +14,14 @@ export default async function LoginPage() {
     <main className="grid min-h-screen bg-[#050505] text-white lg:grid-cols-2">
       <section className="flex items-center justify-center px-5 py-12 sm:px-8">
         <div className="w-full max-w-md">
-          <a
-            href="/"
-            className="flex items-center gap-2"
-          >
+          <a href="/" className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-sm font-bold text-black">
               L
             </div>
 
             <span className="text-lg font-semibold">
               LeadFlow
-              <span className="text-blue-400">
-                AI
-              </span>
+              <span className="text-blue-400">AI</span>
             </span>
           </a>
 
@@ -39,23 +30,17 @@ export default async function LoginPage() {
               Business Login
             </p>
 
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight">
-              Welcome back.
-            </h1>
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight">Welcome back.</h1>
 
             <p className="mt-3 text-zinc-500">
-              Sign in to manage your leads,
-              conversations and appointments.
+              Sign in to manage your leads, conversations and appointments.
             </p>
           </div>
 
           <LoginForm />
           <p className="mt-6 text-center text-sm text-zinc-600">
             New to LeadFlow AI?{" "}
-            <Link
-              href="/register"
-              className="text-blue-400 transition hover:text-violet-300"
-            >
+            <Link href="/register" className="text-blue-400 transition hover:text-violet-300">
               Create an account
             </Link>
           </p>
@@ -73,8 +58,7 @@ export default async function LoginPage() {
           </div>
 
           <h2 className="mt-7 text-3xl font-semibold tracking-tight">
-            Your leads don't stop when
-            you leave the office.
+            Your leads don't stop when you leave the office.
           </h2>
 
           <div className="mt-8 space-y-4">
@@ -84,14 +68,8 @@ export default async function LoginPage() {
               "Appointment tracking",
               "Lead performance analytics",
             ].map((feature) => (
-              <div
-                key={feature}
-                className="flex items-center gap-3 text-zinc-400"
-              >
-                <CheckCircle2
-                  size={18}
-                  className="text-emerald-400"
-                />
+              <div key={feature} className="flex items-center gap-3 text-zinc-400">
+                <CheckCircle2 size={18} className="text-emerald-400" />
 
                 {feature}
               </div>

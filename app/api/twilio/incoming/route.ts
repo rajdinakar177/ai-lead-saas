@@ -1,4 +1,3 @@
-
 import { connectDB } from "@/lib/mongodb";
 import { validatePhoneNumber } from "@/lib/phone";
 import { verifyTwilioSignature } from "@/lib/sms/verify-twilio-signature";
@@ -7,25 +6,16 @@ import {
   findOneAndUpdateLeadWithSmsFence,
 } from "@/lib/sms/sms-fenced-lead";
 
-import {
-  generateQualificationResponse,
-  type AISettings,
-} from "@/lib/ai/qualification";
+import { generateQualificationResponse, type AISettings } from "@/lib/ai/qualification";
 
-import {
-  type GeneratedSlot,
-  type Timeline,
-} from "@/lib/availability";
+import { type GeneratedSlot, type Timeline } from "@/lib/availability";
 
 import { sendSmsReply } from "@/lib/sms/send-sms-reply";
 import {
   acquireSmsConversationLock,
   releaseSmsConversationLock,
 } from "@/lib/sms/sms-conversation-lock";
-import {
-  canFollowUp,
-  getNextFollowUpAt,
-} from "@/lib/follow-up";
+import { canFollowUp, getNextFollowUpAt } from "@/lib/follow-up";
 
 import { Lead } from "@/models/Lead";
 import { Business } from "@/models/Business";
@@ -52,33 +42,23 @@ import {
 
 import { assertSmsConversationOwnership } from "@/lib/sms/incoming/lock-ownership";
 
-import {
-  createSmsLockHeartbeat,
-  type SmsLockHeartbeat,
-} from "@/lib/sms/incoming/lock-heartbeat";
+import { createSmsLockHeartbeat, type SmsLockHeartbeat } from "@/lib/sms/incoming/lock-heartbeat";
 
 import { getSmsAvailableSlots } from "@/lib/sms/incoming/appointment-availability";
 import { sendFreshSmsAppointmentOptions } from "@/lib/sms/incoming/appointment-options";
 import { bookSmsAppointmentAtomically } from "@/lib/sms/incoming/appointment-booking";
 import { sendSmsAppointmentNotifications } from "@/lib/sms/incoming/appointment-notifications";
 
-const VALID_TIMELINES: Timeline[] = [
-  "Today",
-  "Tomorrow",
-  "This week",
-  "Next week",
-];
+const VALID_TIMELINES: Timeline[] = ["Today", "Tomorrow", "This week", "Next week"];
 
 /*
  * Conversation locks use a 120 second lease.
  * Renew every 40 seconds so a healthy worker refreshes the
  * lease well before it expires.
  */
-const SMS_CONVERSATION_LOCK_LEASE_MS =
-  120000;
+const SMS_CONVERSATION_LOCK_LEASE_MS = 120000;
 
-const SMS_CONVERSATION_LOCK_RENEW_MS =
-  40000;
+const SMS_CONVERSATION_LOCK_RENEW_MS = 40000;
 
 /* =========================================================
    POST
@@ -92,13 +72,11 @@ export async function POST(request: Request) {
   let conversationLockBusinessId: any = null;
   let conversationLockPhone: string | null = null;
 
-  let conversationLockLost =
-    false;
+  let conversationLockLost = false;
 
   let processingError: unknown = null;
 
-  let conversationLockHeartbeat:
-    SmsLockHeartbeat | null = null;
+  let conversationLockHeartbeat: SmsLockHeartbeat | null = null;
   /*
    * Use this instead of returning twimlResponse() directly.
    *
@@ -106,66 +84,37 @@ export async function POST(request: Request) {
    * conversation lock, return 503 so Twilio can retry rather
    * than acknowledging work that may no longer be safe.
    */
-  const successResponse = () =>
-    conversationLockLost
-      ? retryResponse()
-      : twimlResponse();
-
+  const successResponse = () => (conversationLockLost ? retryResponse() : twimlResponse());
 
   try {
     /* =====================================================
        READ TWILIO FORM DATA
        ===================================================== */
 
-    const formData =
-      await request.formData();
+    const formData = await request.formData();
 
-    const messageSid =
-      formData
-        .get("MessageSid")
-        ?.toString()
-        .trim();
+    const messageSid = formData.get("MessageSid")?.toString().trim();
 
-    const from =
-      formData
-        .get("From")
-        ?.toString()
-        .trim();
+    const from = formData.get("From")?.toString().trim();
 
-    const to =
-      formData
-        .get("To")
-        ?.toString()
-        .trim();
+    const to = formData.get("To")?.toString().trim();
 
-    const body =
-      formData
-        .get("Body")
-        ?.toString()
-        .trim();
+    const body = formData.get("Body")?.toString().trim();
 
-    console.log(
-      "Incoming Twilio SMS:",
-      {
-        messageSid,
-        from,
-        to,
-        body,
-      }
-    );
+    console.log("Incoming Twilio SMS:", {
+      messageSid,
+      from,
+      to,
+      body,
+    });
 
     /* =====================================================
        TWILIO SIGNATURE VALIDATION
        ===================================================== */
 
-    const isProduction =
-      process.env.NODE_ENV ===
-      "production";
+    const isProduction = process.env.NODE_ENV === "production";
 
-    const signatureValidationEnabled =
-      process.env
-        .TWILIO_SIGNATURE_VALIDATION ===
-      "true";
+    const signatureValidationEnabled = process.env.TWILIO_SIGNATURE_VALIDATION === "true";
 
     /*
      * Never allow Twilio signature
@@ -175,100 +124,59 @@ export async function POST(request: Request) {
      * Local development may disable it
      * explicitly for webhook testing.
      */
-    if (
-      isProduction &&
-      !signatureValidationEnabled
-    ) {
-      console.error(
-        "TWILIO_SIGNATURE_VALIDATION must be enabled in production."
-      );
+    if (isProduction && !signatureValidationEnabled) {
+      console.error("TWILIO_SIGNATURE_VALIDATION must be enabled in production.");
 
       return forbiddenResponse();
     }
 
     if (signatureValidationEnabled) {
-      const signature =
-        request.headers.get(
-          "x-twilio-signature"
-        );
+      const signature = request.headers.get("x-twilio-signature");
 
-      const twilioParams: Record<
-        string,
-        string
-      > = {};
+      const twilioParams: Record<string, string> = {};
 
-      for (
-        const [key, value] of
-        formData.entries()
-      ) {
-        if (
-          typeof value ===
-          "string"
-        ) {
-          twilioParams[key] =
-            value;
+      for (const [key, value] of formData.entries()) {
+        if (typeof value === "string") {
+          twilioParams[key] = value;
         }
       }
 
-      const webhookUrl =
-        process.env
-          .TWILIO_WEBHOOK_URL
-          ?.trim() ||
-        request.url;
+      const webhookUrl = process.env.TWILIO_WEBHOOK_URL?.trim() || request.url;
 
-      let signatureValid =
-        false;
+      let signatureValid = false;
 
       try {
-        signatureValid =
-          verifyTwilioSignature({
-            signature,
-            url: webhookUrl,
-            params:
-              twilioParams,
-          });
+        signatureValid = verifyTwilioSignature({
+          signature,
+          url: webhookUrl,
+          params: twilioParams,
+        });
       } catch (error) {
-        console.error(
-          "Twilio signature validation error:",
-          error
-        );
+        console.error("Twilio signature validation error:", error);
 
         return forbiddenResponse();
       }
 
       if (!signatureValid) {
-        console.warn(
-          "Invalid Twilio signature rejected:",
-          {
-            messageSid,
-            from,
-            to,
-          }
-        );
+        console.warn("Invalid Twilio signature rejected:", {
+          messageSid,
+          from,
+          to,
+        });
 
         return forbiddenResponse();
       }
 
-      console.log(
-        "Twilio signature verified:",
-        messageSid
-      );
+      console.log("Twilio signature verified:", messageSid);
     } else {
-      console.log(
-        "Twilio signature validation disabled for local testing."
-      );
+      console.log("Twilio signature validation disabled for local testing.");
     }
 
     /* =====================================================
        REQUIRED TWILIO FIELDS
        ===================================================== */
 
-    if (
-      !messageSid ||
-      !from ||
-      !to ||
-      !body
-    ) {
+    if (!messageSid || !from || !to || !body) {
       return successResponse();
     }
 
@@ -278,44 +186,33 @@ export async function POST(request: Request) {
        MESSAGE SID IDEMPOTENCY / RETRY CLAIM
        ===================================================== */
 
-    const eventClaim =
-      await claimTwilioInboundEvent({
-        messageSid,
-        from,
-        to,
-        body,
-      });
+    const eventClaim = await claimTwilioInboundEvent({
+      messageSid,
+      from,
+      to,
+      body,
+    });
 
     if (!eventClaim.shouldProcess) {
-      console.log(
-        "Twilio webhook already handled or currently processing:",
-        messageSid
-      );
+      console.log("Twilio webhook already handled or currently processing:", messageSid);
 
       return successResponse();
     }
 
-    claimedMessageSid =
-      messageSid;
+    claimedMessageSid = messageSid;
 
-    claimedProcessingToken =
-      eventClaim.processingToken;
+    claimedProcessingToken = eventClaim.processingToken;
 
     /* =====================================================
        FIND BUSINESS FROM TWILIO TO NUMBER
        ===================================================== */
 
-    const business =
-      await Business.findOne({
-        twilioPhoneNumber:
-          to,
-      }).lean();
+    const business = await Business.findOne({
+      twilioPhoneNumber: to,
+    }).lean();
 
     if (!business) {
-      console.warn(
-        "No business found for Twilio number:",
-        to
-      );
+      console.warn("No business found for Twilio number:", to);
 
       return successResponse();
     }
@@ -324,26 +221,15 @@ export async function POST(request: Request) {
        NORMALIZE CUSTOMER PHONE
        ===================================================== */
 
-    const phoneResult =
-      validatePhoneNumber(
-        from,
-        "US"
-      );
+    const phoneResult = validatePhoneNumber(from, "US");
 
-    if (
-      !phoneResult.valid ||
-      !phoneResult.normalized
-    ) {
-      console.warn(
-        "Invalid incoming phone:",
-        from
-      );
+    if (!phoneResult.valid || !phoneResult.normalized) {
+      console.warn("Invalid incoming phone:", from);
 
       return successResponse();
     }
 
-    const normalizedPhone =
-      phoneResult.normalized;
+    const normalizedPhone = phoneResult.normalized;
 
     /* =====================================================
        PER-CONVERSATION DISTRIBUTED LOCK
@@ -352,87 +238,60 @@ export async function POST(request: Request) {
        lead conversation is serialized by business + phone.
        ===================================================== */
 
-    const conversationLock =
-      await acquireSmsConversationLock({
-        businessId:
-          business._id,
+    const conversationLock = await acquireSmsConversationLock({
+      businessId: business._id,
 
-        phone:
-          normalizedPhone,
+      phone: normalizedPhone,
 
-        waitMs:
-          15000,
+      waitMs: 15000,
 
-        leaseMs:
-          SMS_CONVERSATION_LOCK_LEASE_MS,
-      });
+      leaseMs: SMS_CONVERSATION_LOCK_LEASE_MS,
+    });
 
     if (!conversationLock) {
-      processingError =
-        new Error(
-          "SMS conversation is busy. Please retry."
-        );
+      processingError = new Error("SMS conversation is busy. Please retry.");
 
-      console.warn(
-        "Could not acquire SMS conversation lock:",
-        {
-          businessId:
-            business._id.toString(),
+      console.warn("Could not acquire SMS conversation lock:", {
+        businessId: business._id.toString(),
 
-          phone:
-            normalizedPhone,
+        phone: normalizedPhone,
 
-          messageSid,
-        }
-      );
+        messageSid,
+      });
 
       return retryResponse();
     }
 
-    conversationLockOwner =
-      conversationLock.ownerToken;
+    conversationLockOwner = conversationLock.ownerToken;
 
-    conversationLockFenceToken =
-      conversationLock.fenceToken;
+    conversationLockFenceToken = conversationLock.fenceToken;
 
-    conversationLockBusinessId =
-      business._id;
+    conversationLockBusinessId = business._id;
 
-    conversationLockPhone =
-      normalizedPhone;
+    conversationLockPhone = normalizedPhone;
 
     /*
      * Keep the lease alive while this webhook is processing.
      */
-    conversationLockHeartbeat =
-      createSmsLockHeartbeat({
-        businessId:
-          business._id,
+    conversationLockHeartbeat = createSmsLockHeartbeat({
+      businessId: business._id,
 
-        phone:
-          normalizedPhone,
+      phone: normalizedPhone,
 
-        ownerToken:
-          conversationLockOwner,
+      ownerToken: conversationLockOwner,
 
-        fenceToken:
-          conversationLockFenceToken!,
+      fenceToken: conversationLockFenceToken!,
 
-        leaseMs:
-          SMS_CONVERSATION_LOCK_LEASE_MS,
+      leaseMs: SMS_CONVERSATION_LOCK_LEASE_MS,
 
-        renewEveryMs:
-          SMS_CONVERSATION_LOCK_RENEW_MS,
+      renewEveryMs: SMS_CONVERSATION_LOCK_RENEW_MS,
 
-        onLockLost: (error) => {
-          conversationLockLost =
-            true;
+      onLockLost: (error) => {
+        conversationLockLost = true;
 
-          processingError =
-            processingError ??
-            error;
-        },
-      });
+        processingError = processingError ?? error;
+      },
+    });
 
     conversationLockHeartbeat.start();
 
@@ -443,29 +302,18 @@ export async function POST(request: Request) {
      * Once we own the lock, check whether that original
      * worker already completed the event.
      */
-    const eventAfterLock =
-      await TwilioInboundEvent.findOne({
-        messageSid,
-      })
-        .select(
-          "status processingToken"
-        )
-        .lean();
+    const eventAfterLock = await TwilioInboundEvent.findOne({
+      messageSid,
+    })
+      .select("status processingToken")
+      .lean();
 
-    if (
-      eventAfterLock?.status ===
-      "processed"
-    ) {
-      console.log(
-        "Twilio webhook completed by another worker while waiting for lock:",
-        messageSid
-      );
+    if (eventAfterLock?.status === "processed") {
+      console.log("Twilio webhook completed by another worker while waiting for lock:", messageSid);
 
-      claimedMessageSid =
-        null;
+      claimedMessageSid = null;
 
-      claimedProcessingToken =
-        null;
+      claimedProcessingToken = null;
 
       return successResponse();
     }
@@ -480,31 +328,22 @@ export async function POST(request: Request) {
      */
     if (
       !eventAfterLock ||
-      eventAfterLock.status !==
-      "processing" ||
-      eventAfterLock.processingToken !==
-      claimedProcessingToken
+      eventAfterLock.status !== "processing" ||
+      eventAfterLock.processingToken !== claimedProcessingToken
     ) {
-      console.warn(
-        "Twilio event ownership lost while waiting for SMS conversation lock:",
-        {
-          messageSid,
+      console.warn("Twilio event ownership lost while waiting for SMS conversation lock:", {
+        messageSid,
 
-          claimedProcessingToken,
+        claimedProcessingToken,
 
-          currentProcessingToken:
-            eventAfterLock?.processingToken,
+        currentProcessingToken: eventAfterLock?.processingToken,
 
-          currentStatus:
-            eventAfterLock?.status,
-        }
-      );
+        currentStatus: eventAfterLock?.status,
+      });
 
-      claimedMessageSid =
-        null;
+      claimedMessageSid = null;
 
-      claimedProcessingToken =
-        null;
+      claimedProcessingToken = null;
 
       return successResponse();
     }
@@ -513,29 +352,20 @@ export async function POST(request: Request) {
        FIND LATEST LEAD
        ===================================================== */
 
-    const latestLead =
-      await Lead.findOne({
-        businessId:
-          business._id,
+    const latestLead = await Lead.findOne({
+      businessId: business._id,
 
-        phone:
-          normalizedPhone,
-      }).sort({
-        createdAt:
-          -1,
-      });
+      phone: normalizedPhone,
+    }).sort({
+      createdAt: -1,
+    });
 
     if (!latestLead) {
-      console.warn(
-        "No lead found for incoming SMS:",
-        {
-          businessId:
-            business._id.toString(),
+      console.warn("No lead found for incoming SMS:", {
+        businessId: business._id.toString(),
 
-          phone:
-            normalizedPhone,
-        }
-      );
+        phone: normalizedPhone,
+      });
 
       return successResponse();
     }
@@ -545,67 +375,41 @@ export async function POST(request: Request) {
        ===================================================== */
 
     const aiSettings: AISettings = {
-      businessDescription:
-        business.aiSettings
-          ?.businessDescription ??
-        "",
+      businessDescription: business.aiSettings?.businessDescription ?? "",
 
-      services:
-        business.aiSettings
-          ?.services ??
-        [],
+      services: business.aiSettings?.services ?? [],
 
-      serviceAreas:
-        business.aiSettings
-          ?.serviceAreas ??
-        [],
+      serviceAreas: business.aiSettings?.serviceAreas ?? [],
 
-      welcomeMessage:
-        business.aiSettings
-          ?.welcomeMessage ??
-        "",
+      welcomeMessage: business.aiSettings?.welcomeMessage ?? "",
 
-      tone:
-        business.aiSettings
-          ?.tone ??
-        "friendly",
+      tone: business.aiSettings?.tone ?? "friendly",
 
-      qualificationFields:
-        business.aiSettings
-          ?.qualificationFields ??
-        [
-          "name",
-          "phone",
-          "service",
-          "location",
-          "urgency",
-          "timeline",
-        ],
+      qualificationFields: business.aiSettings?.qualificationFields ?? [
+        "name",
+        "phone",
+        "service",
+        "location",
+        "urgency",
+        "timeline",
+      ],
 
-      additionalInstructions:
-        business.aiSettings
-          ?.additionalInstructions ??
-        "",
+      additionalInstructions: business.aiSettings?.additionalInstructions ?? "",
     };
 
     /* =====================================================
        FIND CURRENT ACTIVE SMS CONVERSATION
        ===================================================== */
 
-    let lead =
-      await Lead.findOne({
-        businessId:
-          business._id,
+    let lead = await Lead.findOne({
+      businessId: business._id,
 
-        phone:
-          normalizedPhone,
+      phone: normalizedPhone,
 
-        smsConversationActive:
-          true,
-      }).sort({
-        updatedAt:
-          -1,
-      });
+      smsConversationActive: true,
+    }).sort({
+      updatedAt: -1,
+    });
 
     /* =====================================================
        EXPLICIT SERVICE SWITCH
@@ -620,22 +424,17 @@ export async function POST(request: Request) {
        ===================================================== */
 
     if (lead) {
-      const openLeadsForSwitch =
-        await Lead.find({
-          businessId:
-            business._id,
+      const openLeadsForSwitch = await Lead.find({
+        businessId: business._id,
 
-          phone:
-            normalizedPhone,
+        phone: normalizedPhone,
 
-          status: {
-            $in:
-              ACTIVE_LEAD_STATUSES,
-          },
-        }).sort({
-          createdAt:
-            -1,
-        });
+        status: {
+          $in: ACTIVE_LEAD_STATUSES,
+        },
+      }).sort({
+        createdAt: -1,
+      });
 
       /*
        * First check whether the customer explicitly named
@@ -644,196 +443,133 @@ export async function POST(request: Request) {
        * This is important because the requested service may
        * not have an existing Lead yet.
        */
-      const requestedService =
-        findConfiguredService(
-          aiSettings.services,
-          body
-        );
+      const requestedService = findConfiguredService(aiSettings.services, body);
 
       if (requestedService) {
         /*
          * Check whether an existing open Lead already represents
          * this configured service.
          */
-        const requestedServiceNormalized =
-          normalizeText(
-            requestedService
-          );
+        const requestedServiceNormalized = normalizeText(requestedService);
 
-        const existingRequestedLead =
-          openLeadsForSwitch.find(
-            (item) =>
-              item.service &&
-              normalizeText(
-                item.service
-              ) ===
-              requestedServiceNormalized
-          );
+        const existingRequestedLead = openLeadsForSwitch.find(
+          (item) => item.service && normalizeText(item.service) === requestedServiceNormalized,
+        );
 
         /* ===================================================
            CASE 1:
            REQUESTED SERVICE ALREADY HAS AN OPEN LEAD
            =================================================== */
 
-        if (
-          existingRequestedLead &&
-          existingRequestedLead._id.toString() !==
-          lead._id.toString()
-        ) {
-          const previousActiveLead =
-            lead;
+        if (existingRequestedLead && existingRequestedLead._id.toString() !== lead._id.toString()) {
+          const previousActiveLead = lead;
 
-          console.log(
-            "Explicit service switch requested:",
-            {
-              fromLeadId:
-                previousActiveLead._id.toString(),
+          console.log("Explicit service switch requested:", {
+            fromLeadId: previousActiveLead._id.toString(),
 
-              fromService:
-                previousActiveLead.service,
+            fromService: previousActiveLead.service,
 
-              toLeadId:
-                existingRequestedLead._id.toString(),
+            toLeadId: existingRequestedLead._id.toString(),
 
-              toService:
-                existingRequestedLead.service,
-            }
-          );
+            toService: existingRequestedLead.service,
+          });
 
-          const deactivated =
-            await findOneAndUpdateLeadWithSmsFence({
-              filter: {
-                _id:
-                  previousActiveLead._id,
+          const deactivated = await findOneAndUpdateLeadWithSmsFence({
+            filter: {
+              _id: previousActiveLead._id,
 
-                businessId:
-                  business._id,
+              businessId: business._id,
 
-                phone:
-                  normalizedPhone,
+              phone: normalizedPhone,
 
-                smsConversationActive:
-                  true,
-              },
+              smsConversationActive: true,
+            },
 
-              fenceToken:
-                conversationLockFenceToken!,
+            fenceToken: conversationLockFenceToken!,
 
-              set: {
-                smsConversationActive:
-                  false,
-              },
-            });
+            set: {
+              smsConversationActive: false,
+            },
+          });
 
           if (!deactivated) {
-            console.warn(
-              "Could not deactivate current SMS conversation during service switch:",
-              {
-                leadId:
-                  previousActiveLead._id.toString(),
+            console.warn("Could not deactivate current SMS conversation during service switch:", {
+              leadId: previousActiveLead._id.toString(),
 
-                phone:
-                  normalizedPhone,
-              }
-            );
+              phone: normalizedPhone,
+            });
 
             return successResponse();
           }
 
           try {
-            const switchedLead =
-              await findOneAndUpdateLeadWithSmsFence({
-                filter: {
-                  _id:
-                    existingRequestedLead._id,
+            const switchedLead = await findOneAndUpdateLeadWithSmsFence({
+              filter: {
+                _id: existingRequestedLead._id,
 
-                  businessId:
-                    business._id,
+                businessId: business._id,
 
-                  phone:
-                    normalizedPhone,
+                phone: normalizedPhone,
 
-                  status: {
-                    $in:
-                      ACTIVE_LEAD_STATUSES,
-                  },
-
-                  smsConversationActive: {
-                    $ne:
-                      true,
-                  },
+                status: {
+                  $in: ACTIVE_LEAD_STATUSES,
                 },
 
-                fenceToken:
-                  conversationLockFenceToken!,
-
-                set: {
-                  smsConversationActive:
-                    true,
+                smsConversationActive: {
+                  $ne: true,
                 },
-              });
+              },
+
+              fenceToken: conversationLockFenceToken!,
+
+              set: {
+                smsConversationActive: true,
+              },
+            });
 
             if (!switchedLead) {
               await restorePreviousSmsConversation({
-                leadId:
-                  previousActiveLead._id,
+                leadId: previousActiveLead._id,
 
-                businessId:
-                  business._id,
+                businessId: business._id,
 
-                phone:
-                  normalizedPhone,
+                phone: normalizedPhone,
 
-                fenceToken:
-                  conversationLockFenceToken!,
+                fenceToken: conversationLockFenceToken!,
               });
 
               console.warn(
                 "Requested SMS service could not be activated because the lead changed state:",
                 {
-                  requestedLeadId:
-                    existingRequestedLead._id.toString(),
+                  requestedLeadId: existingRequestedLead._id.toString(),
 
-                  requestedService:
-                    existingRequestedLead.service,
-                }
+                  requestedService: existingRequestedLead.service,
+                },
               );
 
               return successResponse();
             }
 
-            lead =
-              switchedLead;
+            lead = switchedLead;
 
-            console.log(
-              "SMS conversation switched by explicit service:",
-              {
-                leadId:
-                  lead._id.toString(),
+            console.log("SMS conversation switched by explicit service:", {
+              leadId: lead._id.toString(),
 
-                service:
-                  lead.service,
+              service: lead.service,
 
-                previousLeadId:
-                  previousActiveLead._id.toString(),
+              previousLeadId: previousActiveLead._id.toString(),
 
-                previousService:
-                  previousActiveLead.service,
-              }
-            );
+              previousService: previousActiveLead.service,
+            });
           } catch (error) {
             await restorePreviousSmsConversation({
-              leadId:
-                previousActiveLead._id,
+              leadId: previousActiveLead._id,
 
-              businessId:
-                business._id,
+              businessId: business._id,
 
-              phone:
-                normalizedPhone,
+              phone: normalizedPhone,
 
-              fenceToken:
-                conversationLockFenceToken!,
+              fenceToken: conversationLockFenceToken!,
             });
 
             throw error;
@@ -844,138 +580,96 @@ export async function POST(request: Request) {
            CASE 2:
            REQUESTED SERVICE DOES NOT HAVE AN OPEN LEAD YET
            =================================================== */
-
         else if (
           !existingRequestedLead &&
-          normalizeText(
-            lead.service ?? ""
-          ) !==
-          requestedServiceNormalized
+          normalizeText(lead.service ?? "") !== requestedServiceNormalized
         ) {
-          const previousActiveLead =
-            lead;
+          const previousActiveLead = lead;
 
-          console.log(
-            "Explicit new service request detected:",
-            {
-              previousLeadId:
-                previousActiveLead._id.toString(),
+          console.log("Explicit new service request detected:", {
+            previousLeadId: previousActiveLead._id.toString(),
 
-              previousService:
-                previousActiveLead.service,
+            previousService: previousActiveLead.service,
 
-              requestedService,
-            }
-          );
+            requestedService,
+          });
 
           /*
            * Deactivate the current conversation first.
            * The unique partial index then allows the new Lead
            * to become the active SMS conversation.
            */
-          const deactivated =
-            await findOneAndUpdateLeadWithSmsFence({
-              filter: {
-                _id:
-                  previousActiveLead._id,
+          const deactivated = await findOneAndUpdateLeadWithSmsFence({
+            filter: {
+              _id: previousActiveLead._id,
 
-                businessId:
-                  business._id,
+              businessId: business._id,
 
-                phone:
-                  normalizedPhone,
+              phone: normalizedPhone,
 
-                smsConversationActive:
-                  true,
-              },
+              smsConversationActive: true,
+            },
 
-              fenceToken:
-                conversationLockFenceToken!,
+            fenceToken: conversationLockFenceToken!,
 
-              set: {
-                smsConversationActive:
-                  false,
-              },
-            });
+            set: {
+              smsConversationActive: false,
+            },
+          });
 
           if (!deactivated) {
             console.warn(
               "Could not deactivate current SMS conversation before creating new service lead:",
               {
-                leadId:
-                  previousActiveLead._id.toString(),
+                leadId: previousActiveLead._id.toString(),
 
                 requestedService,
-              }
+              },
             );
 
             return successResponse();
           }
 
           try {
-            const createdLead =
-              await Lead.create({
-                businessId:
-                  business._id,
+            const createdLead = await Lead.create({
+              businessId: business._id,
 
-                phone:
-                  normalizedPhone,
+              phone: normalizedPhone,
 
-                name:
-                  previousActiveLead.name ??
-                  latestLead.name ??
-                  null,
+              name: previousActiveLead.name ?? latestLead.name ?? null,
 
-                industry:
-                  business.industry,
+              industry: business.industry,
 
-                service:
-                  requestedService,
+              service: requestedService,
 
-                location:
-                  null,
+              location: null,
 
-                urgency:
-                  null,
+              urgency: null,
 
-                timeline:
-                  null,
+              timeline: null,
 
-                status:
-                  "new",
+              status: "new",
 
-                source:
-                  "sms",
+              source: "sms",
 
-                smsConversationActive:
-                  true,
+              smsConversationActive: true,
 
-                smsFenceToken:
-                  conversationLockFenceToken!,
-              });
+              smsFenceToken: conversationLockFenceToken!,
+            });
 
-            lead =
-              createdLead;
+            lead = createdLead;
 
-            console.log(
-              "New SMS service conversation created from explicit service switch:",
-              {
-                previousLeadId:
-                  previousActiveLead._id.toString(),
+            console.log("New SMS service conversation created from explicit service switch:", {
+              previousLeadId: previousActiveLead._id.toString(),
 
-                previousService:
-                  previousActiveLead.service,
+              previousService: previousActiveLead.service,
 
-                newLeadId:
-                  lead._id.toString(),
+              newLeadId: lead._id.toString(),
 
-                newService:
-                  lead.service,
+              newService: lead.service,
 
-                fenceToken:
-                  conversationLockFenceToken,
-              }
-            );
+              fenceToken: conversationLockFenceToken,
+            });
           } catch (error) {
             /*
              * If creation fails, try to restore the previous
@@ -983,17 +677,13 @@ export async function POST(request: Request) {
              * an active SMS Lead.
              */
             await restorePreviousSmsConversation({
-              leadId:
-                previousActiveLead._id,
+              leadId: previousActiveLead._id,
 
-              businessId:
-                business._id,
+              businessId: business._id,
 
-              phone:
-                normalizedPhone,
+              phone: normalizedPhone,
 
-              fenceToken:
-                conversationLockFenceToken!,
+              fenceToken: conversationLockFenceToken!,
             });
 
             throw error;
@@ -1005,149 +695,102 @@ export async function POST(request: Request) {
          * This supports historical/open leads whose service may
          * no longer be present in the current business settings.
          */
-        const explicitlyMatchedLead =
-          findLeadByService(
-            openLeadsForSwitch,
-            body
-          );
+        const explicitlyMatchedLead = findLeadByService(openLeadsForSwitch, body);
 
-        if (
-          explicitlyMatchedLead &&
-          explicitlyMatchedLead._id.toString() !==
-          lead._id.toString()
-        ) {
-          const previousActiveLead =
-            lead;
+        if (explicitlyMatchedLead && explicitlyMatchedLead._id.toString() !== lead._id.toString()) {
+          const previousActiveLead = lead;
 
-          console.log(
-            "Explicit service switch requested:",
-            {
-              fromLeadId:
-                previousActiveLead._id.toString(),
+          console.log("Explicit service switch requested:", {
+            fromLeadId: previousActiveLead._id.toString(),
 
-              fromService:
-                previousActiveLead.service,
+            fromService: previousActiveLead.service,
 
-              toLeadId:
-                explicitlyMatchedLead._id.toString(),
+            toLeadId: explicitlyMatchedLead._id.toString(),
 
-              toService:
-                explicitlyMatchedLead.service,
-            }
-          );
+            toService: explicitlyMatchedLead.service,
+          });
 
-          const deactivated =
-            await findOneAndUpdateLeadWithSmsFence({
-              filter: {
-                _id:
-                  previousActiveLead._id,
+          const deactivated = await findOneAndUpdateLeadWithSmsFence({
+            filter: {
+              _id: previousActiveLead._id,
 
-                businessId:
-                  business._id,
+              businessId: business._id,
 
-                phone:
-                  normalizedPhone,
+              phone: normalizedPhone,
 
-                smsConversationActive:
-                  true,
-              },
+              smsConversationActive: true,
+            },
 
-              fenceToken:
-                conversationLockFenceToken!,
+            fenceToken: conversationLockFenceToken!,
 
-              set: {
-                smsConversationActive:
-                  false,
-              },
-            });
+            set: {
+              smsConversationActive: false,
+            },
+          });
 
           if (!deactivated) {
             return successResponse();
           }
 
           try {
-            const switchedLead =
-              await findOneAndUpdateLeadWithSmsFence({
-                filter: {
-                  _id:
-                    explicitlyMatchedLead._id,
+            const switchedLead = await findOneAndUpdateLeadWithSmsFence({
+              filter: {
+                _id: explicitlyMatchedLead._id,
 
-                  businessId:
-                    business._id,
+                businessId: business._id,
 
-                  phone:
-                    normalizedPhone,
+                phone: normalizedPhone,
 
-                  status: {
-                    $in:
-                      ACTIVE_LEAD_STATUSES,
-                  },
-
-                  smsConversationActive: {
-                    $ne:
-                      true,
-                  },
+                status: {
+                  $in: ACTIVE_LEAD_STATUSES,
                 },
 
-                fenceToken:
-                  conversationLockFenceToken!,
-
-                set: {
-                  smsConversationActive:
-                    true,
+                smsConversationActive: {
+                  $ne: true,
                 },
-              });
+              },
+
+              fenceToken: conversationLockFenceToken!,
+
+              set: {
+                smsConversationActive: true,
+              },
+            });
 
             if (!switchedLead) {
               await restorePreviousSmsConversation({
-                leadId:
-                  previousActiveLead._id,
+                leadId: previousActiveLead._id,
 
-                businessId:
-                  business._id,
+                businessId: business._id,
 
-                phone:
-                  normalizedPhone,
+                phone: normalizedPhone,
 
-                fenceToken:
-                  conversationLockFenceToken!,
+                fenceToken: conversationLockFenceToken!,
               });
 
               return successResponse();
             }
 
-            lead =
-              switchedLead;
+            lead = switchedLead;
 
-            console.log(
-              "SMS conversation switched by explicit service:",
-              {
-                leadId:
-                  lead._id.toString(),
+            console.log("SMS conversation switched by explicit service:", {
+              leadId: lead._id.toString(),
 
-                service:
-                  lead.service,
+              service: lead.service,
 
-                previousLeadId:
-                  previousActiveLead._id.toString(),
+              previousLeadId: previousActiveLead._id.toString(),
 
-                previousService:
-                  previousActiveLead.service,
-              }
-            );
+              previousService: previousActiveLead.service,
+            });
           } catch (error) {
             await restorePreviousSmsConversation({
-              leadId:
-                previousActiveLead._id,
+              leadId: previousActiveLead._id,
 
-              businessId:
-                business._id,
+              businessId: business._id,
 
-              phone:
-                normalizedPhone,
+              phone: normalizedPhone,
 
-              fenceToken:
-                conversationLockFenceToken!,
+              fenceToken: conversationLockFenceToken!,
             });
 
             throw error;
@@ -1161,98 +804,63 @@ export async function POST(request: Request) {
        ===================================================== */
 
     if (!lead) {
-      const openLeads =
-        await Lead.find({
-          businessId:
-            business._id,
+      const openLeads = await Lead.find({
+        businessId: business._id,
 
-          phone:
-            normalizedPhone,
+        phone: normalizedPhone,
 
-          status: {
-            $in:
-              ACTIVE_LEAD_STATUSES,
-          },
-        }).sort({
-          createdAt:
-            -1,
-        });
+        status: {
+          $in: ACTIVE_LEAD_STATUSES,
+        },
+      }).sort({
+        createdAt: -1,
+      });
 
       /* ===================================================
          CASE 1:
          ONLY ONE OPEN LEAD
          =================================================== */
 
-      if (
-        openLeads.length ===
-        1
-      ) {
-        const requestedLead =
-          openLeads[0];
+      if (openLeads.length === 1) {
+        const requestedLead = openLeads[0];
 
-        const activation =
-          await activateSmsConversation({
-            targetLeadId:
-              requestedLead._id,
+        const activation = await activateSmsConversation({
+          targetLeadId: requestedLead._id,
 
-            businessId:
-              business._id,
+          businessId: business._id,
 
-            phone:
-              normalizedPhone,
-            fenceToken:
-              conversationLockFenceToken!,
-          });
+          phone: normalizedPhone,
+          fenceToken: conversationLockFenceToken!,
+        });
 
         if (!activation) {
-          console.warn(
-            "Unable to activate SMS conversation:",
-            {
-              requestedLeadId:
-                requestedLead._id.toString(),
+          console.warn("Unable to activate SMS conversation:", {
+            requestedLeadId: requestedLead._id.toString(),
 
-              phone:
-                normalizedPhone,
-            }
-          );
+            phone: normalizedPhone,
+          });
 
           return successResponse();
         }
 
-        lead =
-          activation.lead;
+        lead = activation.lead;
 
-        if (
-          activation
-            .requestedLeadActivated
-        ) {
-          console.log(
-            "Automatically activated SMS conversation:",
-            {
-              leadId:
-                lead._id.toString(),
+        if (activation.requestedLeadActivated) {
+          console.log("Automatically activated SMS conversation:", {
+            leadId: lead._id.toString(),
 
-              service:
-                lead.service,
+            service: lead.service,
 
-              status:
-                lead.status,
-            }
-          );
+            status: lead.status,
+          });
         } else {
-          console.log(
-            "SMS activation race resolved to existing active conversation:",
-            {
-              requestedLeadId:
-                requestedLead._id.toString(),
+          console.log("SMS activation race resolved to existing active conversation:", {
+            requestedLeadId: requestedLead._id.toString(),
 
-              activeLeadId:
-                lead._id.toString(),
+            activeLeadId: lead._id.toString(),
 
-              service:
-                lead.service,
-            }
-          );
+            service: lead.service,
+          });
         }
       }
 
@@ -1260,16 +868,8 @@ export async function POST(request: Request) {
          CASE 2:
          MULTIPLE OPEN LEADS
          =================================================== */
-
-      else if (
-        openLeads.length >
-        1
-      ) {
-        const matchedLead =
-          findLeadByService(
-            openLeads,
-            body
-          );
+      else if (openLeads.length > 1) {
+        const matchedLead = findLeadByService(openLeads, body);
 
         if (matchedLead) {
           /*
@@ -1285,52 +885,33 @@ export async function POST(request: Request) {
            * worker safely.
            */
 
-          const activation =
-            await activateSmsConversation({
-              targetLeadId:
-                matchedLead._id,
+          const activation = await activateSmsConversation({
+            targetLeadId: matchedLead._id,
 
-              businessId:
-                business._id,
+            businessId: business._id,
 
-              phone:
-                normalizedPhone,
-              fenceToken:
-                conversationLockFenceToken!,
-            });
+            phone: normalizedPhone,
+            fenceToken: conversationLockFenceToken!,
+          });
 
           if (!activation) {
-            console.warn(
-              "Unable to activate selected SMS conversation:",
-              {
-                requestedLeadId:
-                  matchedLead._id.toString(),
+            console.warn("Unable to activate selected SMS conversation:", {
+              requestedLeadId: matchedLead._id.toString(),
 
-                phone:
-                  normalizedPhone,
-              }
-            );
+              phone: normalizedPhone,
+            });
 
             return successResponse();
           }
 
-          lead =
-            activation.lead;
+          lead = activation.lead;
 
-          if (
-            activation
-              .requestedLeadActivated
-          ) {
-            console.log(
-              "SMS conversation selected by service:",
-              {
-                leadId:
-                  lead._id.toString(),
+          if (activation.requestedLeadActivated) {
+            console.log("SMS conversation selected by service:", {
+              leadId: lead._id.toString(),
 
-                service:
-                  lead.service,
-              }
-            );
+              service: lead.service,
+            });
           } else {
             /*
              * Another webhook activated a conversation
@@ -1339,109 +920,64 @@ export async function POST(request: Request) {
              * Use the database winner instead of disabling
              * it or causing a 500.
              */
-            console.log(
-              "SMS service-selection race resolved to existing active conversation:",
-              {
-                requestedLeadId:
-                  matchedLead._id.toString(),
+            console.log("SMS service-selection race resolved to existing active conversation:", {
+              requestedLeadId: matchedLead._id.toString(),
 
-                requestedService:
-                  matchedLead.service,
+              requestedService: matchedLead.service,
 
-                activeLeadId:
-                  lead._id.toString(),
+              activeLeadId: lead._id.toString(),
 
-                activeService:
-                  lead.service,
-              }
-            );
+              activeService: lead.service,
+            });
           }
         } else {
-          const uniqueServices =
-            Array.from(
-              new Set(
-                openLeads
-                  .map(
-                    (item) =>
-                      item.service
-                        ?.trim()
-                  )
-                  .filter(
-                    (
-                      service
-                    ): service is string =>
-                      Boolean(
-                        service
-                      )
-                  )
-              )
-            );
+          const uniqueServices = Array.from(
+            new Set(
+              openLeads
+                .map((item) => item.service?.trim())
+                .filter((service): service is string => Boolean(service)),
+            ),
+          );
 
-          let clarification =
-            "You currently have more than one active service request.";
+          let clarification = "You currently have more than one active service request.";
 
-          if (
-            uniqueServices.length >
-            0
-          ) {
-            clarification +=
-              ` Please reply with the service you want to continue: ${uniqueServices.join(
-                " or "
-              )}.`;
+          if (uniqueServices.length > 0) {
+            clarification += ` Please reply with the service you want to continue: ${uniqueServices.join(
+              " or ",
+            )}.`;
           } else {
-            clarification +=
-              " Please tell me which service request you want to continue.";
+            clarification += " Please tell me which service request you want to continue.";
           }
           await assertSmsConversationOwnership({
-            businessId:
-              business._id,
+            businessId: business._id,
 
-            phone:
-              normalizedPhone,
+            phone: normalizedPhone,
 
-            ownerToken:
-              conversationLockOwner!,
+            ownerToken: conversationLockOwner!,
 
-            fenceToken:
-              conversationLockFenceToken!,
+            fenceToken: conversationLockFenceToken!,
           });
           try {
-
             await sendSmsReply({
-              to:
-                normalizedPhone,
+              to: normalizedPhone,
 
-              body:
-                clarification,
+              body: clarification,
             });
           } catch (smsError) {
-            console.error(
-              "SMS lead-selection reply failed:",
-              smsError
-            );
+            console.error("SMS lead-selection reply failed:", smsError);
           }
 
-          console.log(
-            "Multiple active leads require service selection:",
-            {
-              phone:
-                normalizedPhone,
+          console.log("Multiple active leads require service selection:", {
+            phone: normalizedPhone,
 
-              leads:
-                openLeads.map(
-                  (item) => ({
-                    id:
-                      item._id.toString(),
+            leads: openLeads.map((item) => ({
+              id: item._id.toString(),
 
-                    service:
-                      item.service,
+              service: item.service,
 
-                    status:
-                      item.status,
-                  })
-                ),
-            }
-          );
+              status: item.status,
+            })),
+          });
 
           return successResponse();
         }
@@ -1451,55 +987,39 @@ export async function POST(request: Request) {
          CASE 3:
          NO OPEN LEADS
          =================================================== */
-
       else {
-        console.log(
-          "No active/open lead. Checking for new service request..."
+        console.log("No active/open lead. Checking for new service request...");
+
+        const newRequestResult = await generateQualificationResponse(
+          {
+            messages: [
+              {
+                sender: "user",
+
+                text: body,
+              },
+            ],
+
+            lead: {
+              phone: normalizedPhone,
+
+              industry: business.industry,
+            },
+          },
+
+          {
+            name: business.name,
+
+            industry: business.industry,
+
+            country: business.country ?? "US",
+
+            aiSettings,
+          },
         );
 
-        const newRequestResult =
-          await generateQualificationResponse(
-            {
-              messages: [
-                {
-                  sender:
-                    "user",
-
-                  text:
-                    body,
-                },
-              ],
-
-              lead: {
-                phone:
-                  normalizedPhone,
-
-                industry:
-                  business.industry,
-              },
-            },
-
-            {
-              name:
-                business.name,
-
-              industry:
-                business.industry,
-
-              country:
-                business.country ??
-                "US",
-
-              aiSettings,
-            }
-          );
-
-        if (
-          newRequestResult.lead
-            .service
-        ) {
-          let createdLead:
-            any = null;
+        if (newRequestResult.lead.service) {
+          let createdLead: any = null;
 
           try {
             /*
@@ -1510,65 +1030,32 @@ export async function POST(request: Request) {
              * concurrent creation.
              */
 
-            createdLead =
-              await Lead.create({
-                businessId:
-                  business._id,
+            createdLead = await Lead.create({
+              businessId: business._id,
 
-                phone:
-                  normalizedPhone,
+              phone: normalizedPhone,
 
-                name:
-                  newRequestResult.lead
-                    .name ??
-                  latestLead.name ??
-                  null,
+              name: newRequestResult.lead.name ?? latestLead.name ?? null,
 
-                industry:
-                  newRequestResult.lead
-                    .industry ??
-                  business.industry,
+              industry: newRequestResult.lead.industry ?? business.industry,
 
-                service:
-                  newRequestResult.lead
-                    .service,
+              service: newRequestResult.lead.service,
 
-                location:
-                  newRequestResult.lead
-                    .location ??
-                  null,
+              location: newRequestResult.lead.location ?? null,
 
-                urgency:
-                  newRequestResult.lead
-                    .urgency ??
-                  null,
+              urgency: newRequestResult.lead.urgency ?? null,
 
-                timeline:
-                  newRequestResult.lead
-                    .timeline ??
-                  null,
+              timeline: newRequestResult.lead.timeline ?? null,
 
-                status:
-                  newRequestResult
-                    .readyToBook
-                    ? "qualified"
-                    : newRequestResult
-                      .status,
+              status: newRequestResult.readyToBook ? "qualified" : newRequestResult.status,
 
-                source:
-                  "sms",
+              source: "sms",
 
-                smsConversationActive:
-                  true,
-                smsFenceToken:
-                  conversationLockFenceToken!,
-              });
+              smsConversationActive: true,
+              smsFenceToken: conversationLockFenceToken!,
+            });
           } catch (error) {
-            if (
-              !isMongoDuplicateKeyError(
-                error
-              )
-            ) {
+            if (!isMongoDuplicateKeyError(error)) {
               throw error;
             }
 
@@ -1580,52 +1067,38 @@ export async function POST(request: Request) {
              * current inbound SMS against it.
              */
 
-            const activeWinner =
-              await Lead.findOne({
-                businessId:
-                  business._id,
+            const activeWinner = await Lead.findOne({
+              businessId: business._id,
 
-                phone:
-                  normalizedPhone,
+              phone: normalizedPhone,
 
-                smsConversationActive:
-                  true,
-              }).sort({
-                updatedAt:
-                  -1,
-              });
+              smsConversationActive: true,
+            }).sort({
+              updatedAt: -1,
+            });
 
             if (!activeWinner) {
               console.error(
                 "Duplicate active SMS conversation detected but winning lead could not be loaded:",
                 {
-                  businessId:
-                    business._id.toString(),
+                  businessId: business._id.toString(),
 
-                  phone:
-                    normalizedPhone,
-                }
+                  phone: normalizedPhone,
+                },
               );
 
               return successResponse();
             }
 
-            lead =
-              activeWinner;
+            lead = activeWinner;
 
-            console.log(
-              "New SMS lead creation race resolved to existing active conversation:",
-              {
-                activeLeadId:
-                  lead._id.toString(),
+            console.log("New SMS lead creation race resolved to existing active conversation:", {
+              activeLeadId: lead._id.toString(),
 
-                service:
-                  lead.service,
+              service: lead.service,
 
-                phone:
-                  normalizedPhone,
-              }
-            );
+              phone: normalizedPhone,
+            });
           }
 
           /* ===============================================
@@ -1633,185 +1106,113 @@ export async function POST(request: Request) {
              =============================================== */
 
           if (createdLead) {
-            lead =
-              createdLead;
+            lead = createdLead;
 
             /* =============================================
                SCHEDULE FOLLOW-UP FOR NEW SMS LEAD
                ============================================= */
 
-            if (
-              canFollowUp(
-                lead.status,
-                lead.phone
-              )
-            ) {
-              lead.followUp =
-                lead.followUp ?? {};
+            if (canFollowUp(lead.status, lead.phone)) {
+              lead.followUp = lead.followUp ?? {};
 
-              lead.followUp.enabled =
-                true;
+              lead.followUp.enabled = true;
 
-              lead.followUp.count =
-                lead.followUp.count ??
-                0;
+              lead.followUp.count = lead.followUp.count ?? 0;
 
-              lead.followUp.lastFollowUpAt =
-                lead.followUp
-                  .lastFollowUpAt ??
-                null;
+              lead.followUp.lastFollowUpAt = lead.followUp.lastFollowUpAt ?? null;
 
-              lead.followUp.nextFollowUpAt =
-                getNextFollowUpAt(
-                  lead.followUp.count
-                );
+              lead.followUp.nextFollowUpAt = getNextFollowUpAt(lead.followUp.count);
             } else {
-              lead.followUp =
-                lead.followUp ?? {};
+              lead.followUp = lead.followUp ?? {};
 
-              lead.followUp.enabled =
-                false;
+              lead.followUp.enabled = false;
 
-              lead.followUp.nextFollowUpAt =
-                null;
+              lead.followUp.nextFollowUpAt = null;
             }
 
-            const fencedNewLead =
-              await updateLeadWithSmsFence({
-                leadId:
-                  lead._id,
+            const fencedNewLead = await updateLeadWithSmsFence({
+              leadId: lead._id,
 
-                businessId:
-                  business._id,
+              businessId: business._id,
 
-                phone:
-                  normalizedPhone,
+              phone: normalizedPhone,
 
-                fenceToken:
-                  conversationLockFenceToken!,
+              fenceToken: conversationLockFenceToken!,
 
-                set: {
-                  status:
-                    lead.status,
+              set: {
+                status: lead.status,
 
-                  smsConversationActive:
-                    lead.smsConversationActive,
+                smsConversationActive: lead.smsConversationActive,
 
-                  "followUp.enabled":
-                    lead.followUp
-                      ?.enabled ??
-                    false,
+                "followUp.enabled": lead.followUp?.enabled ?? false,
 
-                  "followUp.count":
-                    lead.followUp
-                      ?.count ??
-                    0,
+                "followUp.count": lead.followUp?.count ?? 0,
 
-                  "followUp.nextFollowUpAt":
-                    lead.followUp
-                      ?.nextFollowUpAt ??
-                    null,
+                "followUp.nextFollowUpAt": lead.followUp?.nextFollowUpAt ?? null,
 
-                  "followUp.lastFollowUpAt":
-                    lead.followUp
-                      ?.lastFollowUpAt ??
-                    null,
-                },
-              });
+                "followUp.lastFollowUpAt": lead.followUp?.lastFollowUpAt ?? null,
+              },
+            });
 
             if (!fencedNewLead) {
-              conversationLockLost =
-                true;
+              conversationLockLost = true;
 
-              throw new Error(
-                "Stale SMS worker rejected while saving new service lead."
-              );
+              throw new Error("Stale SMS worker rejected while saving new service lead.");
             }
 
-            lead =
-              fencedNewLead;
+            lead = fencedNewLead;
 
             await Message.create({
-              leadId:
-                lead._id,
+              leadId: lead._id,
 
-              sender:
-                "lead",
+              sender: "lead",
 
-              content:
-                body,
+              content: body,
             });
 
-            const aiMessage =
-              await Message.create({
-                leadId:
-                  lead._id,
+            const aiMessage = await Message.create({
+              leadId: lead._id,
 
-                sender:
-                  "ai",
+              sender: "ai",
 
-                content:
-                  newRequestResult.reply,
-              });
+              content: newRequestResult.reply,
+            });
             await assertSmsConversationOwnership({
-              businessId:
-                business._id,
+              businessId: business._id,
 
-              phone:
-                normalizedPhone,
+              phone: normalizedPhone,
 
-              ownerToken:
-                conversationLockOwner!,
+              ownerToken: conversationLockOwner!,
 
-              fenceToken:
-                conversationLockFenceToken!,
+              fenceToken: conversationLockFenceToken!,
             });
             try {
-
               await sendSmsReply({
-                to:
-                  normalizedPhone,
+                to: normalizedPhone,
 
-                body:
-                  newRequestResult.reply,
+                body: newRequestResult.reply,
               });
             } catch (smsError) {
-              console.error(
-                "New service request SMS reply failed:",
-                smsError
-              );
+              console.error("New service request SMS reply failed:", smsError);
             }
 
-            console.log(
-              "New SMS service request created:",
-              {
-                previousLeadId:
-                  latestLead._id.toString(),
+            console.log("New SMS service request created:", {
+              previousLeadId: latestLead._id.toString(),
 
-                newLeadId:
-                  lead._id.toString(),
+              newLeadId: lead._id.toString(),
 
-                service:
-                  lead.service,
+              service: lead.service,
 
-                status:
-                  lead.status,
+              status: lead.status,
 
-                smsConversationActive:
-                  lead.smsConversationActive,
+              smsConversationActive: lead.smsConversationActive,
 
-                followUpEnabled:
-                  lead.followUp
-                    ?.enabled,
+              followUpEnabled: lead.followUp?.enabled,
 
-                nextFollowUpAt:
-                  lead.followUp
-                    ?.nextFollowUpAt,
+              nextFollowUpAt: lead.followUp?.nextFollowUpAt,
 
-                messageId:
-                  aiMessage._id.toString(),
-              }
-            );
+              messageId: aiMessage._id.toString(),
+            });
 
             return successResponse();
           }
@@ -1828,28 +1229,20 @@ export async function POST(request: Request) {
            */
         } else {
           await Message.create({
-            leadId:
-              latestLead._id,
+            leadId: latestLead._id,
 
-            sender:
-              "lead",
+            sender: "lead",
 
-            content:
-              body,
+            content: body,
           });
 
-          console.log(
-            "SMS attached to latest closed lead:",
-            {
-              leadId:
-                latestLead._id.toString(),
+          console.log("SMS attached to latest closed lead:", {
+            leadId: latestLead._id.toString(),
 
-              status:
-                latestLead.status,
+            status: latestLead.status,
 
-              body,
-            }
-          );
+            body,
+          });
 
           return successResponse();
         }
@@ -1861,9 +1254,7 @@ export async function POST(request: Request) {
        ===================================================== */
 
     if (!lead) {
-      console.warn(
-        "Unable to resolve SMS lead."
-      );
+      console.warn("Unable to resolve SMS lead.");
 
       return successResponse();
     }
@@ -1875,128 +1266,81 @@ export async function POST(request: Request) {
        A new one will be scheduled after AI response.
        ===================================================== */
 
-    if (
-      conversationLockFenceToken ===
-      null
-    ) {
-      throw new Error(
-        "Missing SMS conversation fence token."
-      );
+    if (conversationLockFenceToken === null) {
+      throw new Error("Missing SMS conversation fence token.");
     }
 
-    const fencedReplyLead =
-      await updateLeadWithSmsFence({
-        leadId:
-          lead._id,
+    const fencedReplyLead = await updateLeadWithSmsFence({
+      leadId: lead._id,
 
-        businessId:
-          business._id,
+      businessId: business._id,
 
-        phone:
-          normalizedPhone,
+      phone: normalizedPhone,
 
-        fenceToken:
-          conversationLockFenceToken,
+      fenceToken: conversationLockFenceToken,
 
-        set: {
-          "followUp.nextFollowUpAt":
-            null,
-        },
-      });
+      set: {
+        "followUp.nextFollowUpAt": null,
+      },
+    });
 
     if (!fencedReplyLead) {
-      conversationLockLost =
-        true;
+      conversationLockLost = true;
 
-      throw new Error(
-        "Stale SMS worker rejected while processing customer reply."
-      );
+      throw new Error("Stale SMS worker rejected while processing customer reply.");
     }
 
     /*
      * Continue using the fresh database document returned by
      * the fenced update.
      */
-    lead =
-      fencedReplyLead;
+    lead = fencedReplyLead;
 
     /* =====================================================
        SAVE CUSTOMER MESSAGE
        ===================================================== */
 
-    const incomingMessage =
-      await Message.create({
-        leadId:
-          lead._id,
+    const incomingMessage = await Message.create({
+      leadId: lead._id,
 
-        sender:
-          "lead",
+      sender: "lead",
 
-        content:
-          body,
-      });
+      content: body,
+    });
 
-    console.log(
-      "Incoming SMS saved:",
-      {
-        business:
-          business.name,
+    console.log("Incoming SMS saved:", {
+      business: business.name,
 
-        leadId:
-          lead._id.toString(),
+      leadId: lead._id.toString(),
 
-        messageId:
-          incomingMessage._id.toString(),
+      messageId: incomingMessage._id.toString(),
 
-        phone:
-          normalizedPhone,
+      phone: normalizedPhone,
 
-        service:
-          lead.service,
+      service: lead.service,
 
-        status:
-          lead.status,
+      status: lead.status,
 
-        smsConversationActive:
-          lead.smsConversationActive,
-      }
-    );
+      smsConversationActive: lead.smsConversationActive,
+    });
 
     /* =====================================================
        SMS APPOINTMENT SELECTION
        ===================================================== */
 
-    const selectedOption =
-      /^[1-3]$/.test(body)
-        ? Number(body)
-        : null;
+    const selectedOption = /^[1-3]$/.test(body) ? Number(body) : null;
 
-    if (
-      selectedOption &&
-      lead.timeline &&
-      lead.status ===
-      "qualified"
-    ) {
-      const timeline =
-        lead.timeline as Timeline;
+    if (selectedOption && lead.timeline && lead.status === "qualified") {
+      const timeline = lead.timeline as Timeline;
 
-      if (
-        VALID_TIMELINES.includes(
-          timeline
-        )
-      ) {
+      if (VALID_TIMELINES.includes(timeline)) {
         /* ===============================================
            READ EXACT PREVIOUSLY OFFERED SLOT
            =============================================== */
 
-        const storedSlots =
-          lead.smsBookingOptions
-            ?.slots ?? [];
+        const storedSlots = lead.smsBookingOptions?.slots ?? [];
 
-        const storedSlot =
-          storedSlots[
-          selectedOption - 1
-          ];
+        const storedSlot = storedSlots[selectedOption - 1];
 
         /* ===============================================
            NO STORED OPTION
@@ -2008,10 +1352,8 @@ export async function POST(request: Request) {
             business,
             timeline,
             normalizedPhone,
-            ownerToken:
-              conversationLockOwner!,
-            fenceToken:
-              conversationLockFenceToken!,
+            ownerToken: conversationLockOwner!,
+            fenceToken: conversationLockFenceToken!,
 
             reason:
               "Those appointment options are no longer current. Here are the latest available times:",
@@ -2020,68 +1362,46 @@ export async function POST(request: Request) {
           return successResponse();
         }
 
-        const scheduledFor =
-          new Date(
-            storedSlot.scheduledFor
-          );
+        const scheduledFor = new Date(storedSlot.scheduledFor);
 
-        const selectedLabel =
-          storedSlot.label;
+        const selectedLabel = storedSlot.label;
 
         /* ===============================================
            REVALIDATE EXACT STORED SLOT
            =============================================== */
 
-        const currentAvailableSlots =
-          await getSmsAvailableSlots({
-            business,
-            timeline,
-          });
+        const currentAvailableSlots = await getSmsAvailableSlots({
+          business,
+          timeline,
+        });
 
-        const exactSlotStillAvailable =
-          currentAvailableSlots.some(
-            (slot) =>
-              new Date(
-                slot.scheduledFor
-              ).getTime() ===
-              scheduledFor.getTime()
-          );
+        const exactSlotStillAvailable = currentAvailableSlots.some(
+          (slot) => new Date(slot.scheduledFor).getTime() === scheduledFor.getTime(),
+        );
 
         /* ===============================================
            EXACT OFFERED SLOT NO LONGER AVAILABLE
            =============================================== */
 
-        if (
-          !exactSlotStillAvailable
-        ) {
-          console.log(
-            "Previously offered SMS appointment is no longer available:",
-            {
-              leadId:
-                lead._id.toString(),
+        if (!exactSlotStillAvailable) {
+          console.log("Previously offered SMS appointment is no longer available:", {
+            leadId: lead._id.toString(),
 
-              option:
-                selectedOption,
+            option: selectedOption,
 
-              label:
-                selectedLabel,
+            label: selectedLabel,
 
-              scheduledFor:
-                scheduledFor.toISOString(),
-            }
-          );
+            scheduledFor: scheduledFor.toISOString(),
+          });
 
           await sendFreshSmsAppointmentOptions({
             lead,
             business,
             timeline,
             normalizedPhone,
-            ownerToken:
-              conversationLockOwner!,
-            fenceToken:
-              conversationLockFenceToken!,
-            reason:
-              `Sorry, ${selectedLabel} is no longer available. Here are the latest available times:`,
+            ownerToken: conversationLockOwner!,
+            fenceToken: conversationLockFenceToken!,
+            reason: `Sorry, ${selectedLabel} is no longer available. Here are the latest available times:`,
           });
 
           return successResponse();
@@ -2091,52 +1411,35 @@ export async function POST(request: Request) {
            SECOND DATABASE CONFLICT CHECK
            =============================================== */
 
-        const existingAppointment =
-          await Appointment.findOne({
-            businessId:
-              lead.businessId,
+        const existingAppointment = await Appointment.findOne({
+          businessId: lead.businessId,
 
-            scheduledFor,
+          scheduledFor,
 
-            status: {
-              $in: [
-                "scheduled",
-                "confirmed",
-              ],
-            },
-          }).lean();
+          status: {
+            $in: ["scheduled", "confirmed"],
+          },
+        }).lean();
 
-        if (
-          existingAppointment
-        ) {
-          console.log(
-            "Stored SMS appointment slot already taken:",
-            {
-              leadId:
-                lead._id.toString(),
+        if (existingAppointment) {
+          console.log("Stored SMS appointment slot already taken:", {
+            leadId: lead._id.toString(),
 
-              option:
-                selectedOption,
+            option: selectedOption,
 
-              label:
-                selectedLabel,
+            label: selectedLabel,
 
-              scheduledFor:
-                scheduledFor.toISOString(),
-            }
-          );
+            scheduledFor: scheduledFor.toISOString(),
+          });
 
           await sendFreshSmsAppointmentOptions({
             lead,
             business,
             timeline,
             normalizedPhone,
-            ownerToken:
-              conversationLockOwner!,
-            fenceToken:
-              conversationLockFenceToken!,
-            reason:
-              `Sorry, ${selectedLabel} was just taken. Here are the latest available times:`,
+            ownerToken: conversationLockOwner!,
+            fenceToken: conversationLockFenceToken!,
+            reason: `Sorry, ${selectedLabel} was just taken. Here are the latest available times:`,
           });
 
           return successResponse();
@@ -2156,42 +1459,33 @@ export async function POST(request: Request) {
              Either all commit or all roll back.
              ============================================= */
 
-          const bookingResult =
-            await bookSmsAppointmentAtomically({
-              lead,
+          const bookingResult = await bookSmsAppointmentAtomically({
+            lead,
 
-              businessId:
-                business._id,
+            businessId: business._id,
 
-              normalizedPhone,
+            normalizedPhone,
 
-              ownerToken:
-                conversationLockOwner!,
+            ownerToken: conversationLockOwner!,
 
-              fenceToken:
-                conversationLockFenceToken!,
+            fenceToken: conversationLockFenceToken!,
 
-              selectedLabel,
+            selectedLabel,
 
-              scheduledFor,
+            scheduledFor,
 
-              onLockLost: () => {
-                conversationLockLost =
-                  true;
-              },
-            });
+            onLockLost: () => {
+              conversationLockLost = true;
+            },
+          });
 
-          const appointment =
-            bookingResult.appointment;
+          const appointment = bookingResult.appointment;
 
-          const aiMessage =
-            bookingResult.aiMessage;
+          const aiMessage = bookingResult.aiMessage;
 
-          const confirmation =
-            bookingResult.confirmation;
+          const confirmation = bookingResult.confirmation;
 
-          lead =
-            bookingResult.lead;
+          lead = bookingResult.lead;
           await sendSmsAppointmentNotifications({
             business,
             lead,
@@ -2199,51 +1493,34 @@ export async function POST(request: Request) {
 
             normalizedPhone,
 
-            ownerToken:
-              conversationLockOwner!,
+            ownerToken: conversationLockOwner!,
 
-            fenceToken:
-              conversationLockFenceToken!,
+            fenceToken: conversationLockFenceToken!,
 
             confirmation,
           });
 
-          console.log(
-            "SMS appointment booked atomically:",
-            {
-              leadId:
-                lead._id.toString(),
+          console.log("SMS appointment booked atomically:", {
+            leadId: lead._id.toString(),
 
-              appointmentId:
-                appointment._id.toString(),
+            appointmentId: appointment._id.toString(),
 
-              service:
-                lead.service,
+            service: lead.service,
 
-              option:
-                selectedOption,
+            option: selectedOption,
 
-              label:
-                selectedLabel,
+            label: selectedLabel,
 
-              scheduledFor:
-                scheduledFor.toISOString(),
+            scheduledFor: scheduledFor.toISOString(),
 
-              smsConversationActive:
-                lead.smsConversationActive,
+            smsConversationActive: lead.smsConversationActive,
 
-              followUpEnabled:
-                lead.followUp
-                  ?.enabled,
+            followUpEnabled: lead.followUp?.enabled,
 
-              nextFollowUpAt:
-                lead.followUp
-                  ?.nextFollowUpAt,
+            nextFollowUpAt: lead.followUp?.nextFollowUpAt,
 
-              messageId:
-                aiMessage._id.toString(),
-            }
-          );
+            messageId: aiMessage._id.toString(),
+          });
 
           return successResponse();
         } catch (error) {
@@ -2254,27 +1531,16 @@ export async function POST(request: Request) {
              update and confirmation Message as well.
              ============================================= */
 
-          if (
-            isMongoDuplicateKeyError(
-              error
-            )
-          ) {
-            console.log(
-              "SMS appointment duplicate index conflict:",
-              {
-                leadId:
-                  lead._id.toString(),
+          if (isMongoDuplicateKeyError(error)) {
+            console.log("SMS appointment duplicate index conflict:", {
+              leadId: lead._id.toString(),
 
-                option:
-                  selectedOption,
+              option: selectedOption,
 
-                label:
-                  selectedLabel,
+              label: selectedLabel,
 
-                scheduledFor:
-                  scheduledFor.toISOString(),
-              }
-            );
+              scheduledFor: scheduledFor.toISOString(),
+            });
 
             await sendFreshSmsAppointmentOptions({
               lead,
@@ -2282,14 +1548,11 @@ export async function POST(request: Request) {
               timeline,
               normalizedPhone,
 
-              ownerToken:
-                conversationLockOwner!,
+              ownerToken: conversationLockOwner!,
 
-              fenceToken:
-                conversationLockFenceToken!,
+              fenceToken: conversationLockFenceToken!,
 
-              reason:
-                `Sorry, ${selectedLabel} was just taken. Here are the latest available times:`,
+              reason: `Sorry, ${selectedLabel} was just taken. Here are the latest available times:`,
             });
 
             return successResponse();
@@ -2304,149 +1567,88 @@ export async function POST(request: Request) {
        LOAD THIS LEAD'S CONVERSATION
        ===================================================== */
 
-    const conversation =
-      await Message.find({
-        leadId:
-          lead._id,
+    const conversation = await Message.find({
+      leadId: lead._id,
+    })
+      .sort({
+        createdAt: 1,
       })
-        .sort({
-          createdAt:
-            1,
-        })
-        .lean();
+      .lean();
 
-    const messages =
-      conversation.map(
-        (message) => ({
-          sender:
-            message.sender ===
-              "ai"
-              ? ("ai" as const)
-              : ("user" as const),
+    const messages = conversation.map((message) => ({
+      sender: message.sender === "ai" ? ("ai" as const) : ("user" as const),
 
-          text:
-            message.content,
-        })
-      );
+      text: message.content,
+    }));
 
     /* =====================================================
        GENERATE AI QUALIFICATION RESPONSE
        ===================================================== */
 
-    const result =
-      await generateQualificationResponse(
-        {
-          messages,
+    const result = await generateQualificationResponse(
+      {
+        messages,
 
-          lead: {
-            industry:
-              lead.industry,
+        lead: {
+          industry: lead.industry,
 
-            service:
-              lead.service,
+          service: lead.service,
 
-            location:
-              lead.location,
+          location: lead.location,
 
-            urgency:
-              lead.urgency,
+          urgency: lead.urgency,
 
-            timeline:
-              lead.timeline,
+          timeline: lead.timeline,
 
-            name:
-              lead.name,
+          name: lead.name,
 
-            phone:
-              lead.phone,
-          },
+          phone: lead.phone,
         },
+      },
 
-        {
-          name:
-            business.name,
+      {
+        name: business.name,
 
-          industry:
-            business.industry,
+        industry: business.industry,
 
-          country:
-            business.country ??
-            "US",
+        country: business.country ?? "US",
 
-          aiSettings,
-        }
-      );
+        aiSettings,
+      },
+    );
 
     /* =====================================================
        QUALIFIED:
        GENERATE REAL APPOINTMENT OPTIONS
        ===================================================== */
 
-    let offeredSmsSlots:
-      GeneratedSlot[] = [];
+    let offeredSmsSlots: GeneratedSlot[] = [];
 
-    let shouldStoreSmsOptions =
-      false;
+    let shouldStoreSmsOptions = false;
 
-    if (
-      result.readyToBook &&
-      result.lead.timeline
-    ) {
-      const timeline =
-        result.lead
-          .timeline as Timeline;
+    if (result.readyToBook && result.lead.timeline) {
+      const timeline = result.lead.timeline as Timeline;
 
-      if (
-        VALID_TIMELINES.includes(
-          timeline
-        )
-      ) {
-        const availableSlots =
-          await getSmsAvailableSlots({
-            business,
-            timeline,
-          });
+      if (VALID_TIMELINES.includes(timeline)) {
+        const availableSlots = await getSmsAvailableSlots({
+          business,
+          timeline,
+        });
 
-        const firstThreeSlots =
-          availableSlots.slice(
-            0,
-            3
-          );
+        const firstThreeSlots = availableSlots.slice(0, 3);
 
-        shouldStoreSmsOptions =
-          true;
+        shouldStoreSmsOptions = true;
 
-        offeredSmsSlots =
-          firstThreeSlots;
+        offeredSmsSlots = firstThreeSlots;
 
-        if (
-          firstThreeSlots.length >
-          0
-        ) {
-          const slotLines =
-            firstThreeSlots
-              .map(
-                (
-                  slot,
-                  index
-                ) =>
-                  `${index + 1}. ${slot.label}`
-              )
-              .join("\n");
+        if (firstThreeSlots.length > 0) {
+          const slotLines = firstThreeSlots
+            .map((slot, index) => `${index + 1}. ${slot.label}`)
+            .join("\n");
 
-          const optionNumbers =
-            firstThreeSlots
-              .map(
-                (
-                  _,
-                  index
-                ) =>
-                  index + 1
-              )
-              .join(", ");
+          const optionNumbers = firstThreeSlots.map((_, index) => index + 1).join(", ");
 
-          result.reply =
-            `Great! Here are some available appointment times:\n\n${slotLines}\n\nReply with ${optionNumbers}.`;
+          result.reply = `Great! Here are some available appointment times:\n\n${slotLines}\n\nReply with ${optionNumbers}.`;
         } else {
           result.reply =
             "You're qualified, but I couldn't find an available appointment time for your requested timeline. Please choose another day or timeframe.";
@@ -2458,332 +1660,198 @@ export async function POST(request: Request) {
        UPDATE LEAD
        ===================================================== */
 
-    lead.industry =
-      result.lead.industry ??
-      lead.industry;
+    lead.industry = result.lead.industry ?? lead.industry;
 
-    lead.service =
-      result.lead.service ??
-      lead.service;
+    lead.service = result.lead.service ?? lead.service;
 
-    lead.location =
-      result.lead.location ??
-      lead.location;
+    lead.location = result.lead.location ?? lead.location;
 
-    lead.urgency =
-      result.lead.urgency ??
-      lead.urgency;
+    lead.urgency = result.lead.urgency ?? lead.urgency;
 
-    lead.timeline =
-      result.lead.timeline ??
-      lead.timeline;
+    lead.timeline = result.lead.timeline ?? lead.timeline;
 
-    lead.name =
-      result.lead.name ??
-      lead.name;
+    lead.name = result.lead.name ?? lead.name;
 
-    lead.phone =
-      result.lead.phone ??
-      lead.phone;
+    lead.phone = result.lead.phone ?? lead.phone;
 
-    if (
-      lead.status !==
-      "booked"
-    ) {
-      lead.status =
-        result.readyToBook
-          ? "qualified"
-          : result.status;
+    if (lead.status !== "booked") {
+      lead.status = result.readyToBook ? "qualified" : result.status;
     }
 
-    if (
-      ACTIVE_LEAD_STATUSES.includes(
-        lead.status as
-        | "new"
-        | "warm"
-        | "hot"
-        | "qualified"
-      )
-    ) {
-      lead.smsConversationActive =
-        true;
+    if (ACTIVE_LEAD_STATUSES.includes(lead.status as "new" | "warm" | "hot" | "qualified")) {
+      lead.smsConversationActive = true;
     }
 
     /* =====================================================
        SCHEDULE FRESH FOLLOW-UP AFTER AI RESPONSE
        ===================================================== */
 
-    if (
-      canFollowUp(
-        lead.status,
-        lead.phone
-      )
-    ) {
-      lead.followUp =
-        lead.followUp ?? {};
+    if (canFollowUp(lead.status, lead.phone)) {
+      lead.followUp = lead.followUp ?? {};
 
-      const followUpCount =
-        lead.followUp.count ??
-        0;
+      const followUpCount = lead.followUp.count ?? 0;
 
-      lead.followUp.enabled =
-        true;
+      lead.followUp.enabled = true;
 
-      lead.followUp.nextFollowUpAt =
-        getNextFollowUpAt(
-          followUpCount
-        );
+      lead.followUp.nextFollowUpAt = getNextFollowUpAt(followUpCount);
     } else {
-      lead.followUp =
-        lead.followUp ?? {};
+      lead.followUp = lead.followUp ?? {};
 
-      lead.followUp.enabled =
-        false;
+      lead.followUp.enabled = false;
 
-      lead.followUp.nextFollowUpAt =
-        null;
+      lead.followUp.nextFollowUpAt = null;
     }
 
     /* =====================================================
        STORE EXACT SMS APPOINTMENT OPTIONS
        ===================================================== */
 
-    if (
-      shouldStoreSmsOptions
-    ) {
+    if (shouldStoreSmsOptions) {
       lead.smsBookingOptions = {
-        offeredAt:
-          new Date(),
+        offeredAt: new Date(),
 
-        slots:
-          offeredSmsSlots.map(
-            (slot) => ({
-              label:
-                slot.label,
+        slots: offeredSmsSlots.map((slot) => ({
+          label: slot.label,
 
-              scheduledFor:
-                new Date(
-                  slot.scheduledFor
-                ),
-            })
-          ),
+          scheduledFor: new Date(slot.scheduledFor),
+        })),
       };
-    } else if (
-      !result.readyToBook
-    ) {
+    } else if (!result.readyToBook) {
       lead.smsBookingOptions = {
-        offeredAt:
-          null,
+        offeredAt: null,
 
-        slots:
-          [],
+        slots: [],
       };
     }
-    if (
-      conversationLockFenceToken ===
-      null
-    ) {
-      throw new Error(
-        "Missing SMS conversation fence token."
-      );
+    if (conversationLockFenceToken === null) {
+      throw new Error("Missing SMS conversation fence token.");
     }
 
-    const fencedAiLead =
-      await updateLeadWithSmsFence({
-        leadId:
-          lead._id,
+    const fencedAiLead = await updateLeadWithSmsFence({
+      leadId: lead._id,
 
-        businessId:
-          business._id,
+      businessId: business._id,
 
-        phone:
-          normalizedPhone,
+      phone: normalizedPhone,
 
-        fenceToken:
-          conversationLockFenceToken,
+      fenceToken: conversationLockFenceToken,
 
-        set: {
-          industry:
-            lead.industry,
+      set: {
+        industry: lead.industry,
 
-          service:
-            lead.service,
+        service: lead.service,
 
-          location:
-            lead.location,
+        location: lead.location,
 
-          urgency:
-            lead.urgency,
+        urgency: lead.urgency,
 
-          timeline:
-            lead.timeline,
+        timeline: lead.timeline,
 
-          name:
-            lead.name,
+        name: lead.name,
 
-          phone:
-            lead.phone,
+        phone: lead.phone,
 
-          status:
-            lead.status,
+        status: lead.status,
 
-          smsConversationActive:
-            lead.smsConversationActive,
+        smsConversationActive: lead.smsConversationActive,
 
-          "followUp.enabled":
-            lead.followUp
-              ?.enabled ??
-            false,
+        "followUp.enabled": lead.followUp?.enabled ?? false,
 
-          "followUp.count":
-            lead.followUp
-              ?.count ??
-            0,
+        "followUp.count": lead.followUp?.count ?? 0,
 
-          "followUp.nextFollowUpAt":
-            lead.followUp
-              ?.nextFollowUpAt ??
-            null,
+        "followUp.nextFollowUpAt": lead.followUp?.nextFollowUpAt ?? null,
 
-          "followUp.lastFollowUpAt":
-            lead.followUp
-              ?.lastFollowUpAt ??
-            null,
+        "followUp.lastFollowUpAt": lead.followUp?.lastFollowUpAt ?? null,
 
-          smsBookingOptions:
-            lead.smsBookingOptions,
-        },
-      });
+        smsBookingOptions: lead.smsBookingOptions,
+      },
+    });
 
     if (!fencedAiLead) {
-      conversationLockLost =
-        true;
+      conversationLockLost = true;
 
-      throw new Error(
-        "Stale SMS worker rejected while saving AI response."
-      );
+      throw new Error("Stale SMS worker rejected while saving AI response.");
     }
 
-    lead =
-      fencedAiLead;
-
+    lead = fencedAiLead;
 
     /* =====================================================
        SAVE AI MESSAGE
        ===================================================== */
 
-    const aiMessage =
-      await Message.create({
-        leadId:
-          lead._id,
+    const aiMessage = await Message.create({
+      leadId: lead._id,
 
-        sender:
-          "ai",
+      sender: "ai",
 
-        content:
-          result.reply,
-      });
+      content: result.reply,
+    });
 
     /* =====================================================
        OUTBOUND SMS
        ===================================================== */
     await assertSmsConversationOwnership({
-      businessId:
-        business._id,
+      businessId: business._id,
 
-      phone:
-        normalizedPhone,
+      phone: normalizedPhone,
 
-      ownerToken:
-        conversationLockOwner!,
+      ownerToken: conversationLockOwner!,
 
-      fenceToken:
-        conversationLockFenceToken!,
+      fenceToken: conversationLockFenceToken!,
     });
     try {
-
       await sendSmsReply({
-        to:
-          normalizedPhone,
+        to: normalizedPhone,
 
-        body:
-          result.reply,
+        body: result.reply,
       });
     } catch (smsError) {
-      console.error(
-        "SMS AI reply delivery failed:",
-        smsError
-      );
+      console.error("SMS AI reply delivery failed:", smsError);
     }
 
-    console.log(
-      "SMS AI response generated:",
-      {
-        leadId:
-          lead._id.toString(),
+    console.log("SMS AI response generated:", {
+      leadId: lead._id.toString(),
 
-        service:
-          lead.service,
+      service: lead.service,
 
-        messageId:
-          aiMessage._id.toString(),
+      messageId: aiMessage._id.toString(),
 
-        reply:
-          result.reply,
+      reply: result.reply,
 
-        status:
-          lead.status,
+      status: lead.status,
 
-        readyToBook:
-          result.readyToBook,
+      readyToBook: result.readyToBook,
 
-        smsConversationActive:
-          lead.smsConversationActive,
+      smsConversationActive: lead.smsConversationActive,
 
-        smsBookingOptions:
-          lead.smsBookingOptions
-            ?.slots?.map(
-              (
-                slot: {
-                  label: string;
-                  scheduledFor: Date;
-                },
-                index: number
-              ) => ({
-                option:
-                  index + 1,
+      smsBookingOptions: lead.smsBookingOptions?.slots?.map(
+        (
+          slot: {
+            label: string;
+            scheduledFor: Date;
+          },
+          index: number,
+        ) => ({
+          option: index + 1,
 
-                label:
-                  slot.label,
+          label: slot.label,
 
-                scheduledFor:
-                  slot.scheduledFor,
-              })
-            ),
+          scheduledFor: slot.scheduledFor,
+        }),
+      ),
 
-        followUpEnabled:
-          lead.followUp
-            ?.enabled,
+      followUpEnabled: lead.followUp?.enabled,
 
-        followUpCount:
-          lead.followUp
-            ?.count,
+      followUpCount: lead.followUp?.count,
 
-        nextFollowUpAt:
-          lead.followUp
-            ?.nextFollowUpAt,
-      }
-    );
+      nextFollowUpAt: lead.followUp?.nextFollowUpAt,
+    });
 
     return successResponse();
   } catch (error) {
-    processingError =
-      error;
+    processingError = error;
 
-    console.error(
-      "Incoming SMS webhook error:",
-      error
-    );
+    console.error("Incoming SMS webhook error:", error);
 
     /*
      * Return a retryable error for unexpected failures.
@@ -2796,16 +1864,11 @@ export async function POST(request: Request) {
      * Stop scheduling new heartbeats before finalizing the
      * event and releasing the lock.
      */
-    if (
-      conversationLockHeartbeat
-    ) {
+    if (conversationLockHeartbeat) {
       await conversationLockHeartbeat.stop();
 
-      if (
-        conversationLockHeartbeat.hasLostLock()
-      ) {
-        conversationLockLost =
-          true;
+      if (conversationLockHeartbeat.hasLostLock()) {
+        conversationLockLost = true;
       }
     }
 
@@ -2813,14 +1876,8 @@ export async function POST(request: Request) {
      * If ownership was lost, never mark this inbound event as
      * successfully processed.
      */
-    if (
-      conversationLockLost &&
-      !processingError
-    ) {
-      processingError =
-        new Error(
-          "SMS conversation lock ownership was lost."
-        );
+    if (conversationLockLost && !processingError) {
+      processingError = new Error("SMS conversation lock ownership was lost.");
     }
 
     /*
@@ -2828,96 +1885,70 @@ export async function POST(request: Request) {
      * conversation lock. A waiting retry can then acquire
      * the lock and see the final event state.
      */
-    if (claimedMessageSid &&
-      claimedProcessingToken) {
+    if (claimedMessageSid && claimedProcessingToken) {
       try {
         if (processingError) {
           await TwilioInboundEvent.updateOne(
             {
-              messageSid:
-                claimedMessageSid,
+              messageSid: claimedMessageSid,
 
-              processingToken:
-                claimedProcessingToken,
+              processingToken: claimedProcessingToken,
 
-              status:
-                "processing",
+              status: "processing",
             },
             {
               $set: {
-                status:
-                  "failed",
+                status: "failed",
 
-                error:
-                  getErrorMessage(
-                    processingError
-                  ),
+                error: getErrorMessage(processingError),
 
-                processedAt:
-                  null,
+                processedAt: null,
               },
-            }
+            },
           );
         } else {
           await TwilioInboundEvent.updateOne(
             {
-              messageSid:
-                claimedMessageSid,
+              messageSid: claimedMessageSid,
 
-              processingToken:
-                claimedProcessingToken,
+              processingToken: claimedProcessingToken,
 
-              status:
-                "processing",
+              status: "processing",
             },
             {
               $set: {
-                status:
-                  "processed",
+                status: "processed",
 
-                processedAt:
-                  new Date(),
+                processedAt: new Date(),
 
-                error:
-                  null,
+                error: null,
               },
-            }
+            },
           );
         }
       } catch (eventError) {
-        console.error(
-          "Failed to update Twilio inbound event status:",
-          eventError
-        );
+        console.error("Failed to update Twilio inbound event status:", eventError);
       }
     }
 
     if (
       conversationLockOwner &&
-      conversationLockFenceToken !==
-      null &&
+      conversationLockFenceToken !== null &&
       conversationLockBusinessId &&
       conversationLockPhone
     ) {
       try {
         await releaseSmsConversationLock({
-          businessId:
-            conversationLockBusinessId,
+          businessId: conversationLockBusinessId,
 
-          phone:
-            conversationLockPhone,
+          phone: conversationLockPhone,
 
-          ownerToken:
-            conversationLockOwner,
+          ownerToken: conversationLockOwner,
 
-          fenceToken:
-            conversationLockFenceToken,
+          fenceToken: conversationLockFenceToken,
         });
       } catch (lockError) {
-        console.error(
-          "Failed to release SMS conversation lock:",
-          lockError
-        );
+        console.error("Failed to release SMS conversation lock:", lockError);
       }
     }
   }

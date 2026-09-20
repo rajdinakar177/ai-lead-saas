@@ -33,8 +33,7 @@ export async function claimTwilioInboundEvent({
   to: string;
   body: string;
 }): Promise<ClaimTwilioInboundEventResult> {
-  const firstProcessingToken =
-    randomUUID();
+  const firstProcessingToken = randomUUID();
 
   try {
     await TwilioInboundEvent.create({
@@ -45,8 +44,7 @@ export async function claimTwilioInboundEvent({
 
       status: "processing",
 
-      processingToken:
-        firstProcessingToken,
+      processingToken: firstProcessingToken,
 
       processedAt: null,
 
@@ -56,34 +54,25 @@ export async function claimTwilioInboundEvent({
     return {
       shouldProcess: true,
 
-      processingToken:
-        firstProcessingToken,
+      processingToken: firstProcessingToken,
     };
   } catch (error) {
-    if (
-      !isMongoDuplicateKeyError(
-        error
-      )
-    ) {
+    if (!isMongoDuplicateKeyError(error)) {
       throw error;
     }
   }
 
-  const existing =
-    await TwilioInboundEvent.findOne({
-      messageSid,
-    }).lean();
+  const existing = await TwilioInboundEvent.findOne({
+    messageSid,
+  }).lean();
 
   if (!existing) {
     throw new Error(
-      `Twilio event ${messageSid} exists but could not be loaded.`
+      `Twilio event ${messageSid} exists but could not be loaded.`,
     );
   }
 
-  if (
-    existing.status ===
-    "processed"
-  ) {
+  if (existing.status === "processed") {
     return {
       shouldProcess: false,
 
@@ -91,19 +80,12 @@ export async function claimTwilioInboundEvent({
     };
   }
 
-  const staleBefore =
-    new Date(
-      Date.now() -
-        5 * 60 * 1000
-    );
+  const staleBefore = new Date(Date.now() - 5 * 60 * 1000);
 
   if (
-    existing.status ===
-      "processing" &&
+    existing.status === "processing" &&
     existing.updatedAt &&
-    new Date(
-      existing.updatedAt
-    ) > staleBefore
+    new Date(existing.updatedAt) > staleBefore
   ) {
     return {
       shouldProcess: false,
@@ -115,56 +97,46 @@ export async function claimTwilioInboundEvent({
   /*
    * Every reclaim receives a new ownership token.
    */
-  const reclaimedProcessingToken =
-    randomUUID();
+  const reclaimedProcessingToken = randomUUID();
 
-  const reclaimed =
-    await TwilioInboundEvent.findOneAndUpdate(
-      {
-        messageSid,
+  const reclaimed = await TwilioInboundEvent.findOneAndUpdate(
+    {
+      messageSid,
 
-        $or: [
-          {
-            status:
-              "failed",
-          },
-          {
-            status:
-              "processing",
-
-            updatedAt: {
-              $lte:
-                staleBefore,
-            },
-          },
-        ],
-      },
-
-      {
-        $set: {
-          status:
-            "processing",
-
-          processingToken:
-            reclaimedProcessingToken,
-
-          processedAt:
-            null,
-
-          error:
-            null,
-
-          from,
-          to,
-          body,
+      $or: [
+        {
+          status: "failed",
         },
-      },
+        {
+          status: "processing",
 
-      {
-        returnDocument:
-          "after",
-      }
-    );
+          updatedAt: {
+            $lte: staleBefore,
+          },
+        },
+      ],
+    },
+
+    {
+      $set: {
+        status: "processing",
+
+        processingToken: reclaimedProcessingToken,
+
+        processedAt: null,
+
+        error: null,
+
+        from,
+        to,
+        body,
+      },
+    },
+
+    {
+      returnDocument: "after",
+    },
+  );
 
   if (!reclaimed) {
     /*
@@ -180,7 +152,6 @@ export async function claimTwilioInboundEvent({
   return {
     shouldProcess: true,
 
-    processingToken:
-      reclaimed.processingToken,
+    processingToken: reclaimed.processingToken,
   };
 }

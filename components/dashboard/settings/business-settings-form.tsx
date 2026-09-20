@@ -1,14 +1,7 @@
 "use client";
 
-import {
-  FormEvent,
-  useState,
-} from "react";
-import {
-  CheckCircle2,
-  LoaderCircle,
-  Save,
-} from "lucide-react";
+import { FormEvent, useState } from "react";
+import { CheckCircle2, LoaderCircle, Save } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 type Props = {
@@ -20,35 +13,24 @@ type Props = {
   };
 };
 
-export function BusinessSettingsForm({
-  business,
-}: Props) {
+export function BusinessSettingsForm({ business }: Props) {
   const router = useRouter();
 
-  const [name, setName] =
-    useState(business.name);
+  const [name, setName] = useState(business.name);
 
-  const [industry, setIndustry] =
-    useState(business.industry);
+  const [industry, setIndustry] = useState(business.industry);
 
-  const [email, setEmail] =
-    useState(business.email);
+  const [email, setEmail] = useState(business.email);
 
-  const [phone, setPhone] =
-    useState(business.phone);
+  const [phone, setPhone] = useState(business.phone);
 
-  const [loading, setLoading] =
-    useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const [success, setSuccess] =
-    useState(false);
+  const [success, setSuccess] = useState(false);
 
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>
-  ) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     try {
@@ -56,32 +38,25 @@ export function BusinessSettingsForm({
       setError(null);
       setSuccess(false);
 
-      const response = await fetch(
-        "/api/business",
-        {
-          method: "PATCH",
+      const response = await fetch("/api/business", {
+        method: "PATCH",
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-          body: JSON.stringify({
-            name,
-            industry,
-            email,
-            phone,
-          }),
-        }
-      );
+        body: JSON.stringify({
+          name,
+          industry,
+          email,
+          phone,
+        }),
+      });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Unable to update settings."
-        );
+        throw new Error(data.error || "Unable to update settings.");
       }
 
       setSuccess(true);
@@ -89,9 +64,7 @@ export function BusinessSettingsForm({
       router.refresh();
     } catch (error) {
       setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to update settings."
+        error instanceof Error ? error.message : "Unable to update settings.",
       );
     } finally {
       setLoading(false);
@@ -159,11 +132,7 @@ export function BusinessSettingsForm({
         >
           {loading ? (
             <>
-              <LoaderCircle
-                size={17}
-                className="animate-spin"
-              />
-
+              <LoaderCircle size={17} className="animate-spin" />
               Saving...
             </>
           ) : (
@@ -195,16 +164,12 @@ function Field({
 }) {
   return (
     <div>
-      <label className="text-sm text-zinc-400">
-        {label}
-      </label>
+      <label className="text-sm text-zinc-400">{label}</label>
 
       <input
         type={type}
         value={value}
-        onChange={(event) =>
-          onChange(event.target.value)
-        }
+        onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         required={required}
         className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-700 focus:border-violet-500/50"

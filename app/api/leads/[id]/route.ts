@@ -14,17 +14,13 @@ type RouteContext = {
   }>;
 };
 
-export async function GET(
-  request: Request,
-  context: RouteContext
-) {
+export async function GET(request: Request, context: RouteContext) {
   try {
     /* ================================================
        AUTHENTICATE BUSINESS
        ================================================ */
 
-    const business =
-      await requireBusiness();
+    const business = await requireBusiness();
 
     const { id } = await context.params;
 
@@ -32,16 +28,14 @@ export async function GET(
        VALIDATE LEAD ID
        ================================================ */
 
-    if (
-      !mongoose.Types.ObjectId.isValid(id)
-    ) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       return NextResponse.json(
         {
           error: "Invalid lead ID.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
@@ -69,7 +63,7 @@ export async function GET(
         },
         {
           status: 404,
-        }
+        },
       );
     }
 
@@ -77,14 +71,13 @@ export async function GET(
        LOAD LEAD MESSAGES
        ================================================ */
 
-    const messages =
-      await Message.find({
-        leadId: lead._id,
+    const messages = await Message.find({
+      leadId: lead._id,
+    })
+      .sort({
+        createdAt: 1,
       })
-        .sort({
-          createdAt: 1,
-        })
-        .lean();
+      .lean();
 
     /* ================================================
        LOAD LEAD APPOINTMENT
@@ -92,15 +85,14 @@ export async function GET(
        Include businessId as defense-in-depth.
        ================================================ */
 
-    const appointment =
-      await Appointment.findOne({
-        leadId: lead._id,
-        businessId: business._id,
+    const appointment = await Appointment.findOne({
+      leadId: lead._id,
+      businessId: business._id,
+    })
+      .sort({
+        createdAt: -1,
       })
-        .sort({
-          createdAt: -1,
-        })
-        .lean();
+      .lean();
 
     /* ================================================
        RESPONSE
@@ -112,53 +104,35 @@ export async function GET(
       lead: {
         id: lead._id.toString(),
 
-        industry:
-          lead.industry ?? null,
+        industry: lead.industry ?? null,
 
-        service:
-          lead.service ?? null,
+        service: lead.service ?? null,
 
-        urgency:
-          lead.urgency ?? null,
+        urgency: lead.urgency ?? null,
 
-        timeline:
-          lead.timeline ?? null,
+        timeline: lead.timeline ?? null,
 
-        name:
-          lead.name ?? null,
+        name: lead.name ?? null,
 
-        phone:
-          lead.phone ?? null,
+        phone: lead.phone ?? null,
 
-        status:
-          lead.status ?? "new",
+        status: lead.status ?? "new",
 
-        appointment:
-          appointment?.label ?? null,
+        appointment: appointment?.label ?? null,
       },
 
-      messages: messages.map(
-        (message) => ({
-          id:
-            message._id.toString(),
+      messages: messages.map((message) => ({
+        id: message._id.toString(),
 
-          sender:
-            message.sender === "lead"
-              ? "user"
-              : "ai",
+        sender: message.sender === "lead" ? "user" : "ai",
 
-          text: message.content,
-        })
-      ),
+        text: message.content,
+      })),
 
-      completed:
-        Boolean(appointment),
+      completed: Boolean(appointment),
     });
   } catch (error) {
-    console.error(
-      "Get lead error:",
-      error
-    );
+    console.error("Get lead error:", error);
 
     return NextResponse.json(
       {
@@ -166,7 +140,7 @@ export async function GET(
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

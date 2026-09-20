@@ -1,55 +1,33 @@
 "use client";
 
-import {
-  FormEvent,
-  useState,
-} from "react";
-import {
-  LoaderCircle,
-  UserPlus,
-} from "lucide-react";
+import { FormEvent, useState } from "react";
+import { LoaderCircle, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export function RegisterForm() {
   const router = useRouter();
 
-  const [name, setName] =
-    useState("");
+  const [name, setName] = useState("");
 
-  const [industry, setIndustry] =
-    useState("");
+  const [industry, setIndustry] = useState("");
 
-  const [email, setEmail] =
-    useState("");
+  const [email, setEmail] = useState("");
 
-  const [phone, setPhone] =
-    useState("");
+  const [phone, setPhone] = useState("");
 
-  const [password, setPassword] =
-    useState("");
+  const [password, setPassword] = useState("");
 
-  const [
-    confirmPassword,
-    setConfirmPassword,
-  ] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
-  const [loading, setLoading] =
-    useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>
-  ) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (
-      password !== confirmPassword
-    ) {
-      setError(
-        "Passwords do not match."
-      );
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
 
       return;
     }
@@ -58,47 +36,33 @@ export function RegisterForm() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(
-        "/api/auth/register",
-        {
-          method: "POST",
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
 
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-          body: JSON.stringify({
-            name,
-            industry,
-            email,
-            phone,
-            password,
-          }),
-        }
-      );
+        body: JSON.stringify({
+          name,
+          industry,
+          email,
+          phone,
+          password,
+        }),
+      });
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Unable to create account."
-        );
+        throw new Error(data.error || "Unable to create account.");
       }
 
-  router.push(
-  `/verify-email/pending?email=${encodeURIComponent(
-    email
-  )}`
-);
+      router.push(`/verify-email/pending?email=${encodeURIComponent(email)}`);
       router.refresh();
     } catch (error) {
       setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to create account."
+        error instanceof Error ? error.message : "Unable to create account.",
       );
     } finally {
       setLoading(false);
@@ -106,10 +70,7 @@ export function RegisterForm() {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="mt-8 space-y-5"
-    >
+    <form onSubmit={handleSubmit} className="mt-8 space-y-5">
       {error && (
         <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
           {error}
@@ -161,9 +122,7 @@ export function RegisterForm() {
           label="Confirm Password"
           type="password"
           value={confirmPassword}
-          onChange={
-            setConfirmPassword
-          }
+          onChange={setConfirmPassword}
           placeholder="Repeat password"
         />
       </div>
@@ -175,10 +134,7 @@ export function RegisterForm() {
       >
         {loading ? (
           <>
-            <LoaderCircle
-              size={18}
-              className="animate-spin"
-            />
+            <LoaderCircle size={18} className="animate-spin" />
             Creating account...
           </>
         ) : (
@@ -209,18 +165,12 @@ function Field({
 }) {
   return (
     <div>
-      <label className="text-sm text-zinc-400">
-        {label}
-      </label>
+      <label className="text-sm text-zinc-400">{label}</label>
 
       <input
         type={type}
         value={value}
-        onChange={(event) =>
-          onChange(
-            event.target.value
-          )
-        }
+        onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         required={required}
         className="mt-2 w-full rounded-xl border border-white/10 bg-white/3 px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-700 focus:border-violet-500/50"

@@ -4,10 +4,7 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { Business } from "@/models/Business";
 
-import {
-  generateVerificationToken,
-  sendVerificationEmail,
-} from "@/lib/email-verification";
+import { generateVerificationToken, sendVerificationEmail } from "@/lib/email-verification";
 
 import { createUniqueBusinessSlug } from "@/lib/slug";
 import { applyRequestRateLimit } from "@/lib/request-rate-limit";
@@ -19,62 +16,43 @@ type RegisterBody = {
   password?: string;
 };
 
-const EMAIL_REGEX =
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
   try {
-    const rateLimitResponse =
-      await applyRequestRateLimit({
-        request,
-        action: "auth-register",
-        limit: 5,
-        windowMs:
-          60 * 60 * 1000,
-      });
+    const rateLimitResponse = await applyRequestRateLimit({
+      request,
+      action: "auth-register",
+      limit: 5,
+      windowMs: 60 * 60 * 1000,
+    });
 
     if (rateLimitResponse) {
       return rateLimitResponse;
     }
-    const body: RegisterBody =
-      await request.json();
+    const body: RegisterBody = await request.json();
 
-    const name =
-      body.name?.trim();
+    const name = body.name?.trim();
 
-    const industry =
-      body.industry?.trim();
+    const industry = body.industry?.trim();
 
-    const email =
-      body.email
-        ?.trim()
-        .toLowerCase();
+    const email = body.email?.trim().toLowerCase();
 
-    const phone =
-      body.phone?.trim();
+    const phone = body.phone?.trim();
 
-    const password =
-      body.password;
+    const password = body.password;
 
     /*
      * Required fields
      */
-    if (
-      !name ||
-      !industry ||
-      !email ||
-      !password
-    ) {
+    if (!name || !industry || !email || !password) {
       return NextResponse.json(
         {
-          error:
-            "Business name, industry, email and password are required.",
+          error: "Business name, industry, email and password are required.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
@@ -83,48 +61,36 @@ export async function POST(
      * values from reaching MongoDB and
      * downstream services.
      */
-    if (
-      name.length > 100 ||
-      industry.length > 100
-    ) {
+    if (name.length > 100 || industry.length > 100) {
       return NextResponse.json(
         {
-          error:
-            "Business name and industry must be 100 characters or fewer.",
+          error: "Business name and industry must be 100 characters or fewer.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
-    if (
-      email.length > 254 ||
-      !EMAIL_REGEX.test(email)
-    ) {
+    if (email.length > 254 || !EMAIL_REGEX.test(email)) {
       return NextResponse.json(
         {
-          error:
-            "Please enter a valid email address.",
+          error: "Please enter a valid email address.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
-    if (
-      phone &&
-      phone.length > 30
-    ) {
+    if (phone && phone.length > 30) {
       return NextResponse.json(
         {
-          error:
-            "Phone number is too long.",
+          error: "Phone number is too long.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
@@ -134,111 +100,80 @@ export async function POST(
      * password size within a predictable
      * range.
      */
-    const passwordByteLength =
-      Buffer.byteLength(
-        password,
-        "utf8"
-      );
+    const passwordByteLength = Buffer.byteLength(password, "utf8");
 
-    if (
-      passwordByteLength < 8
-    ) {
+    if (passwordByteLength < 8) {
       return NextResponse.json(
         {
-          error:
-            "Password must be at least 8 characters.",
+          error: "Password must be at least 8 characters.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
-    if (
-      passwordByteLength > 72
-    ) {
+    if (passwordByteLength > 72) {
       return NextResponse.json(
         {
-          error:
-            "Password is too long.",
+          error: "Password is too long.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
     await connectDB();
 
-    const existingBusiness =
-      await Business.findOne({
-        email,
-      });
+    const existingBusiness = await Business.findOne({
+      email,
+    });
 
     if (existingBusiness) {
       return NextResponse.json(
         {
-          error:
-            existingBusiness.emailVerified
-              ? "An account already exists with this email."
-              : "This email is already registered but not verified.",
+          error: existingBusiness.emailVerified
+            ? "An account already exists with this email."
+            : "This email is already registered but not verified.",
         },
         {
           status: 409,
-        }
+        },
       );
     }
 
-    const passwordHash =
-      await bcrypt.hash(
-        password,
-        12
-      );
+    const passwordHash = await bcrypt.hash(password, 12);
 
-    const {
-      token,
-      tokenHash,
-      expiresAt,
-    } =
-      generateVerificationToken();
+    const { token, tokenHash, expiresAt } = generateVerificationToken();
 
-    const slug =
-      await createUniqueBusinessSlug(
-        name
-      );
+    const slug = await createUniqueBusinessSlug(name);
 
-    const business =
-      await Business.create({
-        name,
-        slug,
-        industry,
-        email,
-        phone,
-        passwordHash,
+    const business = await Business.create({
+      name,
+      slug,
+      industry,
+      email,
+      phone,
+      passwordHash,
 
-        emailVerified: false,
+      emailVerified: false,
 
-        emailVerificationTokenHash:
-          tokenHash,
+      emailVerificationTokenHash: tokenHash,
 
-        emailVerificationExpiresAt:
-          expiresAt,
-      });
+      emailVerificationExpiresAt: expiresAt,
+    });
 
     try {
       await sendVerificationEmail({
-        email:
-          business.email,
+        email: business.email,
 
-        businessName:
-          business.name,
+        businessName: business.name,
 
         token,
       });
     } catch (emailError) {
-      await Business.findByIdAndDelete(
-        business._id
-      );
+      await Business.findByIdAndDelete(business._id);
 
       throw emailError;
     }
@@ -247,30 +182,24 @@ export async function POST(
       {
         success: true,
 
-        message:
-          "Account created. Please verify your email.",
+        message: "Account created. Please verify your email.",
 
-        email:
-          business.email,
+        email: business.email,
       },
       {
         status: 201,
-      }
+      },
     );
   } catch (error) {
-    console.error(
-      "Registration error:",
-      error
-    );
+    console.error("Registration error:", error);
 
     return NextResponse.json(
       {
-        error:
-          "Unable to create account.",
+        error: "Unable to create account.",
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

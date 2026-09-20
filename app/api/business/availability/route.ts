@@ -3,15 +3,9 @@ import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import { requireBusiness } from "@/lib/auth";
 import { Business } from "@/models/Business";
-
+import { validateRequestOrigin } from "@/lib/security/origin-protection";
 type AvailabilityDay =
-  | "monday"
-  | "tuesday"
-  | "wednesday"
-  | "thursday"
-  | "friday"
-  | "saturday"
-  | "sunday";
+  "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 
 type DayAvailability = {
   day: AvailabilityDay;
@@ -36,45 +30,30 @@ const validDays: AvailabilityDay[] = [
   "sunday",
 ];
 
-const validSlotDurations = [
-  30,
-  45,
-  60,
-  90,
-  120,
-];
+const validSlotDurations = [30, 45, 60, 90, 120];
 
-const validBufferMinutes = [
-  0,
-  15,
-  30,
-  45,
-  60,
-];
+const validBufferMinutes = [0, 15, 30, 45, 60];
 
 function isValidTime(value: string) {
-  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(
-    value
-  );
+  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
 }
 
-export async function PATCH(
-  request: Request
-) {
+export async function PATCH(request: Request) {
   try {
+    const originError = validateRequestOrigin(request);
+
+    if (originError) {
+      return originError;
+    }
     await connectDB();
 
-    const currentBusiness =
-      await requireBusiness();
+    const currentBusiness = await requireBusiness();
 
-    const body: UpdateAvailabilityBody =
-      await request.json();
+    const body: UpdateAvailabilityBody = await request.json();
 
-    const slotDurationMinutes =
-      Number(body.slotDurationMinutes);
+    const slotDurationMinutes = Number(body.slotDurationMinutes);
 
-    const bufferMinutes =
-      Number(body.bufferMinutes);
+    const bufferMinutes = Number(body.bufferMinutes);
 
     const days = body.days;
 
@@ -82,19 +61,14 @@ export async function PATCH(
        VALIDATE SLOT DURATION
     ----------------------------------------- */
 
-    if (
-      !validSlotDurations.includes(
-        slotDurationMinutes
-      )
-    ) {
+    if (!validSlotDurations.includes(slotDurationMinutes)) {
       return NextResponse.json(
         {
-          error:
-            "Invalid appointment duration.",
+          error: "Invalid appointment duration.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
@@ -102,76 +76,94 @@ export async function PATCH(
        VALIDATE BUFFER
     ----------------------------------------- */
 
-    if (
-      !validBufferMinutes.includes(
-        bufferMinutes
-      )
-    ) {
+    if (!validBufferMinutes.includes(bufferMinutes)) {
       return NextResponse.json(
         {
-          error:
-            "Invalid appointment buffer.",
+          error: "Invalid appointment buffer.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
     /* -----------------------------------------
-       VALIDATE DAYS
+       VALIDATE DAYS ARRAY
     ----------------------------------------- */
 
-    if (
-      !Array.isArray(days) ||
-      days.length !== 7
-    ) {
+    if (!Array.isArray(days) || days.length !== 7) {
       return NextResponse.json(
         {
-          error:
-            "Availability must contain all 7 days.",
+          error: "Availability must contain all 7 days.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
-    const receivedDays =
-      days.map((item) => item.day);
+    /* -----------------------------------------
+       VALIDATE DAY OBJECT STRUCTURE
 
-    const hasInvalidDay =
-      receivedDays.some(
-        (day) =>
-          !validDays.includes(day)
+       Do this BEFORE accessing item.day.
+       This protects against malformed API
+       requests such as null, numbers, etc.
+    ----------------------------------------- */
+
+    const hasInvalidDayStructure = days.some(
+      (item) =>
+        typeof item !== "object" ||
+        item === null ||
+        typeof item.day !== "string" ||
+        typeof item.enabled !== "boolean" ||
+        typeof item.startTime !== "string" ||
+        typeof item.endTime !== "string",
+    );
+
+    if (hasInvalidDayStructure) {
+      return NextResponse.json(
+        {
+          error: "Invalid availability data.",
+        },
+        {
+          status: 400,
+        },
       );
+    }
+
+    /* -----------------------------------------
+       VALIDATE DAY NAMES
+    ----------------------------------------- */
+
+    const receivedDays = days.map((item) => item.day);
+
+    const hasInvalidDay = receivedDays.some((day) => !validDays.includes(day));
 
     if (hasInvalidDay) {
       return NextResponse.json(
         {
-          error:
-            "Invalid availability day.",
+          error: "Invalid availability day.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
-    const uniqueDays =
-      new Set(receivedDays);
+    /* -----------------------------------------
+       PREVENT DUPLICATE DAYS
+    ----------------------------------------- */
 
-    if (
-      uniqueDays.size !== 7
-    ) {
+    const uniqueDays = new Set(receivedDays);
+
+    if (uniqueDays.size !== 7) {
       return NextResponse.json(
         {
-          error:
-            "Each day must appear exactly once.",
+          error: "Each day must appear exactly once.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
@@ -180,71 +172,75 @@ export async function PATCH(
     ----------------------------------------- */
 
     for (const item of days) {
-      if (
-        !isValidTime(item.startTime) ||
-        !isValidTime(item.endTime)
-      ) {
+      if (!isValidTime(item.startTime) || !isValidTime(item.endTime)) {
         return NextResponse.json(
           {
             error: `Invalid time for ${item.day}.`,
           },
           {
             status: 400,
-          }
+          },
         );
       }
 
-      if (
-        item.enabled &&
-        item.startTime >= item.endTime
-      ) {
+      /*
+       * Because the time format is HH:mm,
+       * lexical comparison works correctly.
+       *
+       * Example:
+       * 09:00 < 17:00
+       */
+
+      if (item.enabled && item.startTime >= item.endTime) {
+        const dayName = item.day.charAt(0).toUpperCase() + item.day.slice(1);
+
         return NextResponse.json(
           {
-            error: `${
-              item.day
-                .charAt(0)
-                .toUpperCase() +
-              item.day.slice(1)
-            }: closing time must be after opening time.`,
+            error: `${dayName}: closing time must be after opening time.`,
           },
           {
             status: 400,
-          }
+          },
         );
       }
     }
 
     /* -----------------------------------------
        SAVE AVAILABILITY
+
+       IMPORTANT:
+       currentBusiness._id comes from the
+       authenticated session.
+
+       We do NOT accept a business ID from
+       the request body.
     ----------------------------------------- */
 
-    const business =
-      await Business.findByIdAndUpdate(
-        currentBusiness._id,
-        {
-          $set: {
-            availability: {
-              slotDurationMinutes,
-              bufferMinutes,
-              days,
-            },
+    const business = await Business.findByIdAndUpdate(
+      currentBusiness._id,
+      {
+        $set: {
+          availability: {
+            slotDurationMinutes,
+            bufferMinutes,
+            days,
           },
         },
-        {
-          returnDocument: "after",
-          runValidators: true,
-        }
-      ).lean();
+      },
+      {
+        returnDocument: "after",
+        runValidators: true,
+      },
+    ).lean();
 
     if (!business) {
       return NextResponse.json(
         {
-          error:
-            "Business not found.",
+          error: "Business not found.",
         },
         {
           status: 404,
-        }
+        },
       );
     }
 
@@ -255,23 +251,18 @@ export async function PATCH(
     return NextResponse.json({
       success: true,
 
-      availability:
-        business.availability,
+      availability: business.availability,
     });
   } catch (error) {
-    console.error(
-      "Update availability error:",
-      error
-    );
+    console.error("Update availability error:", error);
 
     return NextResponse.json(
       {
-        error:
-          "Unable to update availability.",
+        error: "Unable to update availability.",
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

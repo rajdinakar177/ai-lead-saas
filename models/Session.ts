@@ -1,8 +1,4 @@
-import {
-  Schema,
-  model,
-  models,
-} from "mongoose";
+import { Schema, model, models } from "mongoose";
 
 const sessionSchema = new Schema(
   {
@@ -27,7 +23,7 @@ const sessionSchema = new Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 /*
@@ -47,12 +43,7 @@ sessionSchema.index(
   },
   {
     expireAfterSeconds: 0,
-  }
+  },
 );
 
-export const Session =
-  models.Session ||
-  model(
-    "Session",
-    sessionSchema
-  );
+export const Session = models.Session || model("Session", sessionSchema);

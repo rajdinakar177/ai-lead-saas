@@ -1,55 +1,50 @@
-import {
-  Schema,
-  model,
-  models,
-} from "mongoose";
+import { Schema, model, models } from "mongoose";
 
-const rateLimitSchema =
-  new Schema(
-    {
-      /*
-       * Unique identifier for one
-       * rate-limit bucket.
-       *
-       * Example:
-       * login:192.168.1.10
-       */
-      key: {
-        type: String,
-        required: true,
-        unique: true,
-        index: true,
-      },
-
-      count: {
-        type: Number,
-        required: true,
-        default: 0,
-      },
-
-      /*
-       * Beginning of the current
-       * rate-limit window.
-       */
-      windowStartedAt: {
-        type: Date,
-        required: true,
-        default: Date.now,
-      },
-
-      /*
-       * MongoDB automatically removes
-       * the record after this time.
-       */
-      expiresAt: {
-        type: Date,
-        required: true,
-      },
+const rateLimitSchema = new Schema(
+  {
+    /*
+     * Unique identifier for one
+     * rate-limit bucket.
+     *
+     * Example:
+     * login:192.168.1.10
+     */
+    key: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
     },
-    {
-      timestamps: true,
-    }
-  );
+
+    count: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
+
+    /*
+     * Beginning of the current
+     * rate-limit window.
+     */
+    windowStartedAt: {
+      type: Date,
+      required: true,
+      default: Date.now,
+    },
+
+    /*
+     * MongoDB automatically removes
+     * the record after this time.
+     */
+    expiresAt: {
+      type: Date,
+      required: true,
+    },
+  },
+  {
+    timestamps: true,
+  },
+);
 
 /*
  * TTL cleanup.
@@ -64,12 +59,8 @@ rateLimitSchema.index(
   },
   {
     expireAfterSeconds: 0,
-  }
+  },
 );
 
 export const RateLimit =
-  models.RateLimit ||
-  model(
-    "RateLimit",
-    rateLimitSchema
-  );
+  models.RateLimit || model("RateLimit", rateLimitSchema);

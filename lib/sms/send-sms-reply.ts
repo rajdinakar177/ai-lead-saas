@@ -5,30 +5,20 @@ type SendSmsReplyParams = {
   body: string;
 };
 
-type SmsMode =
-  | "mock"
-  | "twilio";
+type SmsMode = "mock" | "twilio";
 
-export async function sendSmsReply({
-  to,
-  body,
-}: SendSmsReplyParams) {
-  const mode =
-    (process.env.SMS_MODE ??
-      "mock") as SmsMode;
+export async function sendSmsReply({ to, body }: SendSmsReplyParams) {
+  const mode = (process.env.SMS_MODE ?? "mock") as SmsMode;
 
   // ----------------------------
   // MOCK MODE
   // ----------------------------
 
   if (mode === "mock") {
-    console.log(
-      "📱 Mock SMS outbound:",
-      {
-        to,
-        body,
-      }
-    );
+    console.log("📱 Mock SMS outbound:", {
+      to,
+      body,
+    });
 
     return {
       success: true,
@@ -43,11 +33,10 @@ export async function sendSmsReply({
   // ----------------------------
 
   if (mode === "twilio") {
-    const result =
-      await sendSms({
-        to,
-        body,
-      });
+    const result = await sendSms({
+      to,
+      body,
+    });
 
     return {
       ...result,
@@ -55,7 +44,5 @@ export async function sendSmsReply({
     };
   }
 
-  throw new Error(
-    `Invalid SMS_MODE: ${mode}`
-  );
+  throw new Error(`Invalid SMS_MODE: ${mode}`);
 }

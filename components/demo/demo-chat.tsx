@@ -11,12 +11,7 @@ import {
   User,
 } from "lucide-react";
 
-import {
-  FormEvent,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 /* =========================================================
    TYPES
@@ -39,10 +34,7 @@ type LeadData = {
   appointment?: string;
 };
 
-type LeadStatus =
-  | "new"
-  | "warm"
-  | "hot";
+type LeadStatus = "new" | "warm" | "hot";
 
 type ChatOption = {
   label: string;
@@ -69,10 +61,7 @@ type ChatApiResponse = {
     phone: string | null;
   };
 
-  status:
-    | "new"
-    | "warm"
-    | "hot";
+  status: "new" | "warm" | "hot";
 
   readyToBook: boolean;
 
@@ -96,162 +85,80 @@ export function DemoChat({
   businessName,
   compact = false,
 }: DemoChatProps) {
-  const [
-    leadId,
-    setLeadId,
-  ] = useState<string | null>(
-    null
+  const [leadId, setLeadId] = useState<string | null>(null);
+
+  const [initializing, setInitializing] = useState(true);
+
+  const [options, setOptions] = useState<ChatOption[]>([]);
+
+  const [messages, setMessages] = useState<Message[]>([]);
+
+  const [lead, setLead] = useState<LeadData>({});
+
+  const [status, setStatus] = useState<LeadStatus>("new");
+
+  const [input, setInput] = useState("");
+
+  const [loading, setLoading] = useState(false);
+
+  const [readyToBook, setReadyToBook] = useState(false);
+
+  const [completed, setCompleted] = useState(false);
+
+  const [error, setError] = useState<string | null>(null);
+
+  const [appointmentSlots, setAppointmentSlots] = useState<AppointmentSlot[]>(
+    [],
   );
 
-  const [
-    initializing,
-    setInitializing,
-  ] = useState(true);
+  const [loadingSlots, setLoadingSlots] = useState(false);
 
-  const [
-    options,
-    setOptions,
-  ] = useState<ChatOption[]>(
-    []
-  );
-
-  const [
-    messages,
-    setMessages,
-  ] = useState<Message[]>(
-    []
-  );
-
-  const [
-    lead,
-    setLead,
-  ] = useState<LeadData>(
-    {}
-  );
-
-  const [
-    status,
-    setStatus,
-  ] = useState<LeadStatus>(
-    "new"
-  );
-
-  const [
-    input,
-    setInput,
-  ] = useState("");
-
-  const [
-    loading,
-    setLoading,
-  ] = useState(false);
-
-  const [
-    readyToBook,
-    setReadyToBook,
-  ] = useState(false);
-
-  const [
-    completed,
-    setCompleted,
-  ] = useState(false);
-
-  const [
-    error,
-    setError,
-  ] = useState<string | null>(
-    null
-  );
-
-  const [
-    appointmentSlots,
-    setAppointmentSlots,
-  ] = useState<AppointmentSlot[]>(
-    []
-  );
-
-  const [
-    loadingSlots,
-    setLoadingSlots,
-  ] = useState(false);
-
-  const messagesEndRef =
-    useRef<HTMLDivElement>(
-      null
-    );
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   /* =========================================================
      LOAD REAL AVAILABILITY
      ========================================================= */
 
-  async function loadAvailability(
-    timeline: string,
-    currentLeadId?: string
-  ) {
-    const id =
-      currentLeadId ??
-      leadId;
+  async function loadAvailability(timeline: string, currentLeadId?: string) {
+    const id = currentLeadId ?? leadId;
 
-    if (
-      !id ||
-      !timeline
-    ) {
-      setAppointmentSlots(
-        []
-      );
+    if (!id || !timeline) {
+      setAppointmentSlots([]);
 
       return;
     }
 
     try {
-      setLoadingSlots(
-        true
+      setLoadingSlots(true);
+
+      const response = await fetch(
+        `/api/availability?leadId=${encodeURIComponent(
+          id,
+        )}&timeline=${encodeURIComponent(timeline)}`,
+        {
+          cache: "no-store",
+        },
       );
 
-      const response =
-        await fetch(
-          `/api/availability?leadId=${encodeURIComponent(
-            id
-          )}&timeline=${encodeURIComponent(
-            timeline
-          )}`,
-          {
-            cache: "no-store",
-          }
-        );
-
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Unable to load availability."
-        );
+        throw new Error(data.error || "Unable to load availability.");
       }
 
-      setAppointmentSlots(
-        data.slots ?? []
-      );
+      setAppointmentSlots(data.slots ?? []);
     } catch (error) {
-      console.error(
-        "Availability error:",
-        error
-      );
+      console.error("Availability error:", error);
 
-      setAppointmentSlots(
-        []
-      );
+      setAppointmentSlots([]);
 
       setError(
         error instanceof Error
           ? error.message
-          : "Unable to load available appointments."
+          : "Unable to load available appointments.",
       );
     } finally {
-      setLoadingSlots(
-        false
-      );
+      setLoadingSlots(false);
     }
   }
 
@@ -262,113 +169,62 @@ export function DemoChat({
   useEffect(() => {
     async function initializeDemo() {
       try {
-        setInitializing(
-          true
-        );
+        setInitializing(true);
 
         setError(null);
 
-        const storageKey =
-          `leadflow:${businessSlug}:leadId`;
+        const storageKey = `leadflow:${businessSlug}:leadId`;
 
-        const storedLeadId =
-          localStorage.getItem(
-            storageKey
-          );
+        const storedLeadId = localStorage.getItem(storageKey);
 
         /* ===================================================
            RESTORE EXISTING REAL LEAD
            =================================================== */
 
         if (storedLeadId) {
-          const response =
-            await fetch(
-              `/api/leads/${storedLeadId}`,
-              {
-                cache: "no-store",
-              }
-            );
+          const response = await fetch(`/api/leads/${storedLeadId}`, {
+            cache: "no-store",
+          });
 
           if (response.ok) {
-            const data =
-              await response.json();
+            const data = await response.json();
 
-            setLeadId(
-              data.lead.id
-            );
+            setLeadId(data.lead.id);
 
-            setMessages(
-              data.messages
-            );
+            setMessages(data.messages);
 
             setLead({
-              industry:
-                data.lead.industry ??
-                undefined,
+              industry: data.lead.industry ?? undefined,
 
-              service:
-                data.lead.service ??
-                undefined,
+              service: data.lead.service ?? undefined,
 
-              location:
-                data.lead.location ??
-                undefined,
+              location: data.lead.location ?? undefined,
 
-              urgency:
-                data.lead.urgency ??
-                undefined,
+              urgency: data.lead.urgency ?? undefined,
 
-              timeline:
-                data.lead.timeline ??
-                undefined,
+              timeline: data.lead.timeline ?? undefined,
 
-              name:
-                data.lead.name ??
-                undefined,
+              name: data.lead.name ?? undefined,
 
-              phone:
-                data.lead.phone ??
-                undefined,
+              phone: data.lead.phone ?? undefined,
 
-              appointment:
-                data.lead.appointment ??
-                undefined,
+              appointment: data.lead.appointment ?? undefined,
             });
 
-            setStatus(
-              normalizeStatus(
-                data.lead.status
-              )
-            );
+            setStatus(normalizeStatus(data.lead.status));
 
-            const isCompleted =
-              Boolean(
-                data.completed
-              );
+            const isCompleted = Boolean(data.completed);
 
-            const canBook =
-              data.lead.status ===
-                "qualified" &&
-              !isCompleted;
+            const canBook = data.lead.status === "qualified" && !isCompleted;
 
-            setCompleted(
-              isCompleted
-            );
+            setCompleted(isCompleted);
 
-            setReadyToBook(
-              canBook
-            );
+            setReadyToBook(canBook);
 
             setOptions([]);
 
-            if (
-              canBook &&
-              data.lead.timeline
-            ) {
-              await loadAvailability(
-                data.lead.timeline,
-                data.lead.id
-              );
+            if (canBook && data.lead.timeline) {
+              await loadAvailability(data.lead.timeline, data.lead.id);
             }
 
             return;
@@ -378,9 +234,7 @@ export function DemoChat({
              STORED LEAD NO LONGER EXISTS
              =============================================== */
 
-          localStorage.removeItem(
-            storageKey
-          );
+          localStorage.removeItem(storageKey);
         }
 
         /* ===================================================
@@ -389,19 +243,13 @@ export function DemoChat({
 
         await initializeAnonymousChat();
       } catch (error) {
-        console.error(
-          error
-        );
+        console.error(error);
 
         setError(
-          error instanceof Error
-            ? error.message
-            : "Unable to initialize demo."
+          error instanceof Error ? error.message : "Unable to initialize demo.",
         );
       } finally {
-        setInitializing(
-          false
-        );
+        setInitializing(false);
       }
     }
 
@@ -410,34 +258,24 @@ export function DemoChat({
        ======================================================= */
 
     async function initializeAnonymousChat() {
-      const response =
-        await fetch(
-          "/api/leads",
-          {
-            method: "POST",
+      const response = await fetch("/api/leads", {
+        method: "POST",
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-            body:
-              JSON.stringify({
-                businessSlug,
-              }),
+        body: JSON.stringify({
+          businessSlug,
+        }),
 
-            cache: "no-store",
-          }
-        );
+        cache: "no-store",
+      });
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Unable to initialize chat."
-        );
+        throw new Error(data.error || "Unable to initialize chat.");
       }
 
       /* =====================================================
@@ -446,66 +284,35 @@ export function DemoChat({
          No Lead exists in MongoDB yet.
          ===================================================== */
 
-      setLeadId(
-        data.lead.id ??
-          null
-      );
+      setLeadId(data.lead.id ?? null);
 
-      setMessages(
-        data.messages ??
-          []
-      );
+      setMessages(data.messages ?? []);
 
       setLead({
-        industry:
-          data.lead.industry ??
-          undefined,
+        industry: data.lead.industry ?? undefined,
 
-        service:
-          data.lead.service ??
-          undefined,
+        service: data.lead.service ?? undefined,
 
-        location:
-          data.lead.location ??
-          undefined,
+        location: data.lead.location ?? undefined,
 
-        urgency:
-          data.lead.urgency ??
-          undefined,
+        urgency: data.lead.urgency ?? undefined,
 
-        timeline:
-          data.lead.timeline ??
-          undefined,
+        timeline: data.lead.timeline ?? undefined,
 
-        name:
-          data.lead.name ??
-          undefined,
+        name: data.lead.name ?? undefined,
 
-        phone:
-          data.lead.phone ??
-          undefined,
+        phone: data.lead.phone ?? undefined,
       });
 
-      setOptions(
-        data.options ??
-          []
-      );
+      setOptions(data.options ?? []);
 
-      setAppointmentSlots(
-        []
-      );
+      setAppointmentSlots([]);
 
-      setStatus(
-        "new"
-      );
+      setStatus("new");
 
-      setReadyToBook(
-        false
-      );
+      setReadyToBook(false);
 
-      setCompleted(
-        false
-      );
+      setCompleted(false);
     }
 
     initializeDemo();
@@ -516,29 +323,17 @@ export function DemoChat({
      ========================================================= */
 
   useEffect(() => {
-    messagesEndRef.current
-      ?.scrollIntoView({
-        behavior:
-          "smooth",
-      });
-  }, [
-    messages,
-    loading,
-    options,
-    appointmentSlots,
-    loadingSlots,
-  ]);
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, [messages, loading, options, appointmentSlots, loadingSlots]);
 
   /* =========================================================
      SEND MESSAGE
      ========================================================= */
 
-  async function sendMessage(
-    messageText?: string
-  ) {
-    const text =
-      messageText?.trim() ||
-      input.trim();
+  async function sendMessage(messageText?: string) {
+    const text = messageText?.trim() || input.trim();
 
     /* =======================================================
        IMPORTANT:
@@ -546,11 +341,7 @@ export function DemoChat({
        Anonymous visitors can chat.
        ======================================================= */
 
-    if (
-      !text ||
-      loading ||
-      completed
-    ) {
+    if (!text || loading || completed) {
       return;
     }
 
@@ -558,67 +349,45 @@ export function DemoChat({
 
     setOptions([]);
 
-    const userMessage:
-      Message = {
-      id:
-        crypto.randomUUID(),
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
 
-      sender:
-        "user",
+      sender: "user",
 
       text,
     };
 
-    const updatedMessages =
-      [
-        ...messages,
-        userMessage,
-      ];
+    const updatedMessages = [...messages, userMessage];
 
-    setMessages(
-      updatedMessages
-    );
+    setMessages(updatedMessages);
 
     setInput("");
 
     setLoading(true);
 
     try {
-      const response =
-        await fetch(
-          "/api/chat",
-          {
-            method:
-              "POST",
+      const response = await fetch("/api/chat", {
+        method: "POST",
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-            body:
-              JSON.stringify({
-                leadId,
+        body: JSON.stringify({
+          leadId,
 
-                businessSlug,
+          businessSlug,
 
-                messages:
-                  updatedMessages,
+          messages: updatedMessages,
 
-                lead,
-              }),
-          }
-        );
+          lead,
+        }),
+      });
 
-      const data:
-        ChatApiResponse =
-        await response.json();
+      const data: ChatApiResponse = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.reply ||
-            "Unable to send message."
-        );
+        throw new Error(data.reply || "Unable to send message.");
       }
 
       /* =====================================================
@@ -627,102 +396,59 @@ export function DemoChat({
          This happens when valid phone is collected.
          ===================================================== */
 
-      if (
-        data.leadId &&
-        data.leadId !==
-          leadId
-      ) {
-        setLeadId(
-          data.leadId
-        );
+      if (data.leadId && data.leadId !== leadId) {
+        setLeadId(data.leadId);
 
-        const storageKey =
-          `leadflow:${businessSlug}:leadId`;
+        const storageKey = `leadflow:${businessSlug}:leadId`;
 
-        localStorage.setItem(
-          storageKey,
-          data.leadId
-        );
+        localStorage.setItem(storageKey, data.leadId);
       }
 
       /* =====================================================
          UPDATE LOCAL LEAD PROFILE
          ===================================================== */
 
-      const updatedLead:
-        LeadData = {
-        industry:
-          data.lead.industry ??
-          undefined,
+      const updatedLead: LeadData = {
+        industry: data.lead.industry ?? undefined,
 
-        service:
-          data.lead.service ??
-          undefined,
+        service: data.lead.service ?? undefined,
 
-        location:
-          data.lead.location ??
-          undefined,
+        location: data.lead.location ?? undefined,
 
-        urgency:
-          data.lead.urgency ??
-          undefined,
+        urgency: data.lead.urgency ?? undefined,
 
-        timeline:
-          data.lead.timeline ??
-          undefined,
+        timeline: data.lead.timeline ?? undefined,
 
-        name:
-          data.lead.name ??
-          undefined,
+        name: data.lead.name ?? undefined,
 
-        phone:
-          data.lead.phone ??
-          undefined,
+        phone: data.lead.phone ?? undefined,
 
-        appointment:
-          lead.appointment,
+        appointment: lead.appointment,
       };
 
-      setLead(
-        updatedLead
-      );
+      setLead(updatedLead);
 
-      setStatus(
-        data.status
-      );
+      setStatus(data.status);
 
-      setOptions(
-        data.options ??
-          []
-      );
+      setOptions(data.options ?? []);
 
       /* =====================================================
          ADD AI RESPONSE TO BROWSER CHAT
          ===================================================== */
 
-      setMessages(
-        (
-          current
-        ) => [
-          ...current,
+      setMessages((current) => [
+        ...current,
 
-          {
-            id:
-              data.messageId ||
-              crypto.randomUUID(),
+        {
+          id: data.messageId || crypto.randomUUID(),
 
-            sender:
-              "ai",
+          sender: "ai",
 
-            text:
-              data.reply,
-          },
-        ]
-      );
+          text: data.reply,
+        },
+      ]);
 
-      setReadyToBook(
-        data.readyToBook
-      );
+      setReadyToBook(data.readyToBook);
 
       /* =====================================================
          LOAD AVAILABILITY
@@ -730,34 +456,19 @@ export function DemoChat({
          At this point a real Lead MUST exist.
          ===================================================== */
 
-      if (
-        data.readyToBook &&
-        data.lead.timeline &&
-        data.leadId
-      ) {
-        await loadAvailability(
-          data.lead.timeline,
-          data.leadId
-        );
+      if (data.readyToBook && data.lead.timeline && data.leadId) {
+        await loadAvailability(data.lead.timeline, data.leadId);
       } else {
-        setAppointmentSlots(
-          []
-        );
+        setAppointmentSlots([]);
       }
     } catch (error) {
-      console.error(
-        error
-      );
+      console.error(error);
 
       setError(
-        error instanceof Error
-          ? error.message
-          : "Something went wrong."
+        error instanceof Error ? error.message : "Something went wrong.",
       );
     } finally {
-      setLoading(
-        false
-      );
+      setLoading(false);
     }
   }
 
@@ -765,31 +476,21 @@ export function DemoChat({
      QUICK REPLY
      ========================================================= */
 
-  async function handleOptionClick(
-    option: ChatOption
-  ) {
-    if (
-      loading ||
-      completed
-    ) {
+  async function handleOptionClick(option: ChatOption) {
+    if (loading || completed) {
       return;
     }
 
     setOptions([]);
 
-    await sendMessage(
-      option.value
-    );
+    await sendMessage(option.value);
   }
 
   /* =========================================================
      FORM
      ========================================================= */
 
-  function handleSubmit(
-    event:
-      FormEvent<HTMLFormElement>
-  ) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     sendMessage();
@@ -799,135 +500,79 @@ export function DemoChat({
      BOOK APPOINTMENT
      ========================================================= */
 
-  async function chooseAppointment(
-    slot: AppointmentSlot
-  ) {
-    if (
-      !leadId ||
-      loading
-    ) {
+  async function chooseAppointment(slot: AppointmentSlot) {
+    if (!leadId || loading) {
       return;
     }
 
     try {
-      setLoading(
-        true
-      );
+      setLoading(true);
 
       setError(null);
 
       setOptions([]);
 
-      const response =
-        await fetch(
-          "/api/appointments",
-          {
-            method:
-              "POST",
+      const response = await fetch("/api/appointments", {
+        method: "POST",
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-            body:
-              JSON.stringify({
-                leadId,
+        body: JSON.stringify({
+          leadId,
 
-                appointment:
-                  slot.label,
+          appointment: slot.label,
 
-                scheduledFor:
-                  slot.scheduledFor,
-              }),
-          }
-        );
+          scheduledFor: slot.scheduledFor,
+        }),
+      });
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Unable to save appointment."
-        );
+        throw new Error(data.error || "Unable to save appointment.");
       }
 
-      const userMessage:
-        Message = {
-        id:
-          crypto.randomUUID(),
+      const userMessage: Message = {
+        id: crypto.randomUUID(),
 
-        sender:
-          "user",
+        sender: "user",
 
-        text:
-          slot.label,
+        text: slot.label,
       };
 
-      const aiMessage:
-        Message = {
-        id:
-          data.messageId ||
-          crypto.randomUUID(),
+      const aiMessage: Message = {
+        id: data.messageId || crypto.randomUUID(),
 
-        sender:
-          "ai",
+        sender: "ai",
 
-        text:
-          data.confirmation,
+        text: data.confirmation,
       };
 
-      setMessages(
-        (
-          previous
-        ) => [
-          ...previous,
-          userMessage,
-          aiMessage,
-        ]
-      );
+      setMessages((previous) => [...previous, userMessage, aiMessage]);
 
-      setLead(
-        (
-          previous
-        ) => ({
-          ...previous,
+      setLead((previous) => ({
+        ...previous,
 
-          appointment:
-            slot.label,
-        })
-      );
+        appointment: slot.label,
+      }));
 
-      setAppointmentSlots(
-        []
-      );
+      setAppointmentSlots([]);
 
-      setCompleted(
-        true
-      );
+      setCompleted(true);
 
-      setReadyToBook(
-        false
-      );
+      setReadyToBook(false);
 
-      setStatus(
-        "hot"
-      );
+      setStatus("hot");
     } catch (error) {
-      console.error(
-        error
-      );
+      console.error(error);
 
       setError(
-        error instanceof Error
-          ? error.message
-          : "Something went wrong."
+        error instanceof Error ? error.message : "Something went wrong.",
       );
     } finally {
-      setLoading(
-        false
-      );
+      setLoading(false);
     }
   }
 
@@ -937,28 +582,19 @@ export function DemoChat({
 
   async function restartDemo() {
     try {
-      setInitializing(
-        true
-      );
+      setInitializing(true);
 
       setError(null);
 
       setOptions([]);
 
-      setAppointmentSlots(
-        []
-      );
+      setAppointmentSlots([]);
 
-      setLoadingSlots(
-        false
-      );
+      setLoadingSlots(false);
 
-      const storageKey =
-        `leadflow:${businessSlug}:leadId`;
+      const storageKey = `leadflow:${businessSlug}:leadId`;
 
-      localStorage.removeItem(
-        storageKey
-      );
+      localStorage.removeItem(storageKey);
 
       /* =====================================================
          Restart means:
@@ -966,111 +602,65 @@ export function DemoChat({
          Do NOT create a Lead here.
          ===================================================== */
 
-      const response =
-        await fetch(
-          "/api/leads",
-          {
-            method:
-              "POST",
+      const response = await fetch("/api/leads", {
+        method: "POST",
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-            body:
-              JSON.stringify({
-                businessSlug,
-              }),
+        body: JSON.stringify({
+          businessSlug,
+        }),
 
-            cache: "no-store",
-          }
-        );
-
-      const data =
-        await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Unable to restart conversation."
-        );
-      }
-
-      setLeadId(
-        data.lead.id ??
-          null
-      );
-
-      setMessages(
-        data.messages ??
-          []
-      );
-
-      setLead({
-        industry:
-          data.lead.industry ??
-          undefined,
-
-        service:
-          data.lead.service ??
-          undefined,
-
-        location:
-          data.lead.location ??
-          undefined,
-
-        urgency:
-          data.lead.urgency ??
-          undefined,
-
-        timeline:
-          data.lead.timeline ??
-          undefined,
-
-        name:
-          data.lead.name ??
-          undefined,
-
-        phone:
-          data.lead.phone ??
-          undefined,
+        cache: "no-store",
       });
 
-      setOptions(
-        data.options ??
-          []
-      );
+      const data = await response.json();
 
-      setStatus(
-        "new"
-      );
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to restart conversation.");
+      }
 
-      setReadyToBook(
-        false
-      );
+      setLeadId(data.lead.id ?? null);
 
-      setCompleted(
-        false
-      );
+      setMessages(data.messages ?? []);
 
-      setLoading(
-        false
-      );
+      setLead({
+        industry: data.lead.industry ?? undefined,
+
+        service: data.lead.service ?? undefined,
+
+        location: data.lead.location ?? undefined,
+
+        urgency: data.lead.urgency ?? undefined,
+
+        timeline: data.lead.timeline ?? undefined,
+
+        name: data.lead.name ?? undefined,
+
+        phone: data.lead.phone ?? undefined,
+      });
+
+      setOptions(data.options ?? []);
+
+      setStatus("new");
+
+      setReadyToBook(false);
+
+      setCompleted(false);
+
+      setLoading(false);
     } catch (error) {
-      console.error(
-        error
-      );
+      console.error(error);
 
       setError(
         error instanceof Error
           ? error.message
-          : "Unable to restart conversation."
+          : "Unable to restart conversation.",
       );
     } finally {
-      setInitializing(
-        false
-      );
+      setInitializing(false);
     }
   }
 
@@ -1082,11 +672,7 @@ export function DemoChat({
     return (
       <div className="flex min-h-[500px] items-center justify-center rounded-3xl border border-white/10 bg-zinc-950">
         <div className="flex items-center gap-3 text-sm text-zinc-400">
-          <LoaderCircle
-            size={18}
-            className="animate-spin"
-          />
-
+          <LoaderCircle size={18} className="animate-spin" />
           Loading conversation...
         </div>
       </div>
@@ -1099,11 +685,7 @@ export function DemoChat({
 
   return (
     <div
-      className={
-        compact
-          ? "w-full"
-          : "grid gap-6 lg:grid-cols-[1.4fr_0.8fr]"
-      }
+      className={compact ? "w-full" : "grid gap-6 lg:grid-cols-[1.4fr_0.8fr]"}
     >
       {/* CHAT */}
 
@@ -1113,19 +695,14 @@ export function DemoChat({
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/15 text-blue-400">
-              <Bot
-                size={20}
-              />
+              <Bot size={20} />
             </div>
 
             <div>
-              <p className="font-medium">
-                {businessName} AI
-              </p>
+              <p className="font-medium">{businessName} AI</p>
 
               <div className="flex items-center gap-2 text-xs text-zinc-500">
                 <span className="h-2 w-2 rounded-full bg-emerald-400" />
-
                 Powered by AI
               </div>
             </div>
@@ -1133,18 +710,11 @@ export function DemoChat({
 
           <button
             type="button"
-            onClick={
-              restartDemo
-            }
-            disabled={
-              loading
-            }
+            onClick={restartDemo}
+            disabled={loading}
             className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs text-zinc-400 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
           >
-            <RefreshCcw
-              size={14}
-            />
-
+            <RefreshCcw size={14} />
             Restart
           </button>
         </div>
@@ -1153,95 +723,64 @@ export function DemoChat({
 
         <div
           className={`space-y-5 overflow-y-auto px-5 py-6 ${
-            compact
-              ? "h-[430px]"
-              : "h-[500px]"
+            compact ? "h-[430px]" : "h-[500px]"
           }`}
         >
-          {messages.map(
-            (
-              message
-            ) => (
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${
+                message.sender === "user" ? "justify-end" : "justify-start"
+              }`}
+            >
               <div
-                key={
-                  message.id
-                }
-                className={`flex ${
-                  message.sender ===
-                  "user"
-                    ? "justify-end"
-                    : "justify-start"
+                className={`flex max-w-[85%] gap-3 ${
+                  message.sender === "user" ? "flex-row-reverse" : "flex-row"
                 }`}
               >
                 <div
-                  className={`flex max-w-[85%] gap-3 ${
-                    message.sender ===
-                    "user"
-                      ? "flex-row-reverse"
-                      : "flex-row"
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                    message.sender === "user"
+                      ? "bg-white text-black"
+                      : "bg-violet-500/15 text-blue-400"
                   }`}
                 >
-                  <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                      message.sender ===
-                      "user"
-                        ? "bg-white text-black"
-                        : "bg-violet-500/15 text-blue-400"
-                    }`}
-                  >
-                    {message.sender ===
-                    "user" ? (
-                      <User
-                        size={15}
-                      />
-                    ) : (
-                      <Bot
-                        size={15}
-                      />
-                    )}
-                  </div>
+                  {message.sender === "user" ? (
+                    <User size={15} />
+                  ) : (
+                    <Bot size={15} />
+                  )}
+                </div>
 
-                  <div
-                    className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
-                      message.sender ===
-                      "user"
-                        ? "rounded-tr-md bg-white text-black"
-                        : "rounded-tl-md border border-white/10 bg-white/[0.04] text-zinc-200"
-                    }`}
-                  >
-                    {message.text}
-                  </div>
+                <div
+                  className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
+                    message.sender === "user"
+                      ? "rounded-tr-md bg-white text-black"
+                      : "rounded-tl-md border border-white/10 bg-white/[0.04] text-zinc-200"
+                  }`}
+                >
+                  {message.text}
                 </div>
               </div>
-            )
-          )}
+            </div>
+          ))}
 
           {loading && (
             <div className="flex justify-start">
               <div className="flex gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-500/15 text-blue-400">
-                  <Bot
-                    size={15}
-                  />
+                  <Bot size={15} />
                 </div>
 
                 <div className="flex items-center gap-2 rounded-2xl rounded-tl-md border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-zinc-400">
-                  <LoaderCircle
-                    size={16}
-                    className="animate-spin"
-                  />
-
+                  <LoaderCircle size={16} className="animate-spin" />
                   Thinking...
                 </div>
               </div>
             </div>
           )}
 
-          <div
-            ref={
-              messagesEndRef
-            }
-          />
+          <div ref={messagesEndRef} />
         </div>
 
         {/* INPUT */}
@@ -1249,37 +788,21 @@ export function DemoChat({
         <div className="border-t border-white/10 p-5">
           {/* QUICK REPLIES */}
 
-          {options.length >
-            0 &&
-            !loading &&
-            !readyToBook &&
-            !completed && (
-              <div className="mb-4 flex flex-wrap gap-2">
-                {options.map(
-                  (
-                    option
-                  ) => (
-                    <button
-                      key={
-                        option.value
-                      }
-                      type="button"
-                      onClick={() =>
-                        handleOptionClick(
-                          option
-                        )
-                      }
-                      disabled={
-                        loading
-                      }
-                      className="rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-2.5 text-sm text-violet-200 transition hover:border-violet-400/50 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {option.label}
-                    </button>
-                  )
-                )}
-              </div>
-            )}
+          {options.length > 0 && !loading && !readyToBook && !completed && (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {options.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleOptionClick(option)}
+                  disabled={loading}
+                  className="rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-2.5 text-sm text-violet-200 transition hover:border-violet-400/50 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* ERROR */}
 
@@ -1291,8 +814,7 @@ export function DemoChat({
 
           {/* APPOINTMENTS */}
 
-          {readyToBook &&
-          !completed ? (
+          {readyToBook && !completed ? (
             <div>
               <p className="mb-3 text-sm text-zinc-400">
                 {lead.timeline
@@ -1302,102 +824,54 @@ export function DemoChat({
 
               {loadingSlots ? (
                 <div className="flex items-center gap-2 text-sm text-zinc-500">
-                  <LoaderCircle
-                    size={16}
-                    className="animate-spin"
-                  />
-
+                  <LoaderCircle size={16} className="animate-spin" />
                   Loading available appointments...
                 </div>
-              ) : appointmentSlots.length >
-                0 ? (
+              ) : appointmentSlots.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {appointmentSlots.map(
-                    (
-                      slot
-                    ) => (
-                      <button
-                        key={
-                          slot.scheduledFor
-                        }
-                        type="button"
-                        onClick={() =>
-                          chooseAppointment(
-                            slot
-                          )
-                        }
-                        disabled={
-                          loading
-                        }
-                        className="rounded-full border border-violet-500/30 bg-blue-500/10 px-4 py-2.5 text-sm text-violet-200 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {slot.label}
-                      </button>
-                    )
-                  )}
+                  {appointmentSlots.map((slot) => (
+                    <button
+                      key={slot.scheduledFor}
+                      type="button"
+                      onClick={() => chooseAppointment(slot)}
+                      disabled={loading}
+                      className="rounded-full border border-violet-500/30 bg-blue-500/10 px-4 py-2.5 text-sm text-violet-200 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {slot.label}
+                    </button>
+                  ))}
                 </div>
               ) : (
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-zinc-500">
-                  No appointment
-                  times are currently
-                  available for this
-                  period.
+                  No appointment times are currently available for this period.
                 </div>
               )}
             </div>
           ) : completed ? (
             <div className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 px-4 py-3 text-sm text-emerald-400">
-              <CheckCircle2
-                size={18}
-              />
-
-              Lead qualified and
-              appointment booked
+              <CheckCircle2 size={18} />
+              Lead qualified and appointment booked
             </div>
           ) : (
-            <form
-              onSubmit={
-                handleSubmit
-              }
-              className="flex gap-3"
-            >
+            <form onSubmit={handleSubmit} className="flex gap-3">
               <input
-                value={
-                  input
-                }
-                onChange={(
-                  event
-                ) =>
-                  setInput(
-                    event.target
-                      .value
-                  )
-                }
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
                 placeholder="Describe what you need..."
-                disabled={
-                  loading
-                }
+                disabled={loading}
                 autoComplete="off"
                 className="flex-1 rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-violet-500/50 disabled:cursor-not-allowed disabled:opacity-60"
               />
 
               <button
                 type="submit"
-                disabled={
-                  loading ||
-                  !input.trim()
-                }
+                disabled={loading || !input.trim()}
                 className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {loading ? (
-                  <LoaderCircle
-                    size={17}
-                    className="animate-spin"
-                  />
+                  <LoaderCircle size={17} className="animate-spin" />
                 ) : (
-                  <Send
-                    size={17}
-                  />
+                  <Send size={17} />
                 )}
               </button>
             </form>
@@ -1408,17 +882,7 @@ export function DemoChat({
       {/* LEAD SUMMARY */}
 
       {!compact && (
-        <LeadSummary
-          lead={
-            lead
-          }
-          status={
-            status
-          }
-          completed={
-            completed
-          }
-        />
+        <LeadSummary lead={lead} status={status} completed={completed} />
       )}
     </div>
   );
@@ -1441,19 +905,13 @@ function LeadSummary({
     <aside className="h-fit rounded-3xl border border-white/10 bg-white/[0.03] p-6 lg:sticky lg:top-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-zinc-500">
-            Live Lead Profile
-          </p>
+          <p className="text-sm text-zinc-500">Live Lead Profile</p>
 
-          <h2 className="mt-1 text-xl font-semibold">
-            Qualification
-          </h2>
+          <h2 className="mt-1 text-xl font-semibold">Qualification</h2>
         </div>
 
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
-          <Flame
-            size={19}
-          />
+          <Flame size={19} />
         </div>
       </div>
 
@@ -1464,87 +922,39 @@ function LeadSummary({
 
         <div className="mt-2 flex items-center justify-between gap-3">
           <span className="font-medium text-white">
-            {completed
-              ? "Appointment Booked"
-              : "Qualifying"}
+            {completed ? "Appointment Booked" : "Qualifying"}
           </span>
 
-          <StatusBadge
-            status={
-              status
-            }
-          />
+          <StatusBadge status={status} />
         </div>
       </div>
 
       <div className="mt-5 space-y-4">
-        <SummaryRow
-          label="Industry"
-          value={
-            lead.industry
-          }
-        />
+        <SummaryRow label="Industry" value={lead.industry} />
 
-        <SummaryRow
-          label="Service"
-          value={
-            lead.service
-          }
-        />
+        <SummaryRow label="Service" value={lead.service} />
 
-        <SummaryRow
-          label="Location"
-          value={
-            lead.location
-          }
-        />
+        <SummaryRow label="Location" value={lead.location} />
 
-        <SummaryRow
-          label="Urgency"
-          value={
-            lead.urgency
-          }
-        />
+        <SummaryRow label="Urgency" value={lead.urgency} />
 
-        <SummaryRow
-          label="Timeline"
-          value={
-            lead.timeline
-          }
-        />
+        <SummaryRow label="Timeline" value={lead.timeline} />
 
-        <SummaryRow
-          label="Name"
-          value={
-            lead.name
-          }
-        />
+        <SummaryRow label="Name" value={lead.name} />
 
-        <SummaryRow
-          label="Phone"
-          value={
-            lead.phone
-          }
-        />
+        <SummaryRow label="Phone" value={lead.phone} />
       </div>
 
       {lead.appointment && (
         <div className="mt-6 rounded-2xl border border-blue-500/20 bg-violet-500/5 p-4">
           <div className="flex items-center gap-3">
-            <CalendarDays
-              size={19}
-              className="text-blue-400"
-            />
+            <CalendarDays size={19} className="text-blue-400" />
 
             <div>
-              <p className="text-xs text-zinc-500">
-                Appointment
-              </p>
+              <p className="text-xs text-zinc-500">Appointment</p>
 
               <p className="mt-1 text-sm font-medium text-white">
-                {
-                  lead.appointment
-                }
+                {lead.appointment}
               </p>
             </div>
           </div>
@@ -1553,11 +963,8 @@ function LeadSummary({
 
       <div className="mt-6 border-t border-white/10 pt-5">
         <p className="text-xs leading-5 text-zinc-600">
-          Lead qualification
-          information is
-          extracted from the
-          conversation in real
-          time.
+          Lead qualification information is extracted from the conversation in
+          real time.
         </p>
       </div>
     </aside>
@@ -1568,20 +975,13 @@ function LeadSummary({
    STATUS BADGE
    ========================================================= */
 
-function StatusBadge({
-  status,
-}: {
-  status: LeadStatus;
-}) {
+function StatusBadge({ status }: { status: LeadStatus }) {
   const styles = {
-    new:
-      "bg-zinc-500/10 text-zinc-400",
+    new: "bg-zinc-500/10 text-zinc-400",
 
-    warm:
-      "bg-amber-500/10 text-amber-400",
+    warm: "bg-amber-500/10 text-amber-400",
 
-    hot:
-      "bg-red-500/10 text-red-400",
+    hot: "bg-red-500/10 text-red-400",
   };
 
   return (
@@ -1597,18 +997,10 @@ function StatusBadge({
    SUMMARY ROW
    ========================================================= */
 
-function SummaryRow({
-  label,
-  value,
-}: {
-  label: string;
-  value?: string;
-}) {
+function SummaryRow({ label, value }: { label: string; value?: string }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-white/5 pb-3">
-      <span className="text-sm text-zinc-500">
-        {label}
-      </span>
+      <span className="text-sm text-zinc-500">{label}</span>
 
       <span className="max-w-[60%] text-right text-sm text-zinc-200">
         {value || "—"}
@@ -1621,22 +1013,12 @@ function SummaryRow({
    STATUS NORMALIZER
    ========================================================= */
 
-function normalizeStatus(
-  status: string
-): LeadStatus {
-  if (
-    status === "hot" ||
-    status ===
-      "qualified" ||
-    status ===
-      "booked"
-  ) {
+function normalizeStatus(status: string): LeadStatus {
+  if (status === "hot" || status === "qualified" || status === "booked") {
     return "hot";
   }
 
-  if (
-    status === "warm"
-  ) {
+  if (status === "warm") {
     return "warm";
   }
 

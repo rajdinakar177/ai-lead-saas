@@ -1,27 +1,18 @@
 "use client";
 
-import {
-  CheckCircle2,
-  LoaderCircle,
-  Mail,
-} from "lucide-react";
+import { CheckCircle2, LoaderCircle, Mail } from "lucide-react";
 import { useState } from "react";
 
 type Props = {
   email: string;
 };
 
-export function ResendVerification({
-  email,
-}: Props) {
-  const [loading, setLoading] =
-    useState(false);
+export function ResendVerification({ email }: Props) {
+  const [loading, setLoading] = useState(false);
 
-  const [success, setSuccess] =
-    useState(false);
+  const [success, setSuccess] = useState(false);
 
-  const [error, setError] =
-    useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function resend() {
     try {
@@ -29,31 +20,22 @@ export function ResendVerification({
       setError(null);
       setSuccess(false);
 
-      const response =
-        await fetch(
-          "/api/auth/resend-verification",
-          {
-            method: "POST",
+      const response = await fetch("/api/auth/resend-verification", {
+        method: "POST",
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+        headers: {
+          "Content-Type": "application/json",
+        },
 
-            body: JSON.stringify({
-              email,
-            }),
-          }
-        );
+        body: JSON.stringify({
+          email,
+        }),
+      });
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error ||
-            "Unable to resend verification email."
-        );
+        throw new Error(data.error || "Unable to resend verification email.");
       }
 
       setSuccess(true);
@@ -61,7 +43,7 @@ export function ResendVerification({
       setError(
         error instanceof Error
           ? error.message
-          : "Unable to resend verification email."
+          : "Unable to resend verification email.",
       );
     } finally {
       setLoading(false);
@@ -81,8 +63,7 @@ export function ResendVerification({
           </p>
 
           <p className="mt-1 break-all text-xs leading-5 text-zinc-500">
-            We can send a new verification link to{" "}
-            {email}.
+            We can send a new verification link to {email}.
           </p>
 
           {success ? (
@@ -99,11 +80,7 @@ export function ResendVerification({
             >
               {loading ? (
                 <>
-                  <LoaderCircle
-                    size={15}
-                    className="animate-spin"
-                  />
-
+                  <LoaderCircle size={15} className="animate-spin" />
                   Sending...
                 </>
               ) : (
@@ -112,11 +89,7 @@ export function ResendVerification({
             </button>
           )}
 
-          {error && (
-            <p className="mt-3 text-xs text-red-400">
-              {error}
-            </p>
-          )}
+          {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
         </div>
       </div>
     </div>

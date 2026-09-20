@@ -8,94 +8,74 @@ type CreateLeadBody = {
   businessSlug?: string;
 };
 
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
   try {
-    const rateLimitResponse =
-      await applyRequestRateLimit({
-        request,
-        action: "public-leads",
-        limit: 30,
-        windowMs:
-          10 * 60 * 1000,
-      });
+    const rateLimitResponse = await applyRequestRateLimit({
+      request,
+      action: "public-leads",
+      limit: 30,
+      windowMs: 10 * 60 * 1000,
+    });
 
     if (rateLimitResponse) {
       return rateLimitResponse;
     }
-    const body: CreateLeadBody =
-      await request.json();
+    const body: CreateLeadBody = await request.json();
 
-    const businessSlug =
-      body.businessSlug
-        ?.trim()
-        .toLowerCase();
+    const businessSlug = body.businessSlug?.trim().toLowerCase();
 
     if (!businessSlug) {
       return NextResponse.json(
         {
-          error:
-            "Business slug is required.",
+          error: "Business slug is required.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
     await connectDB();
 
-    const business =
-      await Business.findOne({
-        slug: businessSlug,
-        emailVerified: true,
-      }).lean();
+    const business = await Business.findOne({
+      slug: businessSlug,
+      emailVerified: true,
+    }).lean();
 
     if (!business) {
       return NextResponse.json(
         {
-          error:
-            "Business not found.",
+          error: "Business not found.",
         },
         {
           status: 404,
-        }
+        },
       );
     }
 
-    const services: string[] =
-      business.aiSettings?.services ??
-      [];
+    const services: string[] = business.aiSettings?.services ?? [];
 
     const welcomeText =
       business.aiSettings?.welcomeMessage?.trim() ||
       `Hi! 👋 Welcome to ${business.name}. What can we help you with today?`;
 
-    const options =
-      services.map(
-        (service) => ({
-          label: service,
-          value: service,
-        })
-      );
+    const options = services.map((service) => ({
+      label: service,
+      value: service,
+    }));
 
     return NextResponse.json(
       {
         success: true,
 
         business: {
-          id:
-            business._id.toString(),
+          id: business._id.toString(),
 
-          name:
-            business.name,
+          name: business.name,
 
-          slug:
-            business.slug,
+          slug: business.slug,
 
-          industry:
-            business.industry,
+          industry: business.industry,
         },
 
         // Important:
@@ -103,8 +83,7 @@ export async function POST(
         lead: {
           id: null,
 
-          industry:
-            business.industry,
+          industry: business.industry,
 
           service: null,
 
@@ -127,13 +106,11 @@ export async function POST(
         // It is not written to MongoDB yet.
         messages: [
           {
-            id:
-              crypto.randomUUID(),
+            id: crypto.randomUUID(),
 
             sender: "ai",
 
-            text:
-              welcomeText,
+            text: welcomeText,
           },
         ],
 
@@ -142,25 +119,20 @@ export async function POST(
       {
         status: 200,
         headers: {
-          "Cache-Control":
-            "no-store",
+          "Cache-Control": "no-store",
         },
-      }
+      },
     );
   } catch (error) {
-    console.error(
-      "Initialize chat error:",
-      error
-    );
+    console.error("Initialize chat error:", error);
 
     return NextResponse.json(
       {
-        error:
-          "Unable to initialize chat.",
+        error: "Unable to initialize chat.",
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

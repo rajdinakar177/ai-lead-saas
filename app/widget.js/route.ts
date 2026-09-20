@@ -419,16 +419,11 @@ export async function GET() {
 })();
 `;
 
-  return new Response(
-    script,
-    {
-      headers: {
-        "Content-Type":
-          "application/javascript; charset=utf-8",
+  return new Response(script, {
+    headers: {
+      "Content-Type": "application/javascript; charset=utf-8",
 
-        "Cache-Control":
-          "public, max-age=300",
-      },
-    }
-  );
+      "Cache-Control": "public, max-age=300",
+    },
+  });
 }

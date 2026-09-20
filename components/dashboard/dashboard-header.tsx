@@ -7,10 +7,7 @@ type Props = {
   description: string;
 };
 
-export async function DashboardHeader({
-  title,
-  description,
-}: Props) {
+export async function DashboardHeader({ title, description }: Props) {
   const business = await requireBusiness();
 
   return (
@@ -20,9 +17,7 @@ export async function DashboardHeader({
           {title}
         </h1>
 
-        <p className="mt-2 text-sm text-zinc-500">
-          {description}
-        </p>
+        <p className="mt-2 text-sm text-zinc-500">{description}</p>
       </div>
 
       <div className="flex items-center gap-3">

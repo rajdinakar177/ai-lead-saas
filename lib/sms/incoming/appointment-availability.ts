@@ -1,7 +1,4 @@
-import type {
-  GeneratedSlot,
-  Timeline,
-} from "@/lib/availability";
+import type { GeneratedSlot, Timeline } from "@/lib/availability";
 
 import { getAvailableAppointmentSlots } from "@/lib/appointments/availability";
 

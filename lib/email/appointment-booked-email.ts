@@ -22,12 +22,9 @@ export function generateAppointmentBookedEmail({
   location,
   appointmentLabel,
 }: AppointmentBookedEmailParams) {
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "http://localhost:3000";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-  const appointmentUrl =
-    `${appUrl}/dashboard/appointments`;
+  const appointmentUrl = `${appUrl}/dashboard/appointments`;
 
   const email = {
     body: {
@@ -98,23 +95,12 @@ export function generateAppointmentBookedEmail({
   };
 
   return {
-    subject:
-      `📅 Appointment Booked${
-        service
-          ? `: ${service}`
-          : ""
-      }${
-        name
-          ? ` with ${name}`
-          : ""
-      }`,
+    subject: `📅 Appointment Booked${service ? `: ${service}` : ""}${
+      name ? ` with ${name}` : ""
+    }`,
 
-    html:
-      mailGenerator.generate(email),
+    html: mailGenerator.generate(email),
 
-    text:
-      mailGenerator.generatePlaintext(
-        email
-      ),
+    text: mailGenerator.generatePlaintext(email),
   };
 }

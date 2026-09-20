@@ -20,46 +20,36 @@ export default async function AISettingsPage() {
             AI Configuration
           </p>
 
-          <h2 className="mt-2 text-xl font-semibold text-white">
-            AI Assistant Settings
-          </h2>
+          <h2 className="mt-2 text-xl font-semibold text-white">AI Assistant Settings</h2>
 
           <p className="mt-1 text-sm text-zinc-600">
-            Configure your services, service areas,
-            conversation style and lead qualification
+            Configure your services, service areas, conversation style and lead qualification
             requirements.
           </p>
         </div>
 
         <AISettingsForm
           initialSettings={{
-            businessDescription:
-              business.aiSettings?.businessDescription ?? "",
+            businessDescription: business.aiSettings?.businessDescription ?? "",
 
-            services:
-              business.aiSettings?.services ?? [],
+            services: business.aiSettings?.services ?? [],
 
-            serviceAreas:
-              business.aiSettings?.serviceAreas ?? [],
+            serviceAreas: business.aiSettings?.serviceAreas ?? [],
 
-            welcomeMessage:
-              business.aiSettings?.welcomeMessage ?? "",
+            welcomeMessage: business.aiSettings?.welcomeMessage ?? "",
 
-            tone:
-              business.aiSettings?.tone ?? "friendly",
+            tone: business.aiSettings?.tone ?? "friendly",
 
-            qualificationFields:
-              business.aiSettings?.qualificationFields ?? [
-                "name",
-                "phone",
-                "service",
-                "location",
-                "urgency",
-                "timeline",
-              ],
+            qualificationFields: business.aiSettings?.qualificationFields ?? [
+              "name",
+              "phone",
+              "service",
+              "location",
+              "urgency",
+              "timeline",
+            ],
 
-            additionalInstructions:
-              business.aiSettings?.additionalInstructions ?? "",
+            additionalInstructions: business.aiSettings?.additionalInstructions ?? "",
           }}
         />
       </div>

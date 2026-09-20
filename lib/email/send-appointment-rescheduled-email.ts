@@ -28,17 +28,16 @@ export async function sendAppointmentRescheduledEmail({
   previousAppointmentLabel,
   newAppointmentLabel,
 }: SendAppointmentRescheduledEmailParams) {
-  const email =
-    generateAppointmentRescheduledEmail({
-      businessName,
-      appointmentId,
-      name,
-      phone,
-      service,
-      location,
-      previousAppointmentLabel,
-      newAppointmentLabel,
-    });
+  const email = generateAppointmentRescheduledEmail({
+    businessName,
+    appointmentId,
+    name,
+    phone,
+    service,
+    location,
+    previousAppointmentLabel,
+    newAppointmentLabel,
+  });
 
   return sendEmail({
     toEmail: businessEmail,

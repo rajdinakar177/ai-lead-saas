@@ -9,12 +9,10 @@ import { connectDB } from "@/lib/mongodb";
 
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
 
-export const dynamic =
-  "force-dynamic";
+export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const business =
-    await requireBusiness();
+  const business = await requireBusiness();
 
   await connectDB();
 
@@ -25,28 +23,19 @@ export default async function SettingsPage() {
    * Never send OAuth access/refresh
    * tokens to the Client Component.
    */
-  const googleIntegration =
-    await GoogleCalendarIntegration.findOne({
-      businessId: business._id,
-    })
-      .select(
-        "connected googleEmail calendarId"
-      )
-      .lean();
+  const googleIntegration = await GoogleCalendarIntegration.findOne({
+    businessId: business._id,
+  })
+    .select("connected googleEmail calendarId")
+    .lean();
 
   const googleCalendar = googleIntegration
     ? {
-        connected:
-          googleIntegration.connected ===
-          true,
+        connected: googleIntegration.connected === true,
 
-        googleEmail:
-          googleIntegration.googleEmail ??
-          null,
+        googleEmail: googleIntegration.googleEmail ?? null,
 
-        calendarId:
-          googleIntegration.calendarId ||
-          "primary",
+        calendarId: googleIntegration.calendarId || "primary",
       }
     : null;
 
@@ -61,13 +50,10 @@ export default async function SettingsPage() {
 
       <div className="mt-8 mb-8 max-w-4xl">
         <div className="mb-5">
-          <h2 className="font-semibold text-white">
-            Business Profile
-          </h2>
+          <h2 className="font-semibold text-white">Business Profile</h2>
 
           <p className="mt-1 text-sm text-zinc-600">
-            This information will be used
-            across your Leadquivo workspace.
+            This information will be used across your Leadquivo workspace.
           </p>
         </div>
 
@@ -85,19 +71,14 @@ export default async function SettingsPage() {
 
       <div className="mt-8 max-w-4xl">
         <div className="mb-5">
-          <h2 className="font-semibold text-white">
-            Integrations
-          </h2>
+          <h2 className="font-semibold text-white">Integrations</h2>
 
           <p className="mt-1 text-sm text-zinc-600">
-            Connect Leadquivo with the tools
-            your business uses.
+            Connect Leadquivo with the tools your business uses.
           </p>
         </div>
 
-        <GoogleCalendarSettings
-          integration={googleCalendar}
-        />
+        <GoogleCalendarSettings integration={googleCalendar} />
       </div>
 
       {/* PUBLIC LEAD PAGE */}
@@ -105,14 +86,10 @@ export default async function SettingsPage() {
       <div className="mt-8 max-w-4xl">
         {business.slug && (
           <>
-            <PublicLeadLink
-              slug={business.slug}
-            />
+            <PublicLeadLink slug={business.slug} />
 
             <div className="mt-5">
-              <EmbedCode
-                slug={business.slug}
-              />
+              <EmbedCode slug={business.slug} />
             </div>
           </>
         )}

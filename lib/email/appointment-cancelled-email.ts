@@ -1,4 +1,3 @@
-
 import { mailGenerator } from "@/lib/email/mailgen";
 
 type GenerateAppointmentCancelledEmailParams = {
@@ -22,27 +21,19 @@ export function generateAppointmentCancelledEmail({
   location,
   appointmentLabel,
 }: GenerateAppointmentCancelledEmailParams) {
- 
+  const customerName = name || "Not provided";
 
-  const customerName =
-    name || "Not provided";
+  const customerPhone = phone || "Not provided";
 
-  const customerPhone =
-    phone || "Not provided";
+  const requestedService = service || "Not provided";
 
-  const requestedService =
-    service || "Not provided";
-
-  const customerLocation =
-    location || "Not provided";
+  const customerLocation = location || "Not provided";
 
   const email = {
     body: {
-      greeting:
-        `Hi ${businessName},`,
+      greeting: `Hi ${businessName},`,
 
-      intro:
-        "An appointment has been cancelled.",
+      intro: "An appointment has been cancelled.",
 
       table: {
         data: [
@@ -90,17 +81,10 @@ export function generateAppointmentCancelledEmail({
   };
 
   return {
-    subject:
-      `Appointment cancelled — ${customerName}`,
+    subject: `Appointment cancelled — ${customerName}`,
 
-    html:
-      mailGenerator.generate(
-        email
-      ),
+    html: mailGenerator.generate(email),
 
-    text:
-      mailGenerator.generatePlaintext(
-        email
-      ),
+    text: mailGenerator.generatePlaintext(email),
   };
 }

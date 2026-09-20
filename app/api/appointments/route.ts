@@ -19,49 +19,33 @@ type AppointmentRequest = {
   scheduledFor: string;
 };
 
-const validTimelines: Timeline[] = [
-  "Today",
-  "Tomorrow",
-  "This week",
-  "Next week",
-];
+const validTimelines: Timeline[] = ["Today", "Tomorrow", "This week", "Next week"];
 
-export async function POST(
-  request: Request
-) {
+export async function POST(request: Request) {
   try {
     /* =========================================
        READ REQUEST
        ========================================= */
-    const rateLimitResponse =
-      await applyRequestRateLimit({
-        request,
-        action:
-          "public-appointments",
-        limit: 20,
-        windowMs:
-          10 * 60 * 1000,
-      });
+    const rateLimitResponse = await applyRequestRateLimit({
+      request,
+      action: "public-appointments",
+      limit: 20,
+      windowMs: 10 * 60 * 1000,
+    });
 
     if (rateLimitResponse) {
       return rateLimitResponse;
     }
-    const body: AppointmentRequest =
-      await request.json();
+    const body: AppointmentRequest = await request.json();
 
-    if (
-      !body.leadId ||
-      !body.appointment ||
-      !body.scheduledFor
-    ) {
+    if (!body.leadId || !body.appointment || !body.scheduledFor) {
       return NextResponse.json(
         {
-          error:
-            "leadId, appointment and scheduledFor are required.",
+          error: "leadId, appointment and scheduledFor are required.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
@@ -69,39 +53,27 @@ export async function POST(
        VALIDATE DATE
        ========================================= */
 
-    const scheduledFor =
-      new Date(
-        body.scheduledFor
-      );
+    const scheduledFor = new Date(body.scheduledFor);
 
-    if (
-      Number.isNaN(
-        scheduledFor.getTime()
-      )
-    ) {
+    if (Number.isNaN(scheduledFor.getTime())) {
       return NextResponse.json(
         {
-          error:
-            "Invalid appointment date.",
+          error: "Invalid appointment date.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
-    if (
-      scheduledFor.getTime() <=
-      Date.now()
-    ) {
+    if (scheduledFor.getTime() <= Date.now()) {
       return NextResponse.json(
         {
-          error:
-            "That appointment time has already passed.",
+          error: "That appointment time has already passed.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
@@ -115,20 +87,16 @@ export async function POST(
        FIND LEAD
        ========================================= */
 
-    const lead =
-      await Lead.findById(
-        body.leadId
-      );
+    const lead = await Lead.findById(body.leadId);
 
     if (!lead) {
       return NextResponse.json(
         {
-          error:
-            "Lead not found.",
+          error: "Lead not found.",
         },
         {
           status: 404,
-        }
+        },
       );
     }
 
@@ -136,20 +104,16 @@ export async function POST(
        FIND BUSINESS
        ========================================= */
 
-    const business =
-      await Business.findById(
-        lead.businessId
-      ).lean();
+    const business = await Business.findById(lead.businessId).lean();
 
     if (!business) {
       return NextResponse.json(
         {
-          error:
-            "Business not found.",
+          error: "Business not found.",
         },
         {
           status: 404,
-        }
+        },
       );
     }
 
@@ -157,25 +121,16 @@ export async function POST(
        VALIDATE LEAD TIMELINE
        ========================================= */
 
-    const timeline =
-      lead.timeline as
-      | Timeline
-      | undefined;
+    const timeline = lead.timeline as Timeline | undefined;
 
-    if (
-      !timeline ||
-      !validTimelines.includes(
-        timeline
-      )
-    ) {
+    if (!timeline || !validTimelines.includes(timeline)) {
       return NextResponse.json(
         {
-          error:
-            "Lead does not have a valid booking timeline.",
+          error: "Lead does not have a valid booking timeline.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
@@ -183,21 +138,16 @@ export async function POST(
        VALIDATE BUSINESS AVAILABILITY
        ========================================= */
 
-    const availability =
-      business.availability;
+    const availability = business.availability;
 
-    if (
-      !availability ||
-      !availability.days?.length
-    ) {
+    if (!availability || !availability.days?.length) {
       return NextResponse.json(
         {
-          error:
-            "Business availability is not configured.",
+          error: "Business availability is not configured.",
         },
         {
           status: 400,
-        }
+        },
       );
     }
 
@@ -205,37 +155,29 @@ export async function POST(
        GET CURRENTLY AVAILABLE SLOTS
        ========================================= */
 
-    const availableSlots =
-      await getAvailableAppointmentSlots({
-        business,
-        timeline,
-      });
+    const availableSlots = await getAvailableAppointmentSlots({
+      business,
+      timeline,
+    });
 
     /* =========================================
        VERIFY REQUESTED SLOT
        ========================================= */
 
-    const requestedTime =
-      scheduledFor.getTime();
+    const requestedTime = scheduledFor.getTime();
 
-    const matchedSlot =
-      availableSlots.find(
-        (slot) =>
-          new Date(
-            slot.scheduledFor
-          ).getTime() ===
-          requestedTime
-      );
+    const matchedSlot = availableSlots.find(
+      (slot) => new Date(slot.scheduledFor).getTime() === requestedTime,
+    );
 
     if (!matchedSlot) {
       return NextResponse.json(
         {
-          error:
-            "That appointment time is no longer available. Please choose another time.",
+          error: "That appointment time is no longer available. Please choose another time.",
         },
         {
           status: 409,
-        }
+        },
       );
     }
 
@@ -250,27 +192,21 @@ export async function POST(
        4. Save AI confirmation message
        ========================================= */
 
-    const booking =
-      await bookAppointmentAtomically({
-        lead,
+    const booking = await bookAppointmentAtomically({
+      lead,
 
-        label:
-          matchedSlot.label,
+      label: matchedSlot.label,
 
-        scheduledFor,
-      });
+      scheduledFor,
+    });
 
-    const appointment =
-      booking.appointment;
+    const appointment = booking.appointment;
 
-    const aiMessage =
-      booking.aiMessage;
+    const aiMessage = booking.aiMessage;
 
-    const confirmation =
-      booking.confirmation;
+    const confirmation = booking.confirmation;
 
-    const appointmentId =
-      appointment._id.toString();
+    const appointmentId = appointment._id.toString();
 
     /* =========================================
        SEND EMAIL AFTER TRANSACTION
@@ -281,34 +217,24 @@ export async function POST(
 
     try {
       await sendAppointmentBookedEmail({
-        businessEmail:
-          business.email,
+        businessEmail: business.email,
 
-        businessName:
-          business.name,
+        businessName: business.name,
 
         appointmentId,
 
-        name:
-          lead.name ?? null,
+        name: lead.name ?? null,
 
-        phone:
-          lead.phone ?? null,
+        phone: lead.phone ?? null,
 
-        service:
-          lead.service ?? null,
+        service: lead.service ?? null,
 
-        location:
-          lead.location ?? null,
+        location: lead.location ?? null,
 
-        appointmentLabel:
-          matchedSlot.label,
+        appointmentLabel: matchedSlot.label,
       });
     } catch (emailError) {
-      console.error(
-        "Appointment booked email notification failed:",
-        emailError
-      );
+      console.error("Appointment booked email notification failed:", emailError);
     }
 
     /* =========================================
@@ -328,49 +254,33 @@ export async function POST(
        ========================================= */
 
     try {
-      const googleEvent =
-        await createAppointmentGoogleEvent({
-          businessId:
-            business._id.toString(),
+      const googleEvent = await createAppointmentGoogleEvent({
+        businessId: business._id.toString(),
 
-          appointmentId,
+        appointmentId,
 
-          businessName:
-            business.name,
+        businessName: business.name,
 
-          timezone:
-            business.timezone ||
-            "UTC",
+        timezone: business.timezone || "UTC",
 
-          slotDurationMinutes:
-            availability.slotDurationMinutes ||
-            60,
+        slotDurationMinutes: availability.slotDurationMinutes || 60,
 
-          scheduledFor:
-            appointment.scheduledFor,
+        scheduledFor: appointment.scheduledFor,
 
-          customerName:
-            lead.name ||
-            "Customer",
+        customerName: lead.name || "Customer",
 
-          customerPhone:
-            lead.phone ?? null,
+        customerPhone: lead.phone ?? null,
 
-          customerEmail:
-            lead.email ?? null,
+        customerEmail: lead.email ?? null,
 
-          service:
-            lead.service ?? null,
+        service: lead.service ?? null,
 
-          location:
-            lead.location ?? null,
+        location: lead.location ?? null,
 
-          urgency:
-            lead.urgency ?? null,
+        urgency: lead.urgency ?? null,
 
-          timeline:
-            lead.timeline ?? null,
-        });
+        timeline: lead.timeline ?? null,
+      });
 
       /*
        * null means this business does not
@@ -380,27 +290,21 @@ export async function POST(
       if (googleEvent) {
         await Appointment.updateOne(
           {
-            _id:
-              appointment._id,
+            _id: appointment._id,
 
-            businessId:
-              business._id,
+            businessId: business._id,
           },
           {
             $set: {
-              googleCalendarEventId:
-                googleEvent.eventId,
+              googleCalendarEventId: googleEvent.eventId,
 
-              googleCalendarId:
-                googleEvent.calendarId,
+              googleCalendarId: googleEvent.calendarId,
 
-              googleCalendarSyncedAt:
-                new Date(),
+              googleCalendarSyncedAt: new Date(),
 
-              googleCalendarSyncError:
-                null,
+              googleCalendarSyncError: null,
             },
-          }
+          },
         );
 
         /*
@@ -409,28 +313,21 @@ export async function POST(
          */
         await GoogleCalendarIntegration.updateOne(
           {
-            businessId:
-              business._id,
+            businessId: business._id,
 
-            connected:
-              true,
+            connected: true,
           },
           {
             $set: {
-              lastSyncedAt:
-                new Date(),
+              lastSyncedAt: new Date(),
 
-              lastSyncError:
-                null,
+              lastSyncError: null,
             },
-          }
+          },
         );
       }
     } catch (googleError) {
-      console.error(
-        "Google Calendar appointment sync failed:",
-        googleError
-      );
+      console.error("Google Calendar appointment sync failed:", googleError);
 
       const errorMessage =
         googleError instanceof Error
@@ -445,37 +342,29 @@ export async function POST(
       try {
         await Appointment.updateOne(
           {
-            _id:
-              appointment._id,
+            _id: appointment._id,
 
-            businessId:
-              business._id,
+            businessId: business._id,
           },
           {
             $set: {
-              googleCalendarSyncError:
-                errorMessage,
+              googleCalendarSyncError: errorMessage,
             },
-          }
+          },
         );
 
         await GoogleCalendarIntegration.updateOne(
           {
-            businessId:
-              business._id,
+            businessId: business._id,
           },
           {
             $set: {
-              lastSyncError:
-                errorMessage,
+              lastSyncError: errorMessage,
             },
-          }
+          },
         );
       } catch (syncErrorSaveError) {
-        console.error(
-          "Unable to save Google Calendar sync error:",
-          syncErrorSaveError
-        );
+        console.error("Unable to save Google Calendar sync error:", syncErrorSaveError);
       }
     }
 
@@ -484,61 +373,45 @@ export async function POST(
        ========================================= */
 
     return NextResponse.json({
-      success:
-        true,
+      success: true,
 
       appointment: {
-        id:
-          appointmentId,
+        id: appointmentId,
 
-        label:
-          appointment.label,
+        label: appointment.label,
 
-        scheduledFor:
-          appointment.scheduledFor,
+        scheduledFor: appointment.scheduledFor,
       },
 
       confirmation,
 
-      messageId:
-        aiMessage._id.toString(),
+      messageId: aiMessage._id.toString(),
     });
   } catch (error) {
-    console.error(
-      "Appointment error:",
-      error
-    );
+    console.error("Appointment error:", error);
 
     /* =========================================
        UNIQUE SLOT CONFLICT
        ========================================= */
 
-    if (
-      typeof error ===
-      "object" &&
-      error !== null &&
-      "code" in error &&
-      error.code === 11000
-    ) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
       return NextResponse.json(
         {
-          error:
-            "That appointment time is no longer available. Please choose another time.",
+          error: "That appointment time is no longer available. Please choose another time.",
         },
         {
           status: 409,
-        }
+        },
       );
     }
 
     return NextResponse.json(
       {
-        error:
-          "Unable to save appointment.",
+        error: "Unable to save appointment.",
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

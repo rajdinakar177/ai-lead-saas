@@ -10,19 +10,15 @@ export async function POST() {
       success: true,
     });
   } catch (error) {
-    console.error(
-      "Logout error:",
-      error
-    );
+    console.error("Logout error:", error);
 
     return NextResponse.json(
       {
-        error:
-          "Unable to logout.",
+        error: "Unable to logout.",
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

@@ -21,27 +21,20 @@ export default async function AvailabilityPage() {
 
       <div className="mt-8 max-w-4xl">
         <div className="mb-5">
-          <p className="text-sm font-medium uppercase tracking-wider text-blue-400">
-            Scheduling
-          </p>
+          <p className="text-sm font-medium uppercase tracking-wider text-blue-400">Scheduling</p>
 
-          <h2 className="mt-2 text-xl font-semibold text-white">
-            Business Availability
-          </h2>
+          <h2 className="mt-2 text-xl font-semibold text-white">Business Availability</h2>
 
           <p className="mt-1 text-sm text-zinc-600">
-            Set your working days, business hours,
-            appointment duration, and booking buffer.
+            Set your working days, business hours, appointment duration, and booking buffer.
           </p>
         </div>
 
         <AvailabilitySettingsForm
           initialAvailability={{
-            slotDurationMinutes:
-              business.availability?.slotDurationMinutes ?? 60,
+            slotDurationMinutes: business.availability?.slotDurationMinutes ?? 60,
 
-            bufferMinutes:
-              business.availability?.bufferMinutes ?? 0,
+            bufferMinutes: business.availability?.bufferMinutes ?? 0,
 
             days:
               business.availability?.days?.map((item: AvailabilityDay) => ({

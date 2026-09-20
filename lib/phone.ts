@@ -1,6 +1,4 @@
-import parsePhoneNumber, {
-  type CountryCode,
-} from "libphonenumber-js";
+import parsePhoneNumber, { type CountryCode } from "libphonenumber-js";
 
 export type PhoneValidationResult = {
   valid: boolean;
@@ -11,7 +9,7 @@ export type PhoneValidationResult = {
 
 export function validatePhoneNumber(
   value: string,
-  country: string = "US"
+  country: string = "US",
 ): PhoneValidationResult {
   const input = value.trim();
 
@@ -27,7 +25,7 @@ export function validatePhoneNumber(
   try {
     const phoneNumber = parsePhoneNumber(
       input,
-      country.toUpperCase() as CountryCode
+      country.toUpperCase() as CountryCode,
     );
 
     if (!phoneNumber) {

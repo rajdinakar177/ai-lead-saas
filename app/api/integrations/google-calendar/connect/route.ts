@@ -1,32 +1,24 @@
-import {
-  NextRequest,
-  NextResponse,
-} from "next/server";
-
+import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 
 import { requireBusiness } from "@/lib/auth";
 
 import { getGoogleCalendarAuthorizationUrl } from "@/lib/google-calendar/oauth";
 
-export const dynamic =
-  "force-dynamic";
+export const dynamic = "force-dynamic";
 
-export async function GET(
-) {
+export async function GET() {
   try {
-    const business =
-      await requireBusiness();
+    const business = await requireBusiness();
 
     if (!business) {
       return NextResponse.json(
         {
-          error:
-            "Authentication required.",
+          error: "Authentication required.",
         },
         {
           status: 401,
-        }
+        },
       );
     }
 
@@ -37,20 +29,11 @@ export async function GET(
      * Do NOT expose the business ID
      * inside the state value.
      */
-    const state =
-      randomBytes(32).toString(
-        "hex"
-      );
+    const state = randomBytes(32).toString("hex");
 
-    const authorizationUrl =
-      getGoogleCalendarAuthorizationUrl(
-        state
-      );
+    const authorizationUrl = getGoogleCalendarAuthorizationUrl(state);
 
-    const response =
-      NextResponse.redirect(
-        authorizationUrl
-      );
+    const response = NextResponse.redirect(authorizationUrl);
 
     /*
      * Store state in an httpOnly cookie.
@@ -59,39 +42,29 @@ export async function GET(
      * to our callback. The callback must
      * match it before accepting tokens.
      */
-    response.cookies.set(
-      "google_calendar_oauth_state",
-      state,
-      {
-        httpOnly: true,
+    response.cookies.set("google_calendar_oauth_state", state, {
+      httpOnly: true,
 
-        secure:
-          process.env.NODE_ENV ===
-          "production",
+      secure: process.env.NODE_ENV === "production",
 
-        sameSite: "lax",
+      sameSite: "lax",
 
-        path: "/",
+      path: "/",
 
-        maxAge: 60 * 10,
-      }
-    );
+      maxAge: 60 * 10,
+    });
 
     return response;
   } catch (error) {
-    console.error(
-      "Google Calendar connect error:",
-      error
-    );
+    console.error("Google Calendar connect error:", error);
 
     return NextResponse.json(
       {
-        error:
-          "Unable to connect Google Calendar.",
+        error: "Unable to connect Google Calendar.",
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

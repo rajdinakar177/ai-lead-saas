@@ -49,10 +49,9 @@ export async function updateAppointmentGoogleEvent({
   urgency,
   timeline,
 }: UpdateAppointmentGoogleEventParams) {
-  const googleClient =
-    await getGoogleCalendarClient({
-      businessId,
-    });
+  const googleClient = await getGoogleCalendarClient({
+    businessId,
+  });
 
   /*
    * Google Calendar may have been
@@ -63,37 +62,20 @@ export async function updateAppointmentGoogleEvent({
     return null;
   }
 
-  const {
-    calendar,
-    calendarId:
-      connectedCalendarId,
-  } = googleClient;
+  const { calendar, calendarId: connectedCalendarId } = googleClient;
 
   /*
    * Prefer the calendar stored on the
    * appointment because that is where
    * the original event was created.
    */
-  const targetCalendarId =
-    calendarId ||
-    connectedCalendarId ||
-    "primary";
+  const targetCalendarId = calendarId || connectedCalendarId || "primary";
 
-  const durationMinutes =
-    slotDurationMinutes > 0
-      ? slotDurationMinutes
-      : 60;
+  const durationMinutes = slotDurationMinutes > 0 ? slotDurationMinutes : 60;
 
-  const start =
-    new Date(scheduledFor);
+  const start = new Date(scheduledFor);
 
-  const end =
-    new Date(
-      start.getTime() +
-        durationMinutes *
-          60 *
-          1000
-    );
+  const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
 
   const descriptionLines = [
     "Leadquivo Appointment",
@@ -103,107 +85,76 @@ export async function updateAppointmentGoogleEvent({
   ];
 
   if (customerPhone) {
-    descriptionLines.push(
-      `Phone: ${customerPhone}`
-    );
+    descriptionLines.push(`Phone: ${customerPhone}`);
   }
 
   if (customerEmail) {
-    descriptionLines.push(
-      `Email: ${customerEmail}`
-    );
+    descriptionLines.push(`Email: ${customerEmail}`);
   }
 
   if (service) {
-    descriptionLines.push(
-      `Service: ${service}`
-    );
+    descriptionLines.push(`Service: ${service}`);
   }
 
   if (location) {
-    descriptionLines.push(
-      `Location: ${location}`
-    );
+    descriptionLines.push(`Location: ${location}`);
   }
 
   if (urgency) {
-    descriptionLines.push(
-      `Urgency: ${urgency}`
-    );
+    descriptionLines.push(`Urgency: ${urgency}`);
   }
 
   if (timeline) {
-    descriptionLines.push(
-      `Timeline: ${timeline}`
-    );
+    descriptionLines.push(`Timeline: ${timeline}`);
   }
 
-  descriptionLines.push(
-    "",
-    `Created by Leadquivo for ${businessName}.`
-  );
+  descriptionLines.push("", `Created by Leadquivo for ${businessName}.`);
 
-  const response =
-    await calendar.events.update({
-      calendarId:
-        targetCalendarId,
+  const response = await calendar.events.update({
+    calendarId: targetCalendarId,
 
-      eventId,
+    eventId,
 
-      requestBody: {
-        summary: service
-          ? `${service} - ${customerName}`
-          : `Service Appointment - ${customerName}`,
+    requestBody: {
+      summary: service
+        ? `${service} - ${customerName}`
+        : `Service Appointment - ${customerName}`,
 
-        description:
-          descriptionLines.join("\n"),
+      description: descriptionLines.join("\n"),
 
-        location:
-          location || undefined,
+      location: location || undefined,
 
-        start: {
-          dateTime:
-            start.toISOString(),
+      start: {
+        dateTime: start.toISOString(),
 
-          timeZone:
-            timezone,
-        },
+        timeZone: timezone,
+      },
 
-        end: {
-          dateTime:
-            end.toISOString(),
+      end: {
+        dateTime: end.toISOString(),
 
-          timeZone:
-            timezone,
-        },
+        timeZone: timezone,
+      },
 
-        extendedProperties: {
-          private: {
-            leadquivoAppointmentId:
-              appointmentId,
+      extendedProperties: {
+        private: {
+          leadquivoAppointmentId: appointmentId,
 
-            leadquivoBusinessId:
-              businessId,
-          },
+          leadquivoBusinessId: businessId,
         },
       },
-    });
+    },
+  });
 
   if (!response.data.id) {
-    throw new Error(
-      "Google Calendar did not return the updated event ID."
-    );
+    throw new Error("Google Calendar did not return the updated event ID.");
   }
 
   return {
-    eventId:
-      response.data.id,
+    eventId: response.data.id,
 
-    calendarId:
-      targetCalendarId,
+    calendarId: targetCalendarId,
 
-    htmlLink:
-      response.data.htmlLink ??
-      null,
+    htmlLink: response.data.htmlLink ?? null,
   };
 }

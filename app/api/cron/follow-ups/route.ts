@@ -2,11 +2,7 @@ import { NextResponse } from "next/server";
 
 import { connectDB } from "@/lib/mongodb";
 
-import {
-  canFollowUp,
-  getNextFollowUpAt,
-  MAX_FOLLOW_UPS,
-} from "@/lib/follow-up";
+import { canFollowUp, getNextFollowUpAt, MAX_FOLLOW_UPS } from "@/lib/follow-up";
 
 import { sendSmsReply } from "@/lib/sms/send-sms-reply";
 
@@ -26,21 +22,14 @@ import { Message } from "@/models/Message";
  * If the process crashes before finishing, the lead becomes
  * eligible again after this period.
  */
-const CLAIM_DURATION_MS =
-  5 * 60 * 1000;
+const CLAIM_DURATION_MS = 5 * 60 * 1000;
 
 /* =========================================================
    FOLLOW-UP MESSAGES
    ========================================================= */
 
-function getFollowUpMessage(
-  followUpCount: number,
-  service?: string | null
-) {
-  const serviceText =
-    service
-      ? ` about your ${service} request`
-      : "";
+function getFollowUpMessage(followUpCount: number, service?: string | null) {
+  const serviceText = service ? ` about your ${service} request` : "";
 
   if (followUpCount === 0) {
     return `Hi! Just checking in${serviceText}. Are you still looking for help?`;
@@ -57,38 +46,25 @@ function getFollowUpMessage(
    AUTHORIZATION
    ========================================================= */
 
-function isAuthorized(
-  request: Request
-) {
-  const cronSecret =
-    process.env.CRON_SECRET;
+function isAuthorized(request: Request) {
+  const cronSecret = process.env.CRON_SECRET;
 
   if (!cronSecret) {
-    console.error(
-      "CRON_SECRET is not configured."
-    );
+    console.error("CRON_SECRET is not configured.");
 
     return false;
   }
 
-  const authorization =
-    request.headers.get(
-      "authorization"
-    );
+  const authorization = request.headers.get("authorization");
 
-  return (
-    authorization ===
-    `Bearer ${cronSecret}`
-  );
+  return authorization === `Bearer ${cronSecret}`;
 }
 
 /* =========================================================
    GET
    ========================================================= */
 
-export async function GET(
-  request: Request
-) {
+export async function GET(request: Request) {
   try {
     /* =====================================================
        VERIFY CRON SECRET
@@ -97,19 +73,17 @@ export async function GET(
     if (!isAuthorized(request)) {
       return NextResponse.json(
         {
-          error:
-            "Unauthorized.",
+          error: "Unauthorized.",
         },
         {
           status: 401,
-        }
+        },
       );
     }
 
     await connectDB();
 
-    const startedAt =
-      new Date();
+    const startedAt = new Date();
 
     /* =====================================================
        FIND POSSIBLE DUE LEADS
@@ -120,56 +94,35 @@ export async function GET(
        before a follow-up can be sent.
        ===================================================== */
 
-    const dueLeads =
-      await Lead.find({
-        "followUp.enabled":
-          true,
+    const dueLeads = await Lead.find({
+      "followUp.enabled": true,
 
-        "followUp.nextFollowUpAt":
-          {
-            $ne:
-              null,
+      "followUp.nextFollowUpAt": {
+        $ne: null,
 
-            $lte:
-              startedAt,
-          },
+        $lte: startedAt,
+      },
 
-        "followUp.count":
-          {
-            $lt:
-              MAX_FOLLOW_UPS,
-          },
+      "followUp.count": {
+        $lt: MAX_FOLLOW_UPS,
+      },
 
-        status:
-          {
-            $in: [
-              "new",
-              "warm",
-              "hot",
-              "qualified",
-            ],
-          },
+      status: {
+        $in: ["new", "warm", "hot", "qualified"],
+      },
 
-        phone:
-          {
-            $exists:
-              true,
+      phone: {
+        $exists: true,
 
-            $nin: [
-              null,
-              "",
-            ],
-          },
+        $nin: [null, ""],
+      },
+    })
+      .sort({
+        "followUp.nextFollowUpAt": 1,
       })
-        .sort({
-          "followUp.nextFollowUpAt":
-            1,
-        })
-        .limit(100)
-        .select(
-          "_id followUp"
-        )
-        .lean();
+      .limit(100)
+      .select("_id followUp")
+      .lean();
 
     let claimed = 0;
     let sent = 0;
@@ -180,37 +133,24 @@ export async function GET(
        PROCESS CANDIDATES
        ===================================================== */
 
-    for (
-      const candidate of dueLeads
-    ) {
+    for (const candidate of dueLeads) {
       /*
        * We remember the exact state seen in the candidate.
        *
        * The atomic claim below requires that the database
        * still has the same follow-up count and due timestamp.
        */
-      const candidateCount =
-        candidate.followUp
-          ?.count ??
-        0;
+      const candidateCount = candidate.followUp?.count ?? 0;
 
-      const originalNextFollowUpAt =
-        candidate.followUp
-          ?.nextFollowUpAt;
+      const originalNextFollowUpAt = candidate.followUp?.nextFollowUpAt;
 
-      if (
-        !originalNextFollowUpAt
-      ) {
+      if (!originalNextFollowUpAt) {
         skipped++;
 
         continue;
       }
 
-      const claimUntil =
-        new Date(
-          Date.now() +
-            CLAIM_DURATION_MS
-        );
+      const claimUntil = new Date(Date.now() + CLAIM_DURATION_MS);
 
       /* ===================================================
          ATOMIC CLAIM
@@ -222,52 +162,35 @@ export async function GET(
          returns null.
          =================================================== */
 
-      const lead =
-        await Lead.findOneAndUpdate(
-          {
-            _id:
-              candidate._id,
+      const lead = await Lead.findOneAndUpdate(
+        {
+          _id: candidate._id,
 
-            "followUp.enabled":
-              true,
+          "followUp.enabled": true,
 
-            "followUp.count":
-              candidateCount,
+          "followUp.count": candidateCount,
 
-            "followUp.nextFollowUpAt":
-              originalNextFollowUpAt,
+          "followUp.nextFollowUpAt": originalNextFollowUpAt,
 
-            status:
-              {
-                $in: [
-                  "new",
-                  "warm",
-                  "hot",
-                  "qualified",
-                ],
-              },
-
-            phone:
-              {
-                $exists:
-                  true,
-
-                $nin: [
-                  null,
-                  "",
-                ],
-              },
+          status: {
+            $in: ["new", "warm", "hot", "qualified"],
           },
-          {
-            $set: {
-              "followUp.nextFollowUpAt":
-                claimUntil,
-            },
+
+          phone: {
+            $exists: true,
+
+            $nin: [null, ""],
           },
-          {
-           returnDocument: "after",
-          }
-        );
+        },
+        {
+          $set: {
+            "followUp.nextFollowUpAt": claimUntil,
+          },
+        },
+        {
+          returnDocument: "after",
+        },
+      );
 
       /* ===================================================
          ANOTHER WORKER ALREADY CLAIMED / CHANGED LEAD
@@ -276,13 +199,9 @@ export async function GET(
       if (!lead) {
         skipped++;
 
-        console.log(
-          "Follow-up claim skipped:",
-          {
-            leadId:
-              candidate._id.toString(),
-          }
-        );
+        console.log("Follow-up claim skipped:", {
+          leadId: candidate._id.toString(),
+        });
 
         continue;
       }
@@ -290,38 +209,26 @@ export async function GET(
       claimed++;
 
       try {
-        const followUpCount =
-          lead.followUp
-            ?.count ??
-          0;
+        const followUpCount = lead.followUp?.count ?? 0;
 
         /* =================================================
            FINAL SAFETY CHECK
            ================================================= */
 
-        if (
-          !canFollowUp(
-            lead.status,
-            lead.phone
-          )
-        ) {
+        if (!canFollowUp(lead.status, lead.phone)) {
           await Lead.updateOne(
             {
-              _id:
-                lead._id,
+              _id: lead._id,
 
-              "followUp.nextFollowUpAt":
-                claimUntil,
+              "followUp.nextFollowUpAt": claimUntil,
             },
             {
               $set: {
-                "followUp.enabled":
-                  false,
+                "followUp.enabled": false,
 
-                "followUp.nextFollowUpAt":
-                  null,
+                "followUp.nextFollowUpAt": null,
               },
-            }
+            },
           );
 
           skipped++;
@@ -342,52 +249,32 @@ export async function GET(
            present, stop and do not send the stale follow-up.
            ================================================= */
 
-        const stillClaimed =
-          await Lead.findOne({
-            _id:
-              lead._id,
+        const stillClaimed = await Lead.findOne({
+          _id: lead._id,
 
-            "followUp.enabled":
-              true,
+          "followUp.enabled": true,
 
-            "followUp.count":
-              followUpCount,
+          "followUp.count": followUpCount,
 
-            "followUp.nextFollowUpAt":
-              claimUntil,
+          "followUp.nextFollowUpAt": claimUntil,
 
-            status:
-              {
-                $in: [
-                  "new",
-                  "warm",
-                  "hot",
-                  "qualified",
-                ],
-              },
+          status: {
+            $in: ["new", "warm", "hot", "qualified"],
+          },
 
-            phone:
-              {
-                $exists:
-                  true,
+          phone: {
+            $exists: true,
 
-                $nin: [
-                  null,
-                  "",
-                ],
-              },
-          });
+            $nin: [null, ""],
+          },
+        });
 
         if (!stillClaimed) {
           skipped++;
 
-          console.log(
-            "Follow-up cancelled before send because lead state changed:",
-            {
-              leadId:
-                lead._id.toString(),
-            }
-          );
+          console.log("Follow-up cancelled before send because lead state changed:", {
+            leadId: lead._id.toString(),
+          });
 
           continue;
         }
@@ -396,22 +283,16 @@ export async function GET(
            BUILD FOLLOW-UP MESSAGE
            ================================================= */
 
-        const followUpMessage =
-          getFollowUpMessage(
-            followUpCount,
-            stillClaimed.service
-          );
+        const followUpMessage = getFollowUpMessage(followUpCount, stillClaimed.service);
 
         /* =================================================
            SEND SMS
            ================================================= */
 
         await sendSmsReply({
-          to:
-            stillClaimed.phone,
+          to: stillClaimed.phone,
 
-          body:
-            followUpMessage,
+          body: followUpMessage,
         });
 
         /* =================================================
@@ -419,34 +300,23 @@ export async function GET(
            ================================================= */
 
         await Message.create({
-          leadId:
-            stillClaimed._id,
+          leadId: stillClaimed._id,
 
-          sender:
-            "ai",
+          sender: "ai",
 
-          content:
-            followUpMessage,
+          content: followUpMessage,
         });
 
         /* =================================================
            UPDATE FOLLOW-UP STATE
            ================================================= */
 
-        const sentAt =
-          new Date();
+        const sentAt = new Date();
 
-        const newCount =
-          followUpCount + 1;
+        const newCount = followUpCount + 1;
 
         const nextFollowUpAt =
-          newCount >=
-          MAX_FOLLOW_UPS
-            ? null
-            : getNextFollowUpAt(
-                newCount,
-                sentAt
-              );
+          newCount >= MAX_FOLLOW_UPS ? null : getNextFollowUpAt(newCount, sentAt);
 
         /* =================================================
            FINALIZE ONLY IF WE STILL OWN THE CLAIM
@@ -455,81 +325,54 @@ export async function GET(
            customer reply that changed the follow-up state.
            ================================================= */
 
-        const updateResult =
-          await Lead.updateOne(
-            {
-              _id:
-                stillClaimed._id,
+        const updateResult = await Lead.updateOne(
+          {
+            _id: stillClaimed._id,
 
-              "followUp.count":
-                followUpCount,
+            "followUp.count": followUpCount,
 
-              "followUp.nextFollowUpAt":
-                claimUntil,
+            "followUp.nextFollowUpAt": claimUntil,
+          },
+          {
+            $set: {
+              "followUp.count": newCount,
+
+              "followUp.lastFollowUpAt": sentAt,
+
+              "followUp.enabled": newCount < MAX_FOLLOW_UPS,
+
+              "followUp.nextFollowUpAt": nextFollowUpAt,
             },
-            {
-              $set: {
-                "followUp.count":
-                  newCount,
+          },
+        );
 
-                "followUp.lastFollowUpAt":
-                  sentAt,
-
-                "followUp.enabled":
-                  newCount <
-                  MAX_FOLLOW_UPS,
-
-                "followUp.nextFollowUpAt":
-                  nextFollowUpAt,
-              },
-            }
-          );
-
-        if (
-          updateResult.modifiedCount ===
-          0
-        ) {
-          console.warn(
-            "Follow-up sent but final state changed before completion:",
-            {
-              leadId:
-                stillClaimed._id.toString(),
-            }
-          );
+        if (updateResult.modifiedCount === 0) {
+          console.warn("Follow-up sent but final state changed before completion:", {
+            leadId: stillClaimed._id.toString(),
+          });
         }
 
         sent++;
 
-        console.log(
-          "Automated follow-up sent:",
-          {
-            leadId:
-              stillClaimed._id.toString(),
+        console.log("Automated follow-up sent:", {
+          leadId: stillClaimed._id.toString(),
 
-            phone:
-              stillClaimed.phone,
+          phone: stillClaimed.phone,
 
-            service:
-              stillClaimed.service,
+          service: stillClaimed.service,
 
-            followUpNumber:
-              newCount,
+          followUpNumber: newCount,
 
-            nextFollowUpAt,
-          }
-        );
+          nextFollowUpAt,
+        });
       } catch (error) {
         failed++;
 
-        console.error(
-          "Follow-up processing failed:",
-          {
-            leadId:
-              lead._id.toString(),
+        console.error("Follow-up processing failed:", {
+          leadId: lead._id.toString(),
 
-            error,
-          }
-        );
+          error,
+        });
 
         /* =================================================
            RELEASE / RETRY CLAIM AFTER FAILURE
@@ -544,35 +387,24 @@ export async function GET(
         try {
           await Lead.updateOne(
             {
-              _id:
-                lead._id,
+              _id: lead._id,
 
-              "followUp.count":
-                candidateCount,
+              "followUp.count": candidateCount,
 
-              "followUp.nextFollowUpAt":
-                claimUntil,
+              "followUp.nextFollowUpAt": claimUntil,
             },
             {
               $set: {
-                "followUp.nextFollowUpAt":
-                  originalNextFollowUpAt,
+                "followUp.nextFollowUpAt": originalNextFollowUpAt,
               },
-            }
+            },
           );
-        } catch (
-          releaseError
-        ) {
-          console.error(
-            "Unable to release failed follow-up claim:",
-            {
-              leadId:
-                lead._id.toString(),
+        } catch (releaseError) {
+          console.error("Unable to release failed follow-up claim:", {
+            leadId: lead._id.toString(),
 
-              error:
-                releaseError,
-            }
-          );
+            error: releaseError,
+          });
         }
       }
     }
@@ -582,11 +414,9 @@ export async function GET(
        ===================================================== */
 
     return NextResponse.json({
-      success:
-        true,
+      success: true,
 
-      checked:
-        dueLeads.length,
+      checked: dueLeads.length,
 
       claimed,
 
@@ -596,23 +426,18 @@ export async function GET(
 
       failed,
 
-      processedAt:
-        startedAt.toISOString(),
+      processedAt: startedAt.toISOString(),
     });
   } catch (error) {
-    console.error(
-      "Follow-up cron error:",
-      error
-    );
+    console.error("Follow-up cron error:", error);
 
     return NextResponse.json(
       {
-        error:
-          "Unable to process follow-ups.",
+        error: "Unable to process follow-ups.",
       },
       {
         status: 500,
-      }
+      },
     );
   }
 }

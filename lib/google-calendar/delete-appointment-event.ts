@@ -13,10 +13,9 @@ export async function deleteAppointmentGoogleEvent({
   eventId,
   calendarId,
 }: DeleteAppointmentGoogleEventParams) {
-  const googleClient =
-    await getGoogleCalendarClient({
-      businessId,
-    });
+  const googleClient = await getGoogleCalendarClient({
+    businessId,
+  });
 
   /*
    * Google Calendar may have been
@@ -27,32 +26,23 @@ export async function deleteAppointmentGoogleEvent({
     return null;
   }
 
-  const {
-    calendar,
-    calendarId:
-      connectedCalendarId,
-  } = googleClient;
+  const { calendar, calendarId: connectedCalendarId } = googleClient;
 
   /*
    * Prefer the calendar stored on the
    * appointment because that is where
    * the event was originally created.
    */
-  const targetCalendarId =
-    calendarId ||
-    connectedCalendarId ||
-    "primary";
+  const targetCalendarId = calendarId || connectedCalendarId || "primary";
 
   await calendar.events.delete({
-    calendarId:
-      targetCalendarId,
+    calendarId: targetCalendarId,
 
     eventId,
   });
 
   return {
     deleted: true,
-    calendarId:
-      targetCalendarId,
+    calendarId: targetCalendarId,
   };
 }

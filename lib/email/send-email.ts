@@ -16,99 +16,67 @@ export async function sendEmail({
   html,
   text,
 }: SendEmailParams) {
-  const apiKey =
-    process.env.BREVO_API_KEY;
+  const apiKey = process.env.BREVO_API_KEY;
 
-  const senderEmail =
-    process.env.BREVO_SENDER_EMAIL;
+  const senderEmail = process.env.BREVO_SENDER_EMAIL;
 
-  const senderName =
-    process.env.BREVO_SENDER_NAME ||
-    "LeadFlowAI";
+  const senderName = process.env.BREVO_SENDER_NAME || "LeadFlowAI";
 
   if (!apiKey) {
-    throw new Error(
-      "BREVO_API_KEY is not configured."
-    );
+    throw new Error("BREVO_API_KEY is not configured.");
   }
 
   if (!senderEmail) {
-    throw new Error(
-      "BREVO_SENDER_EMAIL is not configured."
-    );
+    throw new Error("BREVO_SENDER_EMAIL is not configured.");
   }
 
-  const response =
-    await fetch(
-      "https://api.brevo.com/v3/smtp/email",
-      {
-        method: "POST",
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
 
-        headers: {
-          accept:
-            "application/json",
+    headers: {
+      accept: "application/json",
 
-          "content-type":
-            "application/json",
+      "content-type": "application/json",
 
-          "api-key":
-            apiKey,
+      "api-key": apiKey,
+    },
+
+    body: JSON.stringify({
+      sender: {
+        name: senderName,
+
+        email: senderEmail,
+      },
+
+      to: [
+        {
+          email: toEmail,
+
+          name: toName || toEmail,
         },
+      ],
 
-        body:
-          JSON.stringify({
-            sender: {
-              name:
-                senderName,
+      subject,
 
-              email:
-                senderEmail,
-            },
+      htmlContent: html,
 
-            to: [
-              {
-                email:
-                  toEmail,
-
-                name:
-                  toName ||
-                  toEmail,
-              },
-            ],
-
-            subject,
-
-            htmlContent:
-              html,
-
-            textContent:
-              text,
-          }),
-      }
-    );
+      textContent: text,
+    }),
+  });
 
   if (!response.ok) {
-    const errorBody =
-      await response.text();
+    const errorBody = await response.text();
 
-    console.error(
-      "Brevo email error:",
-      errorBody
-    );
+    console.error("Brevo email error:", errorBody);
 
-    throw new Error(
-      "Unable to send email."
-    );
+    throw new Error("Unable to send email.");
   }
 
-  const data =
-    await response.json();
+  const data = await response.json();
 
   return {
     success: true,
 
-    messageId:
-      data.messageId ??
-      null,
+    messageId: data.messageId ?? null,
   };
 }

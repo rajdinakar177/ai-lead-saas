@@ -3,10 +3,7 @@ import { google } from "googleapis";
 import { connectDB } from "@/lib/mongodb";
 import { createGoogleOAuthClient } from "@/lib/google-calendar/oauth";
 
-import {
-  decryptToken,
-  encryptToken,
-} from "@/lib/security/token-encryption";
+import { decryptToken, encryptToken } from "@/lib/security/token-encryption";
 
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
 
@@ -19,11 +16,10 @@ export async function getGoogleCalendarClient({
 }: GetGoogleCalendarClientParams) {
   await connectDB();
 
-  const integration =
-    await GoogleCalendarIntegration.findOne({
-      businessId,
-      connected: true,
-    });
+  const integration = await GoogleCalendarIntegration.findOne({
+    businessId,
+    connected: true,
+  });
 
   if (!integration) {
     return null;
@@ -31,7 +27,7 @@ export async function getGoogleCalendarClient({
 
   if (!integration.refreshToken) {
     throw new Error(
-      "Google Calendar refresh token is missing. Reconnect Google Calendar."
+      "Google Calendar refresh token is missing. Reconnect Google Calendar.",
     );
   }
 
@@ -44,20 +40,13 @@ export async function getGoogleCalendarClient({
    * decryptToken() supports both during
    * our migration period.
    */
-  const accessToken =
-    integration.accessToken
-      ? decryptToken(
-          integration.accessToken
-        )
-      : undefined;
+  const accessToken = integration.accessToken
+    ? decryptToken(integration.accessToken)
+    : undefined;
 
-  const refreshToken =
-    decryptToken(
-      integration.refreshToken
-    );
+  const refreshToken = decryptToken(integration.refreshToken);
 
-  const oauthClient =
-    createGoogleOAuthClient();
+  const oauthClient = createGoogleOAuthClient();
 
   /*
    * Google receives only the real,
@@ -68,20 +57,13 @@ export async function getGoogleCalendarClient({
 
     refresh_token: refreshToken,
 
-    expiry_date:
-      integration.expiryDate
-        ? new Date(
-            integration.expiryDate
-          ).getTime()
-        : undefined,
+    expiry_date: integration.expiryDate
+      ? new Date(integration.expiryDate).getTime()
+      : undefined,
 
-    scope:
-      integration.scope ||
-      undefined,
+    scope: integration.scope || undefined,
 
-    token_type:
-      integration.tokenType ||
-      undefined,
+    token_type: integration.tokenType || undefined,
   });
 
   /*
@@ -93,71 +75,52 @@ export async function getGoogleCalendarClient({
    * must be encrypted before they are
    * written back to MongoDB.
    */
-  oauthClient.on(
-    "tokens",
-    async (tokens) => {
-      try {
-        const update: Record<
-          string,
-          unknown
-        > = {
-          lastSyncError: null,
-        };
+  oauthClient.on("tokens", async (tokens) => {
+    try {
+      const update: Record<string, unknown> = {
+        lastSyncError: null,
+      };
 
-        if (tokens.access_token) {
-          update.accessToken =
-            encryptToken(
-              tokens.access_token
-            );
-        }
-
-        if (tokens.refresh_token) {
-          update.refreshToken =
-            encryptToken(
-              tokens.refresh_token
-            );
-        }
-
-        if (tokens.expiry_date) {
-          update.expiryDate =
-            new Date(
-              tokens.expiry_date
-            );
-        }
-
-        if (tokens.scope) {
-          update.scope =
-            tokens.scope;
-        }
-
-        if (tokens.token_type) {
-          update.tokenType =
-            tokens.token_type;
-        }
-
-        await GoogleCalendarIntegration.updateOne(
-          {
-            _id:
-              integration._id,
-          },
-          {
-            $set: update,
-          }
-        );
-      } catch (error) {
-        console.error(
-          "Unable to save refreshed Google Calendar credentials:",
-          error
-        );
+      if (tokens.access_token) {
+        update.accessToken = encryptToken(tokens.access_token);
       }
-    }
-  );
 
-  const calendar =
-    google.calendar({
-      version: "v3",
-      auth: oauthClient,
-    });
+      if (tokens.refresh_token) {
+        update.refreshToken = encryptToken(tokens.refresh_token);
+      }
+
+      if (tokens.expiry_date) {
+        update.expiryDate = new Date(tokens.expiry_date);
+      }
+
+      if (tokens.scope) {
+        update.scope = tokens.scope;
+      }
+
+      if (tokens.token_type) {
+        update.tokenType = tokens.token_type;
+      }
+
+      await GoogleCalendarIntegration.updateOne(
+        {
+          _id: integration._id,
+        },
+        {
+          $set: update,
+        },
+      );
+    } catch (error) {
+      console.error(
+        "Unable to save refreshed Google Calendar credentials:",
+        error,
+      );
+    }
+  });
+
+  const calendar = google.calendar({
+    version: "v3",
+    auth: oauthClient,
+  });
 
   return {
     calendar,
@@ -166,8 +129,6 @@ export async function getGoogleCalendarClient({
 
     integration,
 
-    calendarId:
-      integration.calendarId ||
-      "primary",
+    calendarId: integration.calendarId || "primary",
   };
 }

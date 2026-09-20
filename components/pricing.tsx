@@ -70,9 +70,7 @@ export function Pricing() {
                 </div>
               )}
 
-              <h3 className="text-xl font-semibold text-white">
-                {plan.name}
-              </h3>
+              <h3 className="text-xl font-semibold text-white">{plan.name}</h3>
 
               <p className="mt-3 min-h-12 text-sm leading-6 text-zinc-500">
                 {plan.description}

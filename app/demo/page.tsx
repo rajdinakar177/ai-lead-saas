@@ -14,16 +14,12 @@ export default function DemoPage() {
           </h1>
 
           <p className="mx-auto mt-4 max-w-2xl text-zinc-400">
-            Pretend you're a homeowner looking for roofing or HVAC service.
-            Watch how the assistant qualifies the lead and moves them toward an
-            appointment.
+            Pretend you're a homeowner looking for roofing or HVAC service. Watch how the assistant
+            qualifies the lead and moves them toward an appointment.
           </p>
         </div>
 
-        <DemoChat
-          businessSlug="abc"
-          businessName="ABC Home Services"
-        />
+        <DemoChat businessSlug="abc" businessName="ABC Home Services" />
       </div>
     </main>
   );

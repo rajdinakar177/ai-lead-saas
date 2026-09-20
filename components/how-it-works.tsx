@@ -1,9 +1,4 @@
-import {
-  Bot,
-  CalendarCheck,
-  MessageCircle,
-  UserPlus,
-} from "lucide-react";
+import { Bot, CalendarCheck, MessageCircle, UserPlus } from "lucide-react";
 
 const steps = [
   {
@@ -69,9 +64,7 @@ export function HowItWorks() {
                     <Icon size={21} />
                   </div>
 
-                  <span className="text-sm text-zinc-600">
-                    {step.number}
-                  </span>
+                  <span className="text-sm text-zinc-600">{step.number}</span>
                 </div>
 
                 <h3 className="mt-7 text-xl font-semibold text-white">

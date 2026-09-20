@@ -7,18 +7,11 @@ import { brevo } from "@/lib/brevo";
 const TOKEN_DURATION = 60 * 60 * 1000;
 
 export function generateVerificationToken() {
-  const token =
-    crypto.randomBytes(32).toString("hex");
+  const token = crypto.randomBytes(32).toString("hex");
 
-  const tokenHash = crypto
-    .createHash("sha256")
-    .update(token)
-    .digest("hex");
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
 
-  const expiresAt =
-    new Date(
-      Date.now() + TOKEN_DURATION
-    );
+  const expiresAt = new Date(Date.now() + TOKEN_DURATION);
 
   return {
     token,
@@ -27,13 +20,8 @@ export function generateVerificationToken() {
   };
 }
 
-export function hashVerificationToken(
-  token: string
-) {
-  return crypto
-    .createHash("sha256")
-    .update(token)
-    .digest("hex");
+export function hashVerificationToken(token: string) {
+  return crypto.createHash("sha256").update(token).digest("hex");
 }
 
 export async function sendVerificationEmail({
@@ -45,34 +33,24 @@ export async function sendVerificationEmail({
   businessName: string;
   token: string;
 }) {
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
-  const senderEmail =
-    process.env.BREVO_SENDER_EMAIL;
+  const senderEmail = process.env.BREVO_SENDER_EMAIL;
 
-  const senderName =
-    process.env.BREVO_SENDER_NAME ||
-    "LeadFlow AI";
+  const senderName = process.env.BREVO_SENDER_NAME || "LeadFlow AI";
 
   if (!appUrl) {
-    throw new Error(
-      "NEXT_PUBLIC_APP_URL is not configured"
-    );
+    throw new Error("NEXT_PUBLIC_APP_URL is not configured");
   }
 
   if (!senderEmail) {
-    throw new Error(
-      "BREVO_SENDER_EMAIL is not configured"
-    );
+    throw new Error("BREVO_SENDER_EMAIL is not configured");
   }
 
-  const verificationUrl =
-    `${appUrl}/verify-email?token=${encodeURIComponent(token)}`;
+  const verificationUrl = `${appUrl}/verify-email?token=${encodeURIComponent(token)}`;
 
   await brevo.transactionalEmails.sendTransacEmail({
-    subject:
-      "Verify your LeadFlow AI email",
+    subject: "Verify your LeadFlow AI email",
 
     sender: {
       name: senderName,

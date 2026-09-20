@@ -2,20 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import {
-  Check,
-  Code2,
-  Copy,
-  MessageCircleMore,
-} from "lucide-react";
+import { Check, Code2, Copy, MessageCircleMore } from "lucide-react";
 
 type EmbedCodeProps = {
   slug: string;
 };
 
-export function EmbedCode({
-  slug,
-}: EmbedCodeProps) {
+export function EmbedCode({ slug }: EmbedCodeProps) {
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -24,9 +17,7 @@ export function EmbedCode({
   }, []);
 
   const widgetCode = useMemo(() => {
-    const scriptUrl = origin
-      ? `${origin}/widget.js`
-      : "/widget.js";
+    const scriptUrl = origin ? `${origin}/widget.js` : "/widget.js";
 
     return `<script
   src="${scriptUrl}"
@@ -44,10 +35,7 @@ export function EmbedCode({
         setCopied(false);
       }, 2000);
     } catch (error) {
-      console.error(
-        "Unable to copy widget code:",
-        error
-      );
+      console.error("Unable to copy widget code:", error);
     }
   }
 
@@ -59,13 +47,11 @@ export function EmbedCode({
         </div>
 
         <div>
-          <h2 className="font-semibold text-white">
-            Website Widget
-          </h2>
+          <h2 className="font-semibold text-white">Website Widget</h2>
 
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500">
-            Add your AI lead assistant to your existing website with one
-            script tag.
+            Add your AI lead assistant to your existing website with one script
+            tag.
           </p>
         </div>
       </div>
@@ -90,10 +76,7 @@ export function EmbedCode({
       >
         {copied ? (
           <>
-            <Check
-              size={16}
-              className="text-emerald-600"
-            />
+            <Check size={16} className="text-emerald-600" />
             Copied
           </>
         ) : (
@@ -105,9 +88,7 @@ export function EmbedCode({
       </button>
 
       <div className="mt-6 rounded-2xl border border-violet-500/15 bg-violet-500/[0.04] p-5">
-        <p className="text-sm font-medium text-violet-300">
-          Installation
-        </p>
+        <p className="text-sm font-medium text-violet-300">Installation</p>
 
         <p className="mt-2 text-sm leading-6 text-zinc-500">
           Paste the code immediately before the closing{" "}

@@ -8,12 +8,8 @@ export function createSlug(value: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-export async function createUniqueBusinessSlug(
-  businessName: string
-) {
-  const baseSlug =
-    createSlug(businessName) ||
-    "business";
+export async function createUniqueBusinessSlug(businessName: string) {
+  const baseSlug = createSlug(businessName) || "business";
 
   let slug = baseSlug;
   let counter = 1;
