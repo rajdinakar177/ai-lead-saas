@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { connectDB } from "@/lib/mongodb";
-import { requireBusiness } from "@/lib/auth";
+import { getCurrentBusiness } from "@/lib/auth";
 
 import { createGoogleOAuthClient } from "@/lib/google-calendar/oauth";
 import { decryptToken } from "@/lib/security/token-encryption";
@@ -17,7 +17,18 @@ export async function POST(request: Request) {
     if (originError) {
       return originError;
     }
-    const business = await requireBusiness();
+    const business = await getCurrentBusiness();
+
+    if (!business) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized.",
+        },
+        {
+          status: 401,
+        },
+      );
+    }
 
     await connectDB();
 

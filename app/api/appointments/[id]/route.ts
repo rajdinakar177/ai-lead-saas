@@ -5,8 +5,7 @@ import type { Timeline } from "@/lib/availability";
 import { getAvailableAppointmentSlots } from "@/lib/appointments/availability";
 
 import { connectDB } from "@/lib/mongodb";
-import { requireBusiness } from "@/lib/auth";
-
+import { getCurrentBusiness } from "@/lib/auth";
 import { Appointment } from "@/models/Appointment";
 import { Business } from "@/models/Business";
 import { Lead } from "@/models/Lead";
@@ -56,8 +55,17 @@ export async function PATCH(
     if (originError) {
       return originError;
     }
-    const business = await requireBusiness();
-
+    const business = await getCurrentBusiness();
+if (!business) {
+  return NextResponse.json(
+    {
+      error: "Unauthorized.",
+    },
+    {
+      status: 401,
+    },
+  );
+}
     const { id } = await params;
 
     const body: UpdateAppointmentRequest = await request.json();

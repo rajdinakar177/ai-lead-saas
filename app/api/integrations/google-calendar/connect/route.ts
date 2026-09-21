@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 
-import { requireBusiness } from "@/lib/auth";
+import { getCurrentBusiness } from "@/lib/auth";
 
 import { getGoogleCalendarAuthorizationUrl } from "@/lib/google-calendar/oauth";
 import { safeLogger } from "@/lib/security/safe-logger";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const business = await requireBusiness();
+    const business = await getCurrentBusiness();
 
     if (!business) {
       return NextResponse.json(

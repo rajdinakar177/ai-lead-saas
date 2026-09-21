@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 
 import { connectDB } from "@/lib/mongodb";
-import { requireBusiness } from "@/lib/auth";
+import { getCurrentBusiness } from "@/lib/auth";
 import { createGoogleOAuthClient } from "@/lib/google-calendar/oauth";
 import { encryptToken } from "@/lib/security/token-encryption";
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
@@ -48,10 +48,12 @@ export async function GET(request: NextRequest) {
      * Business must still be logged in
      * when Google redirects back.
      */
-    const business = await requireBusiness();
+    const business = await getCurrentBusiness();
 
     if (!business) {
-      return NextResponse.redirect(new URL("/login", request.url));
+      return clearOAuthStateCookie(
+        NextResponse.redirect(new URL("/login", request.url)),
+      );
     }
 
     const searchParams = request.nextUrl.searchParams;

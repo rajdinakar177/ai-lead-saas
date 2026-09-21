@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import type { Timeline } from "@/lib/availability";
 import { getAvailableAppointmentSlots } from "@/lib/appointments/availability";
-import { requireBusiness } from "@/lib/auth";
+import { getCurrentBusiness } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import { applyRequestRateLimit } from "@/lib/request-rate-limit";
 import { safeLogger } from "@/lib/security/safe-logger";
@@ -129,8 +129,17 @@ export async function GET(request: Request) {
        ========================================= */
 
     if (appointmentId) {
-      const authenticatedBusiness = await requireBusiness();
-
+      const authenticatedBusiness = await getCurrentBusiness();
+      if (!authenticatedBusiness) {
+        return NextResponse.json(
+          {
+            error: "Unauthorized.",
+          },
+          {
+            status: 401,
+          },
+        );
+      }
       lead = await Lead.findOne({
         _id: leadId,
         businessId: authenticatedBusiness._id,

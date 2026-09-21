@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { connectDB } from "@/lib/mongodb";
-import { requireBusiness } from "@/lib/auth";
+import { getCurrentBusiness } from "@/lib/auth";
 import { Business } from "@/models/Business";
 import { validateRequestOrigin } from "@/lib/security/origin-protection";
 import { safeLogger } from "@/lib/security/safe-logger";
@@ -29,7 +29,18 @@ export async function PATCH(request: Request) {
     }
     await connectDB();
 
-    const currentBusiness = await requireBusiness();
+    const currentBusiness = await getCurrentBusiness();
+
+    if (!currentBusiness) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized.",
+        },
+        {
+          status: 401,
+        },
+      );
+    }
 
     const body: UpdateBusinessBody = await request.json();
 
