@@ -3,6 +3,7 @@ import { google } from "googleapis";
 import { connectDB } from "@/lib/mongodb";
 import { createGoogleOAuthClient } from "@/lib/google-calendar/oauth";
 
+import { safeLogger } from "@/lib/security/safe-logger";
 import { decryptToken, encryptToken } from "@/lib/security/token-encryption";
 
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
@@ -26,9 +27,7 @@ export async function getGoogleCalendarClient({
   }
 
   if (!integration.refreshToken) {
-    throw new Error(
-      "Google Calendar refresh token is missing. Reconnect Google Calendar.",
-    );
+    throw new Error("Google Calendar refresh token is missing. Reconnect Google Calendar.");
   }
 
   /*
@@ -40,6 +39,7 @@ export async function getGoogleCalendarClient({
    * decryptToken() supports both during
    * our migration period.
    */
+
   const accessToken = integration.accessToken
     ? decryptToken(integration.accessToken)
     : undefined;
@@ -52,6 +52,7 @@ export async function getGoogleCalendarClient({
    * Google receives only the real,
    * decrypted credentials.
    */
+
   oauthClient.setCredentials({
     access_token: accessToken,
 
@@ -75,6 +76,7 @@ export async function getGoogleCalendarClient({
    * must be encrypted before they are
    * written back to MongoDB.
    */
+
   oauthClient.on("tokens", async (tokens) => {
     try {
       const update: Record<string, unknown> = {
@@ -110,10 +112,9 @@ export async function getGoogleCalendarClient({
         },
       );
     } catch (error) {
-      console.error(
-        "Unable to save refreshed Google Calendar credentials:",
-        error,
-      );
+      safeLogger.error("Unable to save refreshed Google Calendar credentials.", error, {
+        businessId,
+      });
     }
   });
 

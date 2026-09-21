@@ -1,3 +1,4 @@
+import { safeLogger } from "@/lib/security/safe-logger";
 import { findOneAndUpdateLeadWithSmsFence } from "@/lib/sms/sms-fenced-lead";
 
 import { Lead } from "@/models/Lead";
@@ -47,24 +48,18 @@ export async function restorePreviousSmsConversation({
     });
 
     if (!restored) {
-      console.warn(
+      safeLogger.warn(
         "Previous SMS conversation was not restored because a newer fence exists.",
         {
           leadId: leadId.toString(),
-
-          phone,
-
-          fenceToken,
+          businessId: businessId?.toString?.() ?? String(businessId),
         },
       );
     }
   } catch (error) {
-    console.error("Failed to restore previous SMS conversation:", {
+    safeLogger.error("Failed to restore previous SMS conversation.", error, {
       leadId: leadId.toString(),
-
-      phone,
-
-      error,
+      businessId: businessId?.toString?.() ?? String(businessId),
     });
   }
 }
@@ -124,12 +119,6 @@ export async function activateSmsConversation({
     if (!isMongoDuplicateKeyError(error)) {
       throw error;
     }
-
-    console.log("Active SMS conversation duplicate-key race detected:", {
-      targetLeadId: targetLeadId.toString(),
-
-      phone,
-    });
   }
 
   /*
@@ -158,7 +147,6 @@ export async function activateSmsConversation({
   return {
     lead: activeLead,
 
-    requestedLeadActivated:
-      activeLead._id.toString() === targetLeadId.toString(),
+    requestedLeadActivated: activeLead._id.toString() === targetLeadId.toString(),
   };
 }

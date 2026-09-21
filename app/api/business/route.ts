@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb";
 import { requireBusiness } from "@/lib/auth";
 import { Business } from "@/models/Business";
 import { validateRequestOrigin } from "@/lib/security/origin-protection";
+import { safeLogger } from "@/lib/security/safe-logger";
+
 type UpdateBusinessBody = {
   name?: string;
   industry?: string;
@@ -138,7 +140,7 @@ export async function PATCH(request: Request) {
         phone,
       },
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
       },
     ).lean();
@@ -170,7 +172,7 @@ export async function PATCH(request: Request) {
       },
     });
   } catch (error) {
-    console.error("Update business error:", error);
+    safeLogger.error("Update business error.", error);
 
     return NextResponse.json(
       {

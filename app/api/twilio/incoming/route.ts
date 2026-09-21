@@ -119,7 +119,7 @@ export async function POST(request: Request) {
      * explicitly for webhook testing.
      */
     if (isProduction && !signatureValidationEnabled) {
-      console.error("TWILIO_SIGNATURE_VALIDATION must be enabled in production.");
+      safeLogger.error("TWILIO_SIGNATURE_VALIDATION must be enabled in production.");
 
       return forbiddenResponse();
     }
@@ -184,8 +184,6 @@ export async function POST(request: Request) {
     });
 
     if (!eventClaim.shouldProcess) {
-      console.log("Twilio webhook already handled or currently processing:", messageSid);
-
       return successResponse();
     }
 
@@ -300,8 +298,6 @@ export async function POST(request: Request) {
       .lean();
 
     if (eventAfterLock?.status === "processed") {
-      console.log("Twilio webhook completed by another worker while waiting for lock:", messageSid);
-
       claimedMessageSid = null;
 
       claimedProcessingToken = null;
@@ -322,13 +318,8 @@ export async function POST(request: Request) {
       eventAfterLock.status !== "processing" ||
       eventAfterLock.processingToken !== claimedProcessingToken
     ) {
-      console.warn("Twilio event ownership lost while waiting for SMS conversation lock:", {
+      safeLogger.warn("Twilio event ownership lost while waiting for SMS conversation lock.", {
         messageSid,
-
-        claimedProcessingToken,
-
-        currentProcessingToken: eventAfterLock?.processingToken,
-
         currentStatus: eventAfterLock?.status,
       });
 
@@ -454,16 +445,6 @@ export async function POST(request: Request) {
         if (existingRequestedLead && existingRequestedLead._id.toString() !== lead._id.toString()) {
           const previousActiveLead = lead;
 
-          console.log("Explicit service switch requested:", {
-            fromLeadId: previousActiveLead._id.toString(),
-
-            fromService: previousActiveLead.service,
-
-            toLeadId: existingRequestedLead._id.toString(),
-
-            toService: existingRequestedLead.service,
-          });
-
           const deactivated = await findOneAndUpdateLeadWithSmsFence({
             filter: {
               _id: previousActiveLead._id,
@@ -529,12 +510,10 @@ export async function POST(request: Request) {
                 fenceToken: conversationLockFenceToken!,
               });
 
-              console.warn(
-                "Requested SMS service could not be activated because the lead changed state:",
+              safeLogger.warn(
+                "Requested SMS service could not be activated because the lead changed state.",
                 {
                   requestedLeadId: existingRequestedLead._id.toString(),
-
-                  requestedService: existingRequestedLead.service,
                 },
               );
 
@@ -543,15 +522,6 @@ export async function POST(request: Request) {
 
             lead = switchedLead;
 
-            console.log("SMS conversation switched by explicit service:", {
-              leadId: lead._id.toString(),
-
-              service: lead.service,
-
-              previousLeadId: previousActiveLead._id.toString(),
-
-              previousService: previousActiveLead.service,
-            });
           } catch (error) {
             await restorePreviousSmsConversation({
               leadId: previousActiveLead._id,
@@ -577,14 +547,6 @@ export async function POST(request: Request) {
         ) {
           const previousActiveLead = lead;
 
-          console.log("Explicit new service request detected:", {
-            previousLeadId: previousActiveLead._id.toString(),
-
-            previousService: previousActiveLead.service,
-
-            requestedService,
-          });
-
           /*
            * Deactivate the current conversation first.
            * The unique partial index then allows the new Lead
@@ -609,12 +571,10 @@ export async function POST(request: Request) {
           });
 
           if (!deactivated) {
-            console.warn(
-              "Could not deactivate current SMS conversation before creating new service lead:",
+            safeLogger.warn(
+              "Could not deactivate current SMS conversation before creating new service lead.",
               {
                 leadId: previousActiveLead._id.toString(),
-
-                requestedService,
               },
             );
 
@@ -650,17 +610,6 @@ export async function POST(request: Request) {
 
             lead = createdLead;
 
-            console.log("New SMS service conversation created from explicit service switch:", {
-              previousLeadId: previousActiveLead._id.toString(),
-
-              previousService: previousActiveLead.service,
-
-              newLeadId: lead._id.toString(),
-
-              newService: lead.service,
-
-              fenceToken: conversationLockFenceToken,
-            });
           } catch (error) {
             /*
              * If creation fails, try to restore the previous
@@ -690,16 +639,6 @@ export async function POST(request: Request) {
 
         if (explicitlyMatchedLead && explicitlyMatchedLead._id.toString() !== lead._id.toString()) {
           const previousActiveLead = lead;
-
-          console.log("Explicit service switch requested:", {
-            fromLeadId: previousActiveLead._id.toString(),
-
-            fromService: previousActiveLead.service,
-
-            toLeadId: explicitlyMatchedLead._id.toString(),
-
-            toService: explicitlyMatchedLead.service,
-          });
 
           const deactivated = await findOneAndUpdateLeadWithSmsFence({
             filter: {
@@ -764,15 +703,6 @@ export async function POST(request: Request) {
 
             lead = switchedLead;
 
-            console.log("SMS conversation switched by explicit service:", {
-              leadId: lead._id.toString(),
-
-              service: lead.service,
-
-              previousLeadId: previousActiveLead._id.toString(),
-
-              previousService: previousActiveLead.service,
-            });
           } catch (error) {
             await restorePreviousSmsConversation({
               leadId: previousActiveLead._id,
@@ -834,23 +764,6 @@ export async function POST(request: Request) {
 
         lead = activation.lead;
 
-        if (activation.requestedLeadActivated) {
-          console.log("Automatically activated SMS conversation:", {
-            leadId: lead._id.toString(),
-
-            service: lead.service,
-
-            status: lead.status,
-          });
-        } else {
-          console.log("SMS activation race resolved to existing active conversation:", {
-            requestedLeadId: requestedLead._id.toString(),
-
-            activeLeadId: lead._id.toString(),
-
-            service: lead.service,
-          });
-        }
       }
 
       /* ===================================================
@@ -893,30 +806,6 @@ export async function POST(request: Request) {
 
           lead = activation.lead;
 
-          if (activation.requestedLeadActivated) {
-            console.log("SMS conversation selected by service:", {
-              leadId: lead._id.toString(),
-
-              service: lead.service,
-            });
-          } else {
-            /*
-             * Another webhook activated a conversation
-             * between our initial lookup and this update.
-             *
-             * Use the database winner instead of disabling
-             * it or causing a 500.
-             */
-            console.log("SMS service-selection race resolved to existing active conversation:", {
-              requestedLeadId: matchedLead._id.toString(),
-
-              requestedService: matchedLead.service,
-
-              activeLeadId: lead._id.toString(),
-
-              activeService: lead.service,
-            });
-          }
         } else {
           const uniqueServices = Array.from(
             new Set(
@@ -954,16 +843,6 @@ export async function POST(request: Request) {
             safeLogger.error("SMS lead-selection reply failed.", smsError);
           }
 
-          safeLogger.info("Multiple active leads require service selection.", {
-            leads: openLeads.map((item) => ({
-              id: item._id.toString(),
-
-              service: item.service,
-
-              status: item.status,
-            })),
-          });
-
           return successResponse();
         }
       }
@@ -973,8 +852,6 @@ export async function POST(request: Request) {
          NO OPEN LEADS
          =================================================== */
       else {
-        console.log("No active/open lead. Checking for new service request...");
-
         const newRequestResult = await generateQualificationResponse(
           {
             messages: [
@@ -1076,13 +953,6 @@ export async function POST(request: Request) {
 
             lead = activeWinner;
 
-            safeLogger.info(
-              "New SMS lead creation race resolved to existing active conversation.",
-              {
-                activeLeadId: lead._id.toString(),
-                service: lead.service,
-              },
-            );
           }
 
           /* ===============================================
@@ -1154,7 +1024,7 @@ export async function POST(request: Request) {
               content: body,
             });
 
-            const aiMessage = await Message.create({
+            await Message.create({
               leadId: lead._id,
 
               sender: "ai",
@@ -1180,24 +1050,6 @@ export async function POST(request: Request) {
               safeLogger.error("New service request SMS reply failed.", smsError);
             }
 
-            console.log("New SMS service request created:", {
-              previousLeadId: latestLead._id.toString(),
-
-              newLeadId: lead._id.toString(),
-
-              service: lead.service,
-
-              status: lead.status,
-
-              smsConversationActive: lead.smsConversationActive,
-
-              followUpEnabled: lead.followUp?.enabled,
-
-              nextFollowUpAt: lead.followUp?.nextFollowUpAt,
-
-              messageId: aiMessage._id.toString(),
-            });
-
             return successResponse();
           }
 
@@ -1220,11 +1072,6 @@ export async function POST(request: Request) {
             content: body,
           });
 
-          safeLogger.info("SMS attached to latest closed lead.", {
-            leadId: latestLead._id.toString(),
-            status: latestLead.status,
-          });
-
           return successResponse();
         }
       }
@@ -1235,7 +1082,10 @@ export async function POST(request: Request) {
        ===================================================== */
 
     if (!lead) {
-      console.warn("Unable to resolve SMS lead.");
+      safeLogger.warn("Unable to resolve SMS lead.", {
+        businessId: business._id.toString(),
+        messageSid,
+      });
 
       return successResponse();
     }
@@ -1281,19 +1131,12 @@ export async function POST(request: Request) {
        SAVE CUSTOMER MESSAGE
        ===================================================== */
 
-    const incomingMessage = await Message.create({
+    await Message.create({
       leadId: lead._id,
 
       sender: "lead",
 
       content: body,
-    });
-
-    safeLogger.info("Incoming SMS saved.", {
-      leadId: lead._id.toString(),
-      messageId: incomingMessage._id.toString(),
-      status: lead.status,
-      smsConversationActive: lead.smsConversationActive,
     });
 
     /* =====================================================
@@ -1356,16 +1199,6 @@ export async function POST(request: Request) {
            =============================================== */
 
         if (!exactSlotStillAvailable) {
-          console.log("Previously offered SMS appointment is no longer available:", {
-            leadId: lead._id.toString(),
-
-            option: selectedOption,
-
-            label: selectedLabel,
-
-            scheduledFor: scheduledFor.toISOString(),
-          });
-
           await sendFreshSmsAppointmentOptions({
             lead,
             business,
@@ -1394,16 +1227,6 @@ export async function POST(request: Request) {
         }).lean();
 
         if (existingAppointment) {
-          console.log("Stored SMS appointment slot already taken:", {
-            leadId: lead._id.toString(),
-
-            option: selectedOption,
-
-            label: selectedLabel,
-
-            scheduledFor: scheduledFor.toISOString(),
-          });
-
           await sendFreshSmsAppointmentOptions({
             lead,
             business,
@@ -1453,8 +1276,6 @@ export async function POST(request: Request) {
 
           const appointment = bookingResult.appointment;
 
-          const aiMessage = bookingResult.aiMessage;
-
           const confirmation = bookingResult.confirmation;
 
           lead = bookingResult.lead;
@@ -1472,28 +1293,6 @@ export async function POST(request: Request) {
             confirmation,
           });
 
-          console.log("SMS appointment booked atomically:", {
-            leadId: lead._id.toString(),
-
-            appointmentId: appointment._id.toString(),
-
-            service: lead.service,
-
-            option: selectedOption,
-
-            label: selectedLabel,
-
-            scheduledFor: scheduledFor.toISOString(),
-
-            smsConversationActive: lead.smsConversationActive,
-
-            followUpEnabled: lead.followUp?.enabled,
-
-            nextFollowUpAt: lead.followUp?.nextFollowUpAt,
-
-            messageId: aiMessage._id.toString(),
-          });
-
           return successResponse();
         } catch (error) {
           /* =============================================
@@ -1504,16 +1303,6 @@ export async function POST(request: Request) {
              ============================================= */
 
           if (isMongoDuplicateKeyError(error)) {
-            console.log("SMS appointment duplicate index conflict:", {
-              leadId: lead._id.toString(),
-
-              option: selectedOption,
-
-              label: selectedLabel,
-
-              scheduledFor: scheduledFor.toISOString(),
-            });
-
             await sendFreshSmsAppointmentOptions({
               lead,
               business,
@@ -1751,7 +1540,7 @@ export async function POST(request: Request) {
        SAVE AI MESSAGE
        ===================================================== */
 
-    const aiMessage = await Message.create({
+    await Message.create({
       leadId: lead._id,
 
       sender: "ai",
@@ -1780,39 +1569,6 @@ export async function POST(request: Request) {
     } catch (smsError) {
       safeLogger.error("SMS AI reply delivery failed.", smsError);
     }
-
-    safeLogger.info("SMS AI response generated.", {
-      leadId: lead._id.toString(),
-      service: lead.service,
-      messageId: aiMessage._id.toString(),
-      status: lead.status,
-
-      readyToBook: result.readyToBook,
-
-      smsConversationActive: lead.smsConversationActive,
-
-      smsBookingOptions: lead.smsBookingOptions?.slots?.map(
-        (
-          slot: {
-            label: string;
-            scheduledFor: Date;
-          },
-          index: number,
-        ) => ({
-          option: index + 1,
-
-          label: slot.label,
-
-          scheduledFor: slot.scheduledFor,
-        }),
-      ),
-
-      followUpEnabled: lead.followUp?.enabled,
-
-      followUpCount: lead.followUp?.count,
-
-      nextFollowUpAt: lead.followUp?.nextFollowUpAt,
-    });
 
     return successResponse();
   } catch (error) {

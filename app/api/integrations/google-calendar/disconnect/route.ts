@@ -5,7 +5,7 @@ import { requireBusiness } from "@/lib/auth";
 
 import { createGoogleOAuthClient } from "@/lib/google-calendar/oauth";
 import { decryptToken } from "@/lib/security/token-encryption";
-
+import { safeLogger } from "@/lib/security/safe-logger";
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
 import { validateRequestOrigin } from "@/lib/security/origin-protection";
 export const dynamic = "force-dynamic";
@@ -56,7 +56,9 @@ export async function POST(request: Request) {
 
         await oauthClient.revokeToken(tokenToRevoke);
       } catch (revokeError) {
-        console.error("Google Calendar token revocation failed:", revokeError);
+        safeLogger.error("Google Calendar token revocation failed.", revokeError, {
+          businessId: business._id.toString(),
+        });
       }
     }
 
@@ -93,7 +95,7 @@ export async function POST(request: Request) {
       connected: false,
     });
   } catch (error) {
-    console.error("Google Calendar disconnect error:", error);
+    safeLogger.error("Google Calendar disconnect error.", error);
 
     return NextResponse.json(
       {

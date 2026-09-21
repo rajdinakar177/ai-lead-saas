@@ -5,6 +5,7 @@ import { Business } from "@/models/Business";
 
 import { generateVerificationToken, sendVerificationEmail } from "@/lib/email-verification";
 import { applyRequestRateLimit } from "@/lib/request-rate-limit";
+import { safeLogger } from "@/lib/security/safe-logger";
 type Body = {
   email?: string;
 };
@@ -89,7 +90,7 @@ export async function POST(request: Request) {
       success: true,
     });
   } catch (error) {
-    console.error("Resend verification error:", error);
+  safeLogger.error("Resend verification error:", error);
 
     return NextResponse.json(
       {

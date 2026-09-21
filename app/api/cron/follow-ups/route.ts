@@ -5,7 +5,7 @@ import { connectDB } from "@/lib/mongodb";
 import { canFollowUp, getNextFollowUpAt, MAX_FOLLOW_UPS } from "@/lib/follow-up";
 
 import { sendSmsReply } from "@/lib/sms/send-sms-reply";
-
+import { safeLogger } from "@/lib/security/safe-logger";
 import { Lead } from "@/models/Lead";
 import { Message } from "@/models/Message";
 
@@ -50,7 +50,7 @@ function isAuthorized(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
 
   if (!cronSecret) {
-    console.error("CRON_SECRET is not configured.");
+    safeLogger.error("CRON_SECRET is not configured.");
 
     return false;
   }
@@ -199,9 +199,10 @@ export async function GET(request: Request) {
       if (!lead) {
         skipped++;
 
-        console.log("Follow-up claim skipped:", {
-          leadId: candidate._id.toString(),
-        });
+        if (!lead) {
+          skipped++;
+          continue;
+        }
 
         continue;
       }
@@ -272,10 +273,10 @@ export async function GET(request: Request) {
         if (!stillClaimed) {
           skipped++;
 
-          console.log("Follow-up cancelled before send because lead state changed:", {
-            leadId: lead._id.toString(),
-          });
-
+          if (!stillClaimed) {
+            skipped++;
+            continue;
+          }
           continue;
         }
 
@@ -347,31 +348,18 @@ export async function GET(request: Request) {
         );
 
         if (updateResult.modifiedCount === 0) {
-          console.warn("Follow-up sent but final state changed before completion:", {
+          safeLogger.warn("Follow-up sent but final state changed before completion.", {
             leadId: stillClaimed._id.toString(),
           });
         }
 
         sent++;
 
-        console.log("Automated follow-up sent:", {
-          leadId: stillClaimed._id.toString(),
-
-          phone: stillClaimed.phone,
-
-          service: stillClaimed.service,
-
-          followUpNumber: newCount,
-
-          nextFollowUpAt,
-        });
       } catch (error) {
         failed++;
 
-        console.error("Follow-up processing failed:", {
+        safeLogger.error("Follow-up processing failed.", error, {
           leadId: lead._id.toString(),
-
-          error,
         });
 
         /* =================================================
@@ -400,10 +388,8 @@ export async function GET(request: Request) {
             },
           );
         } catch (releaseError) {
-          console.error("Unable to release failed follow-up claim:", {
+          safeLogger.error("Unable to release failed follow-up claim.", releaseError, {
             leadId: lead._id.toString(),
-
-            error: releaseError,
           });
         }
       }
@@ -429,7 +415,7 @@ export async function GET(request: Request) {
       processedAt: startedAt.toISOString(),
     });
   } catch (error) {
-    console.error("Follow-up cron error:", error);
+    safeLogger.error("Follow-up cron error.", error);
 
     return NextResponse.json(
       {

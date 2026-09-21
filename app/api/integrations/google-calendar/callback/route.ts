@@ -7,9 +7,19 @@ import { requireBusiness } from "@/lib/auth";
 import { createGoogleOAuthClient } from "@/lib/google-calendar/oauth";
 import { encryptToken } from "@/lib/security/token-encryption";
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
-
+import crypto from "crypto";
+import { safeLogger } from "@/lib/security/safe-logger";
 export const dynamic = "force-dynamic";
+function safeStateEqual(storedState: string, returnedState: string) {
+  const storedBuffer = Buffer.from(storedState);
+  const returnedBuffer = Buffer.from(returnedState);
 
+  if (storedBuffer.length !== returnedBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(storedBuffer, returnedBuffer);
+}
 /* =========================================
    CLEAR OAUTH STATE COOKIE
 ========================================= */
@@ -57,8 +67,7 @@ export async function GET(request: NextRequest) {
      * authorization screen.
      */
     if (googleError) {
-      console.error("Google OAuth returned error:", googleError);
-
+      safeLogger.warn("Google OAuth authorization was not completed.");
       return clearOAuthStateCookie(
         NextResponse.redirect(new URL("/dashboard/settings?googleCalendar=cancelled", request.url)),
       );
@@ -88,8 +97,8 @@ export async function GET(request: NextRequest) {
      * Clear the cookie so the state
      * cannot be reused.
      */
-    if (!storedState || storedState !== returnedState) {
-      console.error("Google Calendar OAuth state mismatch.");
+    if (!storedState || !safeStateEqual(storedState, returnedState)) {
+      safeLogger.warn("Google Calendar OAuth state mismatch.");
 
       return clearOAuthStateCookie(
         NextResponse.redirect(
@@ -196,8 +205,7 @@ export async function GET(request: NextRequest) {
      */
     return clearOAuthStateCookie(response);
   } catch (error) {
-    console.error("Google Calendar callback error:", error);
-
+    safeLogger.error("Google Calendar callback error.", error);
     return NextResponse.redirect(new URL("/dashboard/settings?googleCalendar=error", request.url));
   }
 }

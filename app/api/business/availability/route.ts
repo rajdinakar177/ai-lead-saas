@@ -4,6 +4,8 @@ import { connectDB } from "@/lib/mongodb";
 import { requireBusiness } from "@/lib/auth";
 import { Business } from "@/models/Business";
 import { validateRequestOrigin } from "@/lib/security/origin-protection";
+import { safeLogger } from "@/lib/security/safe-logger";
+
 type AvailabilityDay =
   "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 
@@ -254,7 +256,7 @@ export async function PATCH(request: Request) {
       availability: business.availability,
     });
   } catch (error) {
-    console.error("Update availability error:", error);
+    safeLogger.error("Update availability error.", error);
 
     return NextResponse.json(
       {

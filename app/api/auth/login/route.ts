@@ -5,6 +5,7 @@ import { connectDB } from "@/lib/mongodb";
 import { Business } from "@/models/Business";
 import { createSession } from "@/lib/auth";
 import { applyRequestRateLimit } from "@/lib/request-rate-limit";
+import { safeLogger } from "@/lib/security/safe-logger";
 type LoginBody = {
   email?: string;
   password?: string;
@@ -98,7 +99,7 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    console.error("Login error:", error);
+    safeLogger.error("Login error:", error);
 
     return NextResponse.json(
       {

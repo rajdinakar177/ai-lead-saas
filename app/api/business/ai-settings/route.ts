@@ -4,6 +4,7 @@ import { connectDB } from "@/lib/mongodb";
 import { requireBusiness } from "@/lib/auth";
 import { Business } from "@/models/Business";
 import { validateRequestOrigin } from "@/lib/security/origin-protection";
+import { safeLogger } from "@/lib/security/safe-logger";
 const allowedTones = ["friendly", "professional", "casual"] as const;
 
 const allowedQualificationFields = [
@@ -111,8 +112,8 @@ export async function PATCH(request: Request) {
 
     const qualificationFields = Array.isArray(body.qualificationFields)
       ? body.qualificationFields.filter((field): field is QualificationField =>
-          allowedQualificationFields.includes(field as QualificationField),
-        )
+        allowedQualificationFields.includes(field as QualificationField),
+      )
       : [];
 
     const services = cleanStringArray(body.services, MAX_ARRAY_ITEM_LENGTH);
@@ -138,7 +139,7 @@ export async function PATCH(request: Request) {
         },
       },
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
       },
     );
@@ -162,7 +163,7 @@ export async function PATCH(request: Request) {
       aiSettings: updatedBusiness.aiSettings,
     });
   } catch (error) {
-    console.error("Update AI settings error:", error);
+    safeLogger.error("Update AI settings error.", error);
 
     return NextResponse.json(
       {

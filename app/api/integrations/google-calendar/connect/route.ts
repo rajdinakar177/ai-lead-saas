@@ -4,7 +4,7 @@ import { randomBytes } from "crypto";
 import { requireBusiness } from "@/lib/auth";
 
 import { getGoogleCalendarAuthorizationUrl } from "@/lib/google-calendar/oauth";
-
+import { safeLogger } from "@/lib/security/safe-logger";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
@@ -56,7 +56,7 @@ export async function GET() {
 
     return response;
   } catch (error) {
-    console.error("Google Calendar connect error:", error);
+    safeLogger.error("Google Calendar connect error.", error);
 
     return NextResponse.json(
       {

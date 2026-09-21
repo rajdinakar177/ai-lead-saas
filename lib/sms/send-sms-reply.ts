@@ -1,3 +1,4 @@
+import { safeLogger } from "@/lib/security/safe-logger";
 import { sendSms } from "@/lib/sms/send-sms";
 
 type SendSmsReplyParams = {
@@ -15,10 +16,9 @@ export async function sendSmsReply({ to, body }: SendSmsReplyParams) {
   // ----------------------------
 
   if (mode === "mock") {
-    console.log("📱 Mock SMS outbound:", {
-      to,
-      body,
-    });
+    if (process.env.NODE_ENV === "development") {
+      safeLogger.info("Mock SMS outbound.");
+    }
 
     return {
       success: true,

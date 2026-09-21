@@ -1,3 +1,5 @@
+import { safeLogger } from "@/lib/security/safe-logger";
+
 type SendEmailParams = {
   toEmail: string;
   toName?: string;
@@ -65,9 +67,9 @@ export async function sendEmail({
   });
 
   if (!response.ok) {
-    const errorBody = await response.text();
-
-    console.error("Brevo email error:", errorBody);
+    safeLogger.error("Brevo email request failed.", undefined, {
+      status: response.status,
+    });
 
     throw new Error("Unable to send email.");
   }

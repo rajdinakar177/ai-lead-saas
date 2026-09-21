@@ -2,6 +2,7 @@ import type { Timeline } from "@/lib/availability";
 
 import { canFollowUp, getNextFollowUpAt } from "@/lib/follow-up";
 
+import { safeLogger } from "@/lib/security/safe-logger";
 import { updateLeadWithSmsFence } from "@/lib/sms/sms-fenced-lead";
 import { sendSmsReply } from "@/lib/sms/send-sms-reply";
 
@@ -45,9 +46,7 @@ export async function sendFreshSmsAppointmentOptions({
       .map((slot, index) => `${index + 1}. ${slot.label}`)
       .join("\n");
 
-    const optionNumbers = firstThreeSlots
-      .map((_, index) => index + 1)
-      .join(", ");
+    const optionNumbers = firstThreeSlots.map((_, index) => index + 1).join(", ");
 
     reply = `${reason}\n\n${slotLines}\n\nReply with ${optionNumbers}.`;
   } else {
@@ -115,9 +114,7 @@ export async function sendFreshSmsAppointmentOptions({
   });
 
   if (!fencedLead) {
-    throw new Error(
-      "Stale SMS worker rejected while refreshing appointment options.",
-    );
+    throw new Error("Stale SMS worker rejected while refreshing appointment options.");
   }
 
   lead = fencedLead;
@@ -126,7 +123,7 @@ export async function sendFreshSmsAppointmentOptions({
      SAVE AI MESSAGE
      ======================================================= */
 
-  const aiMessage = await Message.create({
+  await Message.create({
     leadId: lead._id,
 
     sender: "ai",
@@ -159,26 +156,9 @@ export async function sendFreshSmsAppointmentOptions({
       body: reply,
     });
   } catch (smsError) {
-    console.error("Fresh SMS appointment options delivery failed:", smsError);
+    safeLogger.error("Fresh SMS appointment options delivery failed.", smsError, {
+      businessId: business._id.toString(),
+      leadId: lead._id.toString(),
+    });
   }
-
-  console.log("Fresh SMS appointment options sent:", {
-    leadId: lead._id.toString(),
-
-    slots: firstThreeSlots.map((slot, index) => ({
-      option: index + 1,
-
-      label: slot.label,
-
-      scheduledFor: slot.scheduledFor,
-    })),
-
-    followUpEnabled: lead.followUp?.enabled,
-
-    followUpCount: lead.followUp?.count,
-
-    nextFollowUpAt: lead.followUp?.nextFollowUpAt,
-
-    messageId: aiMessage._id.toString(),
-  });
 }

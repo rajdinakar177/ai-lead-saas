@@ -7,6 +7,7 @@ import { hashVerificationToken } from "@/lib/email-verification";
 
 import { createSession } from "@/lib/auth";
 import { applyRequestRateLimit } from "@/lib/request-rate-limit";
+import { safeLogger } from "@/lib/security/safe-logger";
 
 type VerifyBody = {
   token?: string;
@@ -89,7 +90,7 @@ export async function POST(request: Request) {
       success: true,
     });
   } catch (error) {
-    console.error("Verify email error:", error);
+    safeLogger.error("Verify email error:", error);
 
     return NextResponse.json(
       {

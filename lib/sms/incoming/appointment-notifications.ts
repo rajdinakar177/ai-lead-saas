@@ -1,6 +1,7 @@
 import { assertSmsConversationOwnership } from "@/lib/sms/incoming/lock-ownership";
 import { sendSmsReply } from "@/lib/sms/send-sms-reply";
 import { sendAppointmentBookedEmail } from "@/lib/email/send-appointment-booked-email";
+import { safeLogger } from "@/lib/security/safe-logger";
 
 type SendSmsAppointmentNotificationsParams = {
   business: any;
@@ -49,7 +50,11 @@ export async function sendSmsAppointmentNotifications({
       body: confirmation,
     });
   } catch (smsError) {
-    console.error("SMS appointment confirmation delivery failed:", smsError);
+    safeLogger.error("SMS appointment confirmation delivery failed.", smsError, {
+      businessId: business._id.toString(),
+      appointmentId: appointment._id.toString(),
+      leadId: lead._id.toString(),
+    });
   }
 
   /* =====================================================
@@ -89,6 +94,10 @@ export async function sendSmsAppointmentNotifications({
       appointmentLabel: appointment.label,
     });
   } catch (emailError) {
-    console.error("SMS appointment booked email failed:", emailError);
+    safeLogger.error("SMS appointment booked email failed.", emailError, {
+      businessId: business._id.toString(),
+      appointmentId: appointment._id.toString(),
+      leadId: lead._id.toString(),
+    });
   }
 }

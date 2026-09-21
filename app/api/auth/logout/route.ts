@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { deleteSession } from "@/lib/auth";
 import { validateRequestOrigin } from "@/lib/security/origin-protection";
+import { safeLogger } from "@/lib/security/safe-logger";
 
 export async function POST(request: Request) {
   try {
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
       success: true,
     });
   } catch (error) {
-    console.error("Logout error:", error);
+    safeLogger.error("Logout error:", error);
 
     return NextResponse.json(
       {

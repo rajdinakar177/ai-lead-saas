@@ -59,7 +59,13 @@ export async function deleteSession() {
     });
   }
 
-  cookieStore.delete(SESSION_COOKIE);
+  cookieStore.set(SESSION_COOKIE, "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    expires: new Date(0),
+  });
 }
 
 export async function getCurrentBusiness() {

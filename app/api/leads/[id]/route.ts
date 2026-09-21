@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
-
-import { requireBusiness } from "@/lib/auth";
+import { getCurrentBusiness } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import { safeLogger } from "@/lib/security/safe-logger";
 
@@ -88,8 +87,18 @@ export async function GET(request: Request, context: RouteContext) {
          Authenticated businesses continue using the
          existing business ownership protection.
          ================================================ */
+      const business = await getCurrentBusiness();
 
-      const business = await requireBusiness();
+      if (!business) {
+        return NextResponse.json(
+          {
+            error: "Unauthorized.",
+          },
+          {
+            status: 401,
+          },
+        );
+      }
 
       lead = await Lead.findOne({
         _id: id,
