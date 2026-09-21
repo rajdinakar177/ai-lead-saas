@@ -38,6 +38,14 @@ export default async function LoginPage() {
           </div>
 
           <LoginForm />
+          <div className="mt-4 text-center">
+            <Link
+              href="/forgot-password"
+              className="text-sm text-blue-400 transition hover:text-violet-300"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <p className="mt-6 text-center text-sm text-zinc-600">
             New to LeadFlow AI?{" "}
             <Link href="/register" className="text-blue-400 transition hover:text-violet-300">

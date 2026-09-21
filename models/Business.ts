@@ -196,6 +196,16 @@ const businessSchema = new Schema(
       type: Date,
       default: null,
     },
+
+    passwordResetTokenHash: {
+      type: String,
+      default: null,
+    },
+
+    passwordResetExpiresAt: {
+      type: Date,
+      default: null,
+    },
     aiSettings: {
       businessDescription: {
         type: String,
