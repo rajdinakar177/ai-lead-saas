@@ -51,6 +51,8 @@ type ChatApiResponse = {
 
   leadId?: string | null;
 
+  publicAccessToken?: string | null;
+
   lead: {
     industry: string | null;
     service: string | null;
@@ -87,6 +89,10 @@ export function DemoChat({
 }: DemoChatProps) {
   const [leadId, setLeadId] = useState<string | null>(null);
 
+  const [publicAccessToken, setPublicAccessToken] = useState<string | null>(
+    null,
+  );
+
   const [initializing, setInitializing] = useState(true);
 
   const [options, setOptions] = useState<ChatOption[]>([]);
@@ -119,10 +125,16 @@ export function DemoChat({
      LOAD REAL AVAILABILITY
      ========================================================= */
 
-  async function loadAvailability(timeline: string, currentLeadId?: string) {
+  async function loadAvailability(
+    timeline: string,
+    currentLeadId?: string,
+    currentPublicAccessToken?: string,
+  ) {
     const id = currentLeadId ?? leadId;
 
-    if (!id || !timeline) {
+    const accessToken = currentPublicAccessToken ?? publicAccessToken;
+
+    if (!id || !accessToken || !timeline) {
       setAppointmentSlots([]);
 
       return;
@@ -132,11 +144,12 @@ export function DemoChat({
       setLoadingSlots(true);
 
       const response = await fetch(
-        `/api/availability?leadId=${encodeURIComponent(
-          id,
-        )}&timeline=${encodeURIComponent(timeline)}`,
+        `/api/availability?leadId=${encodeURIComponent(id)}&timeline=${encodeURIComponent(timeline)}`,
         {
           cache: "no-store",
+          headers: {
+            "X-Lead-Access-Token": accessToken,
+          },
         },
       );
 
@@ -175,21 +188,30 @@ export function DemoChat({
 
         const storageKey = `leadflow:${businessSlug}:leadId`;
 
+        const tokenStorageKey = `leadflow:${businessSlug}:publicAccessToken`;
+
         const storedLeadId = localStorage.getItem(storageKey);
+
+        const storedPublicAccessToken = localStorage.getItem(tokenStorageKey);
 
         /* ===================================================
            RESTORE EXISTING REAL LEAD
            =================================================== */
 
-        if (storedLeadId) {
+        if (storedLeadId && storedPublicAccessToken) {
           const response = await fetch(`/api/leads/${storedLeadId}`, {
             cache: "no-store",
+            headers: {
+              "X-Lead-Access-Token": storedPublicAccessToken,
+            },
           });
 
           if (response.ok) {
             const data = await response.json();
 
             setLeadId(data.lead.id);
+
+            setPublicAccessToken(storedPublicAccessToken);
 
             setMessages(data.messages);
 
@@ -224,7 +246,11 @@ export function DemoChat({
             setOptions([]);
 
             if (canBook && data.lead.timeline) {
-              await loadAvailability(data.lead.timeline, data.lead.id);
+              await loadAvailability(
+                data.lead.timeline,
+                data.lead.id,
+                storedPublicAccessToken,
+              );
             }
 
             return;
@@ -235,6 +261,12 @@ export function DemoChat({
              =============================================== */
 
           localStorage.removeItem(storageKey);
+
+          localStorage.removeItem(tokenStorageKey);
+        } else if (storedLeadId || storedPublicAccessToken) {
+          localStorage.removeItem(storageKey);
+
+          localStorage.removeItem(tokenStorageKey);
         }
 
         /* ===================================================
@@ -285,6 +317,8 @@ export function DemoChat({
          ===================================================== */
 
       setLeadId(data.lead.id ?? null);
+
+      setPublicAccessToken(null);
 
       setMessages(data.messages ?? []);
 
@@ -376,6 +410,8 @@ export function DemoChat({
         body: JSON.stringify({
           leadId,
 
+          publicAccessToken,
+
           businessSlug,
 
           messages: updatedMessages,
@@ -396,12 +432,18 @@ export function DemoChat({
          This happens when valid phone is collected.
          ===================================================== */
 
-      if (data.leadId && data.leadId !== leadId) {
+      if (data.leadId && data.publicAccessToken) {
         setLeadId(data.leadId);
+
+        setPublicAccessToken(data.publicAccessToken);
 
         const storageKey = `leadflow:${businessSlug}:leadId`;
 
+        const tokenStorageKey = `leadflow:${businessSlug}:publicAccessToken`;
+
         localStorage.setItem(storageKey, data.leadId);
+
+        localStorage.setItem(tokenStorageKey, data.publicAccessToken);
       }
 
       /* =====================================================
@@ -457,7 +499,11 @@ export function DemoChat({
          ===================================================== */
 
       if (data.readyToBook && data.lead.timeline && data.leadId) {
-        await loadAvailability(data.lead.timeline, data.leadId);
+        await loadAvailability(
+          data.lead.timeline,
+          data.leadId,
+          data.publicAccessToken ?? publicAccessToken ?? undefined,
+        );
       } else {
         setAppointmentSlots([]);
       }
@@ -501,7 +547,7 @@ export function DemoChat({
      ========================================================= */
 
   async function chooseAppointment(slot: AppointmentSlot) {
-    if (!leadId || loading) {
+    if (!leadId || !publicAccessToken || loading) {
       return;
     }
 
@@ -521,6 +567,8 @@ export function DemoChat({
 
         body: JSON.stringify({
           leadId,
+
+          publicAccessToken,
 
           appointment: slot.label,
 
@@ -594,7 +642,13 @@ export function DemoChat({
 
       const storageKey = `leadflow:${businessSlug}:leadId`;
 
+      const tokenStorageKey = `leadflow:${businessSlug}:publicAccessToken`;
+
       localStorage.removeItem(storageKey);
+
+      localStorage.removeItem(tokenStorageKey);
+
+      setPublicAccessToken(null);
 
       /* =====================================================
          Restart means:
@@ -623,6 +677,8 @@ export function DemoChat({
       }
 
       setLeadId(data.lead.id ?? null);
+
+      setPublicAccessToken(null);
 
       setMessages(data.messages ?? []);
 
@@ -722,28 +778,24 @@ export function DemoChat({
         {/* MESSAGES */}
 
         <div
-          className={`space-y-5 overflow-y-auto px-5 py-6 ${
-            compact ? "h-[430px]" : "h-[500px]"
-          }`}
+          className={`space-y-5 overflow-y-auto px-5 py-6 ${compact ? "h-[430px]" : "h-[500px]"
+            }`}
         >
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`flex ${
-                message.sender === "user" ? "justify-end" : "justify-start"
-              }`}
+              className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"
+                }`}
             >
               <div
-                className={`flex max-w-[85%] gap-3 ${
-                  message.sender === "user" ? "flex-row-reverse" : "flex-row"
-                }`}
+                className={`flex max-w-[85%] gap-3 ${message.sender === "user" ? "flex-row-reverse" : "flex-row"
+                  }`}
               >
                 <div
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                    message.sender === "user"
-                      ? "bg-white text-black"
-                      : "bg-violet-500/15 text-blue-400"
-                  }`}
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${message.sender === "user"
+                    ? "bg-white text-black"
+                    : "bg-violet-500/15 text-blue-400"
+                    }`}
                 >
                   {message.sender === "user" ? (
                     <User size={15} />
@@ -753,11 +805,10 @@ export function DemoChat({
                 </div>
 
                 <div
-                  className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
-                    message.sender === "user"
-                      ? "rounded-tr-md bg-white text-black"
-                      : "rounded-tl-md border border-white/10 bg-white/[0.04] text-zinc-200"
-                  }`}
+                  className={`rounded-2xl px-4 py-3 text-sm leading-6 ${message.sender === "user"
+                    ? "rounded-tr-md bg-white text-black"
+                    : "rounded-tl-md border border-white/10 bg-white/[0.04] text-zinc-200"
+                    }`}
                 >
                   {message.text}
                 </div>

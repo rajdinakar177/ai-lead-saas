@@ -158,7 +158,6 @@ export async function POST(request: Request) {
 
         return forbiddenResponse();
       }
-
     } else {
       safeLogger.info("Twilio signature validation disabled for local testing.");
     }
@@ -484,9 +483,12 @@ export async function POST(request: Request) {
           });
 
           if (!deactivated) {
-            safeLogger.warn("Could not deactivate current SMS conversation during service switch.", {
-              leadId: previousActiveLead._id.toString(),
-            });
+            safeLogger.warn(
+              "Could not deactivate current SMS conversation during service switch.",
+              {
+                leadId: previousActiveLead._id.toString(),
+              },
+            );
 
             return successResponse();
           }
@@ -1074,10 +1076,13 @@ export async function POST(request: Request) {
 
             lead = activeWinner;
 
-            safeLogger.info("New SMS lead creation race resolved to existing active conversation.", {
-              activeLeadId: lead._id.toString(),
-              service: lead.service,
-            });
+            safeLogger.info(
+              "New SMS lead creation race resolved to existing active conversation.",
+              {
+                activeLeadId: lead._id.toString(),
+                service: lead.service,
+              },
+            );
           }
 
           /* ===============================================

@@ -17,6 +17,7 @@ import { updateAppointmentGoogleEvent } from "@/lib/google-calendar/update-appoi
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
 import { deleteAppointmentGoogleEvent } from "@/lib/google-calendar/delete-appointment-event";
 import { validateRequestOrigin } from "@/lib/security/origin-protection";
+import { safeLogger } from "@/lib/security/safe-logger";
 type AppointmentStatus = "scheduled" | "confirmed" | "completed" | "cancelled";
 
 type StatusUpdateRequest = {
@@ -304,7 +305,10 @@ export async function PATCH(
           });
         }
       } catch (emailError) {
-        console.error("Appointment reschedule email failed:", emailError);
+        safeLogger.error("Appointment reschedule email failed.", emailError, {
+          appointmentId: appointment._id.toString(),
+          businessId: business._id.toString(),
+        });
       }
 
       /* =========================================
@@ -387,7 +391,10 @@ export async function PATCH(
             }
           }
         } catch (googleError) {
-          console.error("Google Calendar appointment reschedule sync failed:", googleError);
+          safeLogger.error("Google Calendar appointment reschedule sync failed.", googleError, {
+            appointmentId: appointment._id.toString(),
+            businessId: business._id.toString(),
+          });
 
           const errorMessage =
             googleError instanceof Error
@@ -419,10 +426,10 @@ export async function PATCH(
               },
             );
           } catch (syncErrorSaveError) {
-            console.error(
-              "Unable to save Google Calendar reschedule sync error:",
-              syncErrorSaveError,
-            );
+            safeLogger.error("Unable to save Google Calendar reschedule sync error.", syncErrorSaveError, {
+              appointmentId: appointment._id.toString(),
+              businessId: business._id.toString(),
+            });
           }
         }
       }
@@ -501,7 +508,10 @@ export async function PATCH(
           });
         }
       } catch (emailError) {
-        console.error("Appointment cancellation email failed:", emailError);
+        safeLogger.error("Appointment cancellation email failed.", emailError, {
+          appointmentId: appointment._id.toString(),
+          businessId: business._id.toString(),
+        });
       }
 
       /* =========================================
@@ -549,7 +559,10 @@ export async function PATCH(
             );
           }
         } catch (googleError) {
-          console.error("Google Calendar appointment cancellation sync failed:", googleError);
+          safeLogger.error("Google Calendar appointment cancellation sync failed.", googleError, {
+            appointmentId: appointment._id.toString(),
+            businessId: business._id.toString(),
+          });
 
           const errorMessage =
             googleError instanceof Error
@@ -581,10 +594,10 @@ export async function PATCH(
               },
             );
           } catch (syncErrorSaveError) {
-            console.error(
-              "Unable to save Google Calendar cancellation sync error:",
-              syncErrorSaveError,
-            );
+            safeLogger.error("Unable to save Google Calendar cancellation sync error.", syncErrorSaveError, {
+              appointmentId: appointment._id.toString(),
+              businessId: business._id.toString(),
+            });
           }
         }
       }
@@ -604,7 +617,7 @@ export async function PATCH(
       },
     });
   } catch (error) {
-    console.error("Appointment update error:", error);
+    safeLogger.error("Appointment update error.", error);
 
     if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
       return NextResponse.json(

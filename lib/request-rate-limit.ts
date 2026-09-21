@@ -9,19 +9,35 @@ type RequestRateLimitOptions = {
   windowMs: number;
 };
 
+const MAX_IP_LENGTH = 64;
+
+function normalizeIp(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim();
+
+  if (!normalized || normalized.length > MAX_IP_LENGTH) {
+    return null;
+  }
+
+  return normalized;
+}
+
 function getClientIp(request: Request) {
   /*
-   * On Vercel, x-forwarded-for is
-   * populated by the trusted platform
-   * proxy.
+   * In production, Leadquivo is deployed
+   * behind Vercel's trusted proxy.
    *
+   * Vercel populates x-forwarded-for.
    * The first value represents the
-   * original client IP.
+   * original client address.
    */
   const forwardedFor = request.headers.get("x-forwarded-for");
 
   if (forwardedFor) {
-    const firstIp = forwardedFor.split(",")[0]?.trim();
+    const firstIp = normalizeIp(forwardedFor.split(",")[0] ?? null);
 
     if (firstIp) {
       return firstIp;
@@ -29,18 +45,22 @@ function getClientIp(request: Request) {
   }
 
   /*
-   * Vercel may also expose the client
-   * address through this header.
+   * Fallback for environments that
+   * provide x-real-ip.
    */
-  const realIp = request.headers.get("x-real-ip");
+  const realIp = normalizeIp(request.headers.get("x-real-ip"));
 
   if (realIp) {
-    return realIp.trim();
+    return realIp;
   }
 
   /*
-   * Local development does not always
-   * provide a client IP header.
+   * Local development may not provide
+   * either header.
+   *
+   * Sharing one fallback bucket is safer
+   * than generating attacker-controlled
+   * identifiers.
    */
   return "unknown";
 }
@@ -69,12 +89,9 @@ export async function applyRequestRateLimit({
     },
     {
       status: 429,
-
       headers: {
         "Retry-After": result.retryAfterSeconds.toString(),
-
         "X-RateLimit-Limit": result.limit.toString(),
-
         "X-RateLimit-Remaining": result.remaining.toString(),
       },
     },

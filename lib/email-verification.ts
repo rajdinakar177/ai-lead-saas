@@ -5,7 +5,14 @@ import crypto from "crypto";
 import { brevo } from "@/lib/brevo";
 
 const TOKEN_DURATION = 60 * 60 * 1000;
-
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 export function generateVerificationToken() {
   const token = crypto.randomBytes(32).toString("hex");
 
@@ -46,7 +53,7 @@ export async function sendVerificationEmail({
   if (!senderEmail) {
     throw new Error("BREVO_SENDER_EMAIL is not configured");
   }
-
+  const safeBusinessName = escapeHtml(businessName);
   const verificationUrl = `${appUrl}/verify-email?token=${encodeURIComponent(token)}`;
 
   await brevo.transactionalEmails.sendTransacEmail({
@@ -60,7 +67,7 @@ export async function sendVerificationEmail({
     to: [
       {
         email,
-        name: businessName,
+        name: businessName.trim().slice(0, 100),
       },
     ],
 
@@ -74,7 +81,7 @@ export async function sendVerificationEmail({
             </h2>
 
             <p>
-              Hi ${businessName},
+            Hi ${safeBusinessName},
             </p>
 
             <p>

@@ -120,6 +120,9 @@ export async function checkRateLimit({
       const concurrent = await RateLimit.findOneAndUpdate(
         {
           key,
+          windowStartedAt: {
+            $gt: windowStartedAt,
+          },
         },
         {
           $inc: {
@@ -150,6 +153,11 @@ export async function checkRateLimit({
           ),
         };
       }
+      return checkRateLimit({
+        key,
+        limit,
+        windowMs,
+      });
     }
 
     throw error;

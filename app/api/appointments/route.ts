@@ -1,3 +1,4 @@
+import { Types } from "mongoose";
 import { NextResponse } from "next/server";
 
 import type { Timeline } from "@/lib/availability";
@@ -13,13 +14,57 @@ import { Business } from "@/models/Business";
 import { Appointment } from "@/models/Appointment";
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
 import { applyRequestRateLimit } from "@/lib/request-rate-limit";
+import { safeLogger } from "@/lib/security/safe-logger";
 type AppointmentRequest = {
   leadId: string;
+  publicAccessToken: string;
   appointment: string;
   scheduledFor: string;
 };
 
 const validTimelines: Timeline[] = ["Today", "Tomorrow", "This week", "Next week"];
+const MAX_PUBLIC_ACCESS_TOKEN_LENGTH = 200;
+const MAX_APPOINTMENT_LABEL_LENGTH = 500;
+const MAX_SCHEDULED_FOR_LENGTH = 100;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateAppointmentRequest(value: unknown): string | null {
+  if (!isRecord(value)) {
+    return "Invalid request body.";
+  }
+
+  if (typeof value.leadId !== "string" || !Types.ObjectId.isValid(value.leadId)) {
+    return "Invalid leadId.";
+  }
+
+  if (
+    typeof value.publicAccessToken !== "string" ||
+    !value.publicAccessToken ||
+    value.publicAccessToken.length > MAX_PUBLIC_ACCESS_TOKEN_LENGTH
+  ) {
+    return "Invalid publicAccessToken.";
+  }
+  if (
+    typeof value.appointment !== "string" ||
+    !value.appointment.trim() ||
+    value.appointment.length > MAX_APPOINTMENT_LABEL_LENGTH
+  ) {
+    return `appointment must be between 1 and ${MAX_APPOINTMENT_LABEL_LENGTH} characters.`;
+  }
+
+  if (
+    typeof value.scheduledFor !== "string" ||
+    !value.scheduledFor.trim() ||
+    value.scheduledFor.length > MAX_SCHEDULED_FOR_LENGTH
+  ) {
+    return `scheduledFor must be between 1 and ${MAX_SCHEDULED_FOR_LENGTH} characters.`;
+  }
+
+  return null;
+}
 
 export async function POST(request: Request) {
   try {
@@ -36,18 +81,35 @@ export async function POST(request: Request) {
     if (rateLimitResponse) {
       return rateLimitResponse;
     }
-    const body: AppointmentRequest = await request.json();
+    let rawBody: unknown;
 
-    if (!body.leadId || !body.appointment || !body.scheduledFor) {
+    try {
+      rawBody = await request.json();
+    } catch {
       return NextResponse.json(
         {
-          error: "leadId, appointment and scheduledFor are required.",
+          error: "Invalid JSON body.",
         },
         {
           status: 400,
         },
       );
     }
+
+    const validationError = validateAppointmentRequest(rawBody);
+
+    if (validationError) {
+      return NextResponse.json(
+        {
+          error: validationError,
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    const body = rawBody as AppointmentRequest;
 
     /* =========================================
        VALIDATE DATE
@@ -87,7 +149,7 @@ export async function POST(request: Request) {
        FIND LEAD
        ========================================= */
 
-    const lead = await Lead.findById(body.leadId);
+    const lead = await Lead.findOne({_id: body.leadId,  publicAccessToken: body.publicAccessToken, });
 
     if (!lead) {
       return NextResponse.json(
@@ -234,7 +296,7 @@ export async function POST(request: Request) {
         appointmentLabel: matchedSlot.label,
       });
     } catch (emailError) {
-      console.error("Appointment booked email notification failed:", emailError);
+      safeLogger.error("Appointment booked email notification failed.", emailError);
     }
 
     /* =========================================
@@ -327,7 +389,7 @@ export async function POST(request: Request) {
         );
       }
     } catch (googleError) {
-      console.error("Google Calendar appointment sync failed:", googleError);
+      safeLogger.error("Google Calendar appointment sync failed.", googleError);
 
       const errorMessage =
         googleError instanceof Error
@@ -364,7 +426,7 @@ export async function POST(request: Request) {
           },
         );
       } catch (syncErrorSaveError) {
-        console.error("Unable to save Google Calendar sync error:", syncErrorSaveError);
+        safeLogger.error("Unable to save Google Calendar sync error.", syncErrorSaveError);
       }
     }
 
@@ -388,7 +450,7 @@ export async function POST(request: Request) {
       messageId: aiMessage._id.toString(),
     });
   } catch (error) {
-    console.error("Appointment error:", error);
+    safeLogger.error("Appointment error.", error);
 
     /* =========================================
        UNIQUE SLOT CONFLICT

@@ -1,12 +1,13 @@
-import { NextResponse } from "next/server";
 import mongoose from "mongoose";
+import { NextResponse } from "next/server";
 
-import { connectDB } from "@/lib/mongodb";
 import { requireBusiness } from "@/lib/auth";
+import { connectDB } from "@/lib/mongodb";
+import { safeLogger } from "@/lib/security/safe-logger";
 
+import { Appointment } from "@/models/Appointment";
 import { Lead } from "@/models/Lead";
 import { Message } from "@/models/Message";
-import { Appointment } from "@/models/Appointment";
 
 type RouteContext = {
   params: Promise<{
@@ -14,14 +15,10 @@ type RouteContext = {
   }>;
 };
 
+const MAX_PUBLIC_ACCESS_TOKEN_LENGTH = 200;
+
 export async function GET(request: Request, context: RouteContext) {
   try {
-    /* ================================================
-       AUTHENTICATE BUSINESS
-       ================================================ */
-
-    const business = await requireBusiness();
-
     const { id } = await context.params;
 
     /* ================================================
@@ -39,32 +36,76 @@ export async function GET(request: Request, context: RouteContext) {
       );
     }
 
-    await connectDB();
+    const publicAccessToken = request.headers.get("X-Lead-Access-Token");
 
-    /* ================================================
-       LOAD LEAD + VERIFY OWNERSHIP
-
-       Important:
-       Never use findById(id) here.
-
-       The businessId condition prevents one business
-       from accessing another business's lead.
-       ================================================ */
-
-    const lead = await Lead.findOne({
-      _id: id,
-      businessId: business._id,
-    }).lean();
-
-    if (!lead) {
+    if (
+      publicAccessToken !== null &&
+      (!publicAccessToken || publicAccessToken.length > MAX_PUBLIC_ACCESS_TOKEN_LENGTH)
+    ) {
       return NextResponse.json(
         {
-          error: "Lead not found.",
+          error: "Invalid lead access token.",
         },
         {
-          status: 404,
+          status: 400,
         },
       );
+    }
+
+    await connectDB();
+
+    let lead;
+
+    /* ================================================
+       PUBLIC CHAT ACCESS
+
+       Public visitors are not authenticated businesses.
+
+       They must prove access using:
+       leadId + publicAccessToken
+       ================================================ */
+
+    if (publicAccessToken) {
+      lead = await Lead.findOne({
+        _id: id,
+        publicAccessToken,
+      }).lean();
+
+      if (!lead) {
+        return NextResponse.json(
+          {
+            error: "Lead not found.",
+          },
+          {
+            status: 404,
+          },
+        );
+      }
+    } else {
+      /* ================================================
+         DASHBOARD ACCESS
+
+         Authenticated businesses continue using the
+         existing business ownership protection.
+         ================================================ */
+
+      const business = await requireBusiness();
+
+      lead = await Lead.findOne({
+        _id: id,
+        businessId: business._id,
+      }).lean();
+
+      if (!lead) {
+        return NextResponse.json(
+          {
+            error: "Lead not found.",
+          },
+          {
+            status: 404,
+          },
+        );
+      }
     }
 
     /* ================================================
@@ -82,12 +123,12 @@ export async function GET(request: Request, context: RouteContext) {
     /* ================================================
        LOAD LEAD APPOINTMENT
 
-       Include businessId as defense-in-depth.
+       Always scope by both lead and business.
        ================================================ */
 
     const appointment = await Appointment.findOne({
       leadId: lead._id,
-      businessId: business._id,
+      businessId: lead.businessId,
     })
       .sort({
         createdAt: -1,
@@ -98,41 +139,50 @@ export async function GET(request: Request, context: RouteContext) {
        RESPONSE
        ================================================ */
 
-    return NextResponse.json({
-      success: true,
+    return NextResponse.json(
+      {
+        success: true,
 
-      lead: {
-        id: lead._id.toString(),
+        lead: {
+          id: lead._id.toString(),
 
-        industry: lead.industry ?? null,
+          industry: lead.industry ?? null,
 
-        service: lead.service ?? null,
+          service: lead.service ?? null,
 
-        urgency: lead.urgency ?? null,
+          location: lead.location ?? null,
 
-        timeline: lead.timeline ?? null,
+          urgency: lead.urgency ?? null,
 
-        name: lead.name ?? null,
+          timeline: lead.timeline ?? null,
 
-        phone: lead.phone ?? null,
+          name: lead.name ?? null,
 
-        status: lead.status ?? "new",
+          phone: lead.phone ?? null,
 
-        appointment: appointment?.label ?? null,
+          status: lead.status ?? "new",
+
+          appointment: appointment?.label ?? null,
+        },
+
+        messages: messages.map((message) => ({
+          id: message._id.toString(),
+
+          sender: message.sender === "lead" ? "user" : "ai",
+
+          text: message.content,
+        })),
+
+        completed: Boolean(appointment),
       },
-
-      messages: messages.map((message) => ({
-        id: message._id.toString(),
-
-        sender: message.sender === "lead" ? "user" : "ai",
-
-        text: message.content,
-      })),
-
-      completed: Boolean(appointment),
-    });
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      },
+    );
   } catch (error) {
-    console.error("Get lead error:", error);
+    safeLogger.error("Get lead error.", error);
 
     return NextResponse.json(
       {

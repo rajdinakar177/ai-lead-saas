@@ -8,6 +8,10 @@ const leadSchema = new Schema(
       required: true,
       index: true,
     },
+    publicAccessToken: {
+      type: String,
+      default: null,
+    },
 
     name: {
       type: String,
@@ -73,6 +77,7 @@ const leadSchema = new Schema(
       default: 0,
       min: 0,
     },
+
     smsBookingOptions: {
       offeredAt: {
         type: Date,
@@ -145,6 +150,7 @@ leadSchema.index({
   "followUp.nextFollowUpAt": 1,
   status: 1,
 });
+
 leadSchema.index(
   {
     businessId: 1,
@@ -159,6 +165,20 @@ leadSchema.index(
       },
     },
     name: "unique_active_sms_conversation_per_business_phone",
+  },
+);
+leadSchema.index(
+  {
+    publicAccessToken: 1,
+  },
+  {
+    unique: true,
+    partialFilterExpression: {
+      publicAccessToken: {
+        $type: "string",
+      },
+    },
+    name: "unique_public_access_token",
   },
 );
 export const Lead = models.Lead || model("Lead", leadSchema);

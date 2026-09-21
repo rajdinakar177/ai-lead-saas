@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 
 import { connectDB } from "@/lib/mongodb";
-import { Business } from "@/models/Business";
 import { applyRequestRateLimit } from "@/lib/request-rate-limit";
+import { safeLogger } from "@/lib/security/safe-logger";
+import { Business } from "@/models/Business";
 
 type CreateLeadBody = {
   businessSlug?: string;
 };
+
+const MAX_BUSINESS_SLUG_LENGTH = 100;
 
 export async function POST(request: Request) {
   try {
@@ -20,7 +23,48 @@ export async function POST(request: Request) {
     if (rateLimitResponse) {
       return rateLimitResponse;
     }
-    const body: CreateLeadBody = await request.json();
+
+    let rawBody: unknown;
+
+    try {
+      rawBody = await request.json();
+    } catch {
+      return NextResponse.json(
+        {
+          error: "Invalid JSON body.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    if (typeof rawBody !== "object" || rawBody === null || Array.isArray(rawBody)) {
+      return NextResponse.json(
+        {
+          error: "Invalid request body.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    const body = rawBody as CreateLeadBody;
+
+    if (
+      body.businessSlug !== undefined &&
+      (typeof body.businessSlug !== "string" || body.businessSlug.length > MAX_BUSINESS_SLUG_LENGTH)
+    ) {
+      return NextResponse.json(
+        {
+          error: `Business slug must be ${MAX_BUSINESS_SLUG_LENGTH} characters or fewer.`,
+        },
+        {
+          status: 400,
+        },
+      );
+    }
 
     const businessSlug = body.businessSlug?.trim().toLowerCase();
 
@@ -124,7 +168,7 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
-    console.error("Initialize chat error:", error);
+    safeLogger.error("Initialize chat error.", error);
 
     return NextResponse.json(
       {

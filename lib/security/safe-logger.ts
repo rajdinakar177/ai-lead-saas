@@ -1,41 +1,56 @@
 type LogMetadata = Record<string, unknown>;
 
+const sensitiveKeys = new Set([
+  "phone",
+  "from",
+  "to",
+  "body",
+  "reply",
+  "content",
+  "message",
+  "name",
+  "email",
+  "location",
+  "address",
+  "accesstoken",
+  "refreshtoken",
+  "publicaccesstoken",
+  "token",
+  "password",
+  "authorization",
+  "cookie",
+  "set-cookie",
+]);
+
+function sanitizeValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeValue(item));
+  }
+
+  if (value && typeof value === "object") {
+    const sanitized: Record<string, unknown> = {};
+
+    for (const [key, nestedValue] of Object.entries(value)) {
+      if (sensitiveKeys.has(key.toLowerCase())) {
+        sanitized[key] = "[REDACTED]";
+        continue;
+      }
+
+      sanitized[key] = sanitizeValue(nestedValue);
+    }
+
+    return sanitized;
+  }
+
+  return value;
+}
+
 function sanitizeMetadata(metadata?: LogMetadata): LogMetadata | undefined {
   if (!metadata) {
     return undefined;
   }
 
-  const sensitiveKeys = new Set([
-    "phone",
-    "from",
-    "to",
-    "body",
-    "reply",
-    "content",
-    "message",
-    "name",
-    "email",
-    "location",
-    "address",
-    "accessToken",
-    "refreshToken",
-    "token",
-    "password",
-    "authorization",
-  ]);
-
-  const sanitized: LogMetadata = {};
-
-  for (const [key, value] of Object.entries(metadata)) {
-    if (sensitiveKeys.has(key)) {
-      sanitized[key] = "[REDACTED]";
-      continue;
-    }
-
-    sanitized[key] = value;
-  }
-
-  return sanitized;
+  return sanitizeValue(metadata) as LogMetadata;
 }
 
 export const safeLogger = {

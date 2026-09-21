@@ -5,7 +5,7 @@ import { connectDB } from "@/lib/mongodb";
 import { Business } from "@/models/Business";
 
 import { generateVerificationToken, sendVerificationEmail } from "@/lib/email-verification";
-
+import { safeLogger } from "@/lib/security/safe-logger";
 import { createUniqueBusinessSlug } from "@/lib/slug";
 import { applyRequestRateLimit } from "@/lib/request-rate-limit";
 type RegisterBody = {
@@ -133,9 +133,7 @@ export async function POST(request: Request) {
     if (existingBusiness) {
       return NextResponse.json(
         {
-          error: existingBusiness.emailVerified
-            ? "An account already exists with this email."
-            : "This email is already registered but not verified.",
+          error: "Unable to create an account with these details.",
         },
         {
           status: 409,
@@ -191,8 +189,7 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
-    console.error("Registration error:", error);
-
+safeLogger.error("Registration error.", error);
     return NextResponse.json(
       {
         error: "Unable to create account.",

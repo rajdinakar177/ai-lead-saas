@@ -1,3 +1,5 @@
+import { randomBytes } from "crypto";
+import { Types } from "mongoose";
 import { NextResponse } from "next/server";
 
 import { connectDB } from "@/lib/mongodb";
@@ -15,6 +17,7 @@ import {
   type LeadData,
 } from "@/lib/ai/qualification";
 import { applyRequestRateLimit } from "@/lib/request-rate-limit";
+import { safeLogger } from "@/lib/security/safe-logger";
 
 /* =========================================================
    TYPES
@@ -22,10 +25,109 @@ import { applyRequestRateLimit } from "@/lib/request-rate-limit";
 
 type RequestBody = {
   leadId?: string | null;
+  publicAccessToken?: string | null;
   businessSlug?: string;
   messages: ChatMessage[];
   lead: LeadData;
 };
+
+const MAX_MESSAGES = 50;
+const MAX_MESSAGE_LENGTH = 2000;
+const MAX_BUSINESS_SLUG_LENGTH = 100;
+const MAX_PUBLIC_ACCESS_TOKEN_LENGTH = 200;
+const MAX_LEAD_FIELD_LENGTH = 500;
+
+const LEAD_TEXT_FIELDS = [
+  "industry",
+  "service",
+  "location",
+  "urgency",
+  "timeline",
+  "name",
+  "phone",
+] as const;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validateRequestBody(value: unknown): string | null {
+  if (!isRecord(value)) {
+    return "Invalid request body.";
+  }
+
+  if (!Array.isArray(value.messages)) {
+    return "messages are required.";
+  }
+
+  if (value.messages.length > MAX_MESSAGES) {
+    return `A maximum of ${MAX_MESSAGES} messages is allowed per request.`;
+  }
+
+  for (const message of value.messages) {
+    if (!isRecord(message)) {
+      return "Each message must be a valid object.";
+    }
+
+    if (message.sender !== "user" && message.sender !== "ai") {
+      return "Each message must have a valid sender.";
+    }
+
+    if (typeof message.text !== "string") {
+      return "Each message must contain text.";
+    }
+
+    if (message.text.length > MAX_MESSAGE_LENGTH) {
+      return `Each message must be ${MAX_MESSAGE_LENGTH} characters or fewer.`;
+    }
+  }
+
+  if (
+    value.businessSlug !== undefined &&
+    (typeof value.businessSlug !== "string" || value.businessSlug.length > MAX_BUSINESS_SLUG_LENGTH)
+  ) {
+    return `businessSlug must be ${MAX_BUSINESS_SLUG_LENGTH} characters or fewer.`;
+  }
+
+  if (
+    value.leadId !== undefined &&
+    value.leadId !== null &&
+    (typeof value.leadId !== "string" || !Types.ObjectId.isValid(value.leadId))
+  ) {
+    return "Invalid leadId.";
+  }
+
+  if (
+    value.publicAccessToken !== undefined &&
+    value.publicAccessToken !== null &&
+    (typeof value.publicAccessToken !== "string" ||
+      value.publicAccessToken.length > MAX_PUBLIC_ACCESS_TOKEN_LENGTH)
+  ) {
+    return "Invalid publicAccessToken.";
+  }
+
+  if (!isRecord(value.lead)) {
+    return "lead is required.";
+  }
+
+  for (const field of LEAD_TEXT_FIELDS) {
+    const fieldValue = value.lead[field];
+
+    if (fieldValue === undefined || fieldValue === null) {
+      continue;
+    }
+
+    if (typeof fieldValue !== "string") {
+      return `${field} must be a string.`;
+    }
+
+    if (fieldValue.length > MAX_LEAD_FIELD_LENGTH) {
+      return `${field} must be ${MAX_LEAD_FIELD_LENGTH} characters or fewer.`;
+    }
+  }
+
+  return null;
+}
 
 /* =========================================================
    POST
@@ -43,18 +145,35 @@ export async function POST(request: Request) {
     if (rateLimitResponse) {
       return rateLimitResponse;
     }
-    const body: RequestBody = await request.json();
+    let rawBody: unknown;
 
-    if (!Array.isArray(body.messages)) {
+    try {
+      rawBody = await request.json();
+    } catch {
       return NextResponse.json(
         {
-          error: "messages are required.",
+          error: "Invalid JSON body.",
         },
         {
           status: 400,
         },
       );
     }
+
+    const validationError = validateRequestBody(rawBody);
+
+    if (validationError) {
+      return NextResponse.json(
+        {
+          error: validationError,
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    const body = rawBody as RequestBody;
 
     await connectDB();
 
@@ -96,9 +215,21 @@ export async function POST(request: Request) {
         );
       }
 
+      if (!body.publicAccessToken) {
+        return NextResponse.json(
+          {
+            error: "Lead access token is required.",
+          },
+          {
+            status: 401,
+          },
+        );
+      }
+
       existingLead = await Lead.findOne({
         _id: body.leadId,
         businessId: business._id,
+        publicAccessToken: body.publicAccessToken,
       });
 
       if (!existingLead) {
@@ -297,6 +428,8 @@ export async function POST(request: Request) {
 
         leadId: existingLead._id.toString(),
 
+        publicAccessToken: existingLead.publicAccessToken,
+
         messageId: aiMessage._id.toString(),
       });
     }
@@ -315,6 +448,8 @@ export async function POST(request: Request) {
         ...result,
 
         leadId: null,
+
+        publicAccessToken: null,
 
         messageId: null,
       });
@@ -339,6 +474,8 @@ export async function POST(request: Request) {
 
         leadId: null,
 
+        publicAccessToken: null,
+
         messageId: null,
 
         readyToBook: false,
@@ -353,8 +490,12 @@ export async function POST(request: Request) {
        NOW this becomes a real Lead.
        ===================================================== */
 
+    const publicAccessToken = randomBytes(32).toString("base64url");
+
     const newLead = await Lead.create({
       businessId: business._id,
+
+      publicAccessToken,
 
       industry: result.lead.industry ?? business.industry,
 
@@ -423,7 +564,7 @@ export async function POST(request: Request) {
         timeline: result.lead.timeline,
       });
     } catch (emailError) {
-      console.error("New lead email notification failed:", emailError);
+      safeLogger.error("New lead email notification failed.", emailError);
     }
 
     /* =====================================================
@@ -457,10 +598,12 @@ export async function POST(request: Request) {
 
       leadId: newLead._id.toString(),
 
+      publicAccessToken,
+
       messageId: aiMessage._id.toString(),
     });
   } catch (error) {
-    console.error("Chat API error:", error);
+    safeLogger.error("Chat API error.", error);
 
     return NextResponse.json(
       {
