@@ -6,7 +6,7 @@ import { GoogleCalendarSettings } from "@/components/dashboard/settings/google-c
 
 import { requireBusiness } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
-
+import { SubscriptionSettings } from "@/components/dashboard/settings/subscription-settings";
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
 
 export const dynamic = "force-dynamic";
@@ -31,12 +31,12 @@ export default async function SettingsPage() {
 
   const googleCalendar = googleIntegration
     ? {
-        connected: googleIntegration.connected === true,
+      connected: googleIntegration.connected === true,
 
-        googleEmail: googleIntegration.googleEmail ?? null,
+      googleEmail: googleIntegration.googleEmail ?? null,
 
-        calendarId: googleIntegration.calendarId || "primary",
-      }
+      calendarId: googleIntegration.calendarId || "primary",
+    }
     : null;
 
   return (
@@ -66,7 +66,19 @@ export default async function SettingsPage() {
           }}
         />
       </div>
+      {/* SUBSCRIPTION */}
 
+      <div className="mt-8 max-w-4xl">
+        <SubscriptionSettings
+          currentPlan={business.subscription?.plan ?? null}
+          currentStatus={business.subscription?.status ?? "none"}
+          cancelAt={
+            business.subscription?.cancelAt
+              ? business.subscription.cancelAt.toISOString()
+              : null
+          }
+        />
+      </div>
       {/* INTEGRATIONS */}
 
       <div className="mt-8 max-w-4xl">

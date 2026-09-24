@@ -14,7 +14,31 @@ export type BusinessAvailabilityDay = {
   startTime: string;
   endTime: string;
 };
+export type SubscriptionPlan = "starter" | "pro";
 
+export type SubscriptionStatus =
+  | "none"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "unpaid"
+  | "incomplete"
+  | "incomplete_expired"
+  | "paused";
+
+export type BusinessSubscription = {
+  plan: SubscriptionPlan | null;
+  status: SubscriptionStatus;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
+  stripePriceId: string | null;
+  currentPeriodStart: Date | null;
+  currentPeriodEnd: Date | null;
+  cancelAtPeriodEnd: boolean;
+  cancelAt: Date | null;
+  canceledAt: Date | null;
+};
 export type BusinessAvailability = {
   slotDurationMinutes: number;
   bufferMinutes: number;
@@ -253,6 +277,71 @@ const businessSchema = new Schema(
         trim: true,
       },
     },
+    subscription: {
+      plan: {
+        type: String,
+        enum: ["starter", "pro"],
+        default: null,
+      },
+
+      status: {
+        type: String,
+        enum: [
+          "none",
+          "trialing",
+          "active",
+          "past_due",
+          "canceled",
+          "unpaid",
+          "incomplete",
+          "incomplete_expired",
+          "paused",
+        ],
+        default: "none",
+        index: true,
+      },
+
+      stripeCustomerId: {
+        type: String,
+        default: null,
+        index: true,
+      },
+
+      stripeSubscriptionId: {
+        type: String,
+        default: null,
+        index: true,
+      },
+
+      stripePriceId: {
+        type: String,
+        default: null,
+      },
+
+      currentPeriodStart: {
+        type: Date,
+        default: null,
+      },
+
+      currentPeriodEnd: {
+        type: Date,
+        default: null,
+      },
+      cancelAt: {
+        type: Date,
+        default: null,
+      },
+
+      cancelAtPeriodEnd: {
+        type: Boolean,
+        default: false,
+      },
+
+      canceledAt: {
+        type: Date,
+        default: null,
+      },
+    },
   },
   {
     timestamps: true,
@@ -260,3 +349,4 @@ const businessSchema = new Schema(
 );
 
 export const Business = models.Business || model("Business", businessSchema);
+;

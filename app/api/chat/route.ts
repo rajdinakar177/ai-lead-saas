@@ -18,7 +18,8 @@ import {
 } from "@/lib/ai/qualification";
 import { applyRequestRateLimit } from "@/lib/request-rate-limit";
 import { safeLogger } from "@/lib/security/safe-logger";
-
+import { getSubscriptionAccess } from "@/lib/subscription-access";
+import { consumeSubscriptionUsage, releaseSubscriptionUsage, } from "@/lib/subscription-usage";
 /* =========================================================
    TYPES
    ========================================================= */
@@ -489,32 +490,125 @@ export async function POST(request: Request) {
 
        NOW this becomes a real Lead.
        ===================================================== */
+    const subscriptionAccess = getSubscriptionAccess(
+      business.subscription,
+    );
 
-    const publicAccessToken = randomBytes(32).toString("base64url");
+    if (
+      !subscriptionAccess.hasAccess ||
+      !subscriptionAccess.limits
+    ) {
+      return NextResponse.json(
+        {
+          error: "An active subscription is required.",
+        },
+        {
+          status: 403,
+        },
+      );
+    }
 
-    const newLead = await Lead.create({
+    const periodStart =
+      business.subscription?.currentPeriodStart;
+
+    const periodEnd =
+      business.subscription?.currentPeriodEnd;
+
+    if (!periodStart || !periodEnd) {
+      safeLogger.error(
+        "Business subscription billing period is missing.",
+        undefined,
+        {
+          businessId: business._id.toString(),
+        },
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Subscription billing information is temporarily unavailable.",
+        },
+        {
+          status: 503,
+        },
+      );
+    }
+
+    const leadUsage = await consumeSubscriptionUsage({
       businessId: business._id,
-
-      publicAccessToken,
-
-      industry: result.lead.industry ?? business.industry,
-
-      service: result.lead.service ?? undefined,
-
-      location: result.lead.location ?? undefined,
-
-      urgency: result.lead.urgency ?? undefined,
-
-      timeline: result.lead.timeline ?? undefined,
-
-      name: result.lead.name ?? undefined,
-
-      phone: result.lead.phone,
-
-      status: result.readyToBook ? "qualified" : result.status,
-
-      source: "public-lead-page",
+      periodStart,
+      periodEnd,
+      type: "leads",
+      amount: 1,
+      limit: subscriptionAccess.limits.leads,
     });
+
+    if (!leadUsage.allowed) {
+      return NextResponse.json(
+        {
+          error: "Monthly lead limit reached.",
+          code: "LEAD_LIMIT_REACHED",
+          usage: {
+            used: leadUsage.used,
+            limit: leadUsage.limit,
+            remaining: leadUsage.remaining,
+          },
+        },
+        {
+          status: 429,
+        },
+      );
+    }
+
+    const publicAccessToken =
+      randomBytes(32).toString("base64url");
+
+    let newLead;
+
+    try {
+      newLead = await Lead.create({
+        businessId: business._id,
+
+        publicAccessToken,
+
+        industry: result.lead.industry ?? business.industry,
+
+        service: result.lead.service ?? undefined,
+
+        location: result.lead.location ?? undefined,
+
+        urgency: result.lead.urgency ?? undefined,
+
+        timeline: result.lead.timeline ?? undefined,
+
+        name: result.lead.name ?? undefined,
+
+        phone: result.lead.phone,
+
+        status: result.readyToBook
+          ? "qualified"
+          : result.status,
+
+        source: "public-lead-page",
+      });
+    } catch (error) {
+      try {
+        await releaseSubscriptionUsage({
+          businessId: business._id,
+          periodStart,
+          periodEnd,
+          type: "leads",
+          amount: 1,
+        });
+      } catch (rollbackError) {
+        safeLogger.error(
+          "Failed to release reserved lead usage.",
+          rollbackError,
+        );
+      }
+
+      throw error;
+    }
 
     /* =====================================================
        SCHEDULE FIRST FOLLOW-UP FOR NEW LEAD
