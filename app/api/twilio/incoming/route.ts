@@ -857,8 +857,8 @@ export async function POST(request: Request) {
           });
           try {
             await sendSmsReply({
+              business,
               to: normalizedPhone,
-
               body: clarification,
             });
           } catch (smsError) {
@@ -1080,8 +1080,8 @@ export async function POST(request: Request) {
             });
             try {
               await sendSmsReply({
+                business,
                 to: normalizedPhone,
-
                 body: newRequestResult.reply,
               });
             } catch (smsError) {
@@ -1600,8 +1600,8 @@ export async function POST(request: Request) {
     });
     try {
       await sendSmsReply({
+        business,
         to: normalizedPhone,
-
         body: result.reply,
       });
     } catch (smsError) {
