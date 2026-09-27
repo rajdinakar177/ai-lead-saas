@@ -12,9 +12,7 @@ type BillingSuccessPageProps = {
   }>;
 };
 
-export default async function BillingSuccessPage({
-  searchParams,
-}: BillingSuccessPageProps) {
+export default async function BillingSuccessPage({ searchParams }: BillingSuccessPageProps) {
   const business = await requireBusiness();
 
   const { session_id: sessionId } = await searchParams;
@@ -34,8 +32,7 @@ export default async function BillingSuccessPage({
   try {
     const stripe = getStripe();
 
-    checkoutSession =
-      await stripe.checkout.sessions.retrieve(sessionId);
+    checkoutSession = await stripe.checkout.sessions.retrieve(sessionId);
   } catch {
     redirect("/billing/subscribe");
   }
@@ -59,18 +56,14 @@ export default async function BillingSuccessPage({
    * verify that the Checkout Session belongs to
    * the same Stripe customer.
    */
-  const businessStripeCustomerId =
-    business.subscription?.stripeCustomerId ?? null;
+  const businessStripeCustomerId = business.subscription?.stripeCustomerId ?? null;
 
   const checkoutCustomerId =
     typeof checkoutSession.customer === "string"
       ? checkoutSession.customer
-      : checkoutSession.customer?.id ?? null;
+      : (checkoutSession.customer?.id ?? null);
 
-  if (
-    businessStripeCustomerId &&
-    checkoutCustomerId !== businessStripeCustomerId
-  ) {
+  if (businessStripeCustomerId && checkoutCustomerId !== businessStripeCustomerId) {
     redirect("/billing/subscribe");
   }
 
@@ -83,12 +76,9 @@ export default async function BillingSuccessPage({
    * Only the subscription state synchronized by
    * our verified Stripe webhook can do that.
    */
-  const subscriptionStatus =
-    business.subscription?.status ?? "none";
+  const subscriptionStatus = business.subscription?.status ?? "none";
 
-  const hasAccess =
-    subscriptionStatus === "active" ||
-    subscriptionStatus === "trialing";
+  const hasAccess = subscriptionStatus === "active" || subscriptionStatus === "trialing";
 
   if (hasAccess) {
     redirect("/dashboard");
@@ -101,13 +91,11 @@ export default async function BillingSuccessPage({
           ✓
         </div>
 
-        <h1 className="mt-5 text-2xl font-semibold">
-          Payment received
-        </h1>
+        <h1 className="mt-5 text-2xl font-semibold">Payment received</h1>
 
         <p className="mt-3 text-sm leading-6 text-zinc-400">
-          Your payment was received and your subscription is being
-          activated. This normally takes only a few seconds.
+          Your payment was received and your subscription is being activated. This normally takes
+          only a few seconds.
         </p>
 
         <form className="mt-7">

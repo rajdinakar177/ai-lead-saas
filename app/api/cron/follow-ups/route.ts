@@ -354,7 +354,6 @@ export async function GET(request: Request) {
         }
 
         sent++;
-
       } catch (error) {
         failed++;
 

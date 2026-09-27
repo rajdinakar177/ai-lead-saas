@@ -49,17 +49,11 @@ export default async function AdminSystemPage() {
   return (
     <>
       <div>
-        <p className="text-sm font-medium uppercase tracking-widest text-blue-400">
-          Platform
-        </p>
+        <p className="text-sm font-medium uppercase tracking-widest text-blue-400">Platform</p>
 
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">
-          System
-        </h1>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight">System</h1>
 
-        <p className="mt-2 text-zinc-500">
-          Monitor platform data and integration readiness.
-        </p>
+        <p className="mt-2 text-zinc-500">Monitor platform data and integration readiness.</p>
       </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -114,8 +108,8 @@ export default async function AdminSystemPage() {
           </div>
 
           <p className="mt-5 text-sm leading-6 text-zinc-500">
-            Detailed AI token usage, SMS usage, provider costs and integration
-            health will be added when production providers are enabled.
+            Detailed AI token usage, SMS usage, provider costs and integration health will be added
+            when production providers are enabled.
           </p>
         </div>
       </div>

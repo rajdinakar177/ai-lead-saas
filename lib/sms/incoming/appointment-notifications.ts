@@ -50,11 +50,15 @@ export async function sendSmsAppointmentNotifications({
       body: confirmation,
     });
   } catch (smsError) {
-    safeLogger.error("SMS appointment confirmation delivery failed.", smsError, {
-      businessId: business._id.toString(),
-      appointmentId: appointment._id.toString(),
-      leadId: lead._id.toString(),
-    });
+    safeLogger.error(
+      "SMS appointment confirmation delivery failed.",
+      smsError,
+      {
+        businessId: business._id.toString(),
+        appointmentId: appointment._id.toString(),
+        leadId: lead._id.toString(),
+      },
+    );
   }
 
   /* =====================================================

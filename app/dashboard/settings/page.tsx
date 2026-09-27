@@ -31,12 +31,12 @@ export default async function SettingsPage() {
 
   const googleCalendar = googleIntegration
     ? {
-      connected: googleIntegration.connected === true,
+        connected: googleIntegration.connected === true,
 
-      googleEmail: googleIntegration.googleEmail ?? null,
+        googleEmail: googleIntegration.googleEmail ?? null,
 
-      calendarId: googleIntegration.calendarId || "primary",
-    }
+        calendarId: googleIntegration.calendarId || "primary",
+      }
     : null;
 
   return (
@@ -73,9 +73,7 @@ export default async function SettingsPage() {
           currentPlan={business.subscription?.plan ?? null}
           currentStatus={business.subscription?.status ?? "none"}
           cancelAt={
-            business.subscription?.cancelAt
-              ? business.subscription.cancelAt.toISOString()
-              : null
+            business.subscription?.cancelAt ? business.subscription.cancelAt.toISOString() : null
           }
         />
       </div>

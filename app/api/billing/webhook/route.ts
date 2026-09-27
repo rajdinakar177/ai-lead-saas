@@ -26,26 +26,18 @@ function getPlanFromPriceId(priceId: string | null): PlanId | null {
     return null;
   }
 
-  if (
-    process.env.STRIPE_STARTER_PRICE_ID &&
-    priceId === process.env.STRIPE_STARTER_PRICE_ID
-  ) {
+  if (process.env.STRIPE_STARTER_PRICE_ID && priceId === process.env.STRIPE_STARTER_PRICE_ID) {
     return "starter";
   }
 
-  if (
-    process.env.STRIPE_PRO_PRICE_ID &&
-    priceId === process.env.STRIPE_PRO_PRICE_ID
-  ) {
+  if (process.env.STRIPE_PRO_PRICE_ID && priceId === process.env.STRIPE_PRO_PRICE_ID) {
     return "pro";
   }
 
   return null;
 }
 
-function getStripeCustomerId(
-  customer: string | Stripe.Customer | Stripe.DeletedCustomer,
-) {
+function getStripeCustomerId(customer: string | Stripe.Customer | Stripe.DeletedCustomer) {
   return typeof customer === "string" ? customer : customer.id;
 }
 
@@ -53,30 +45,23 @@ async function syncSubscription(subscription: Stripe.Subscription) {
   const item = subscription.items.data[0];
 
   if (!item) {
-    throw new Error(
-      `Stripe subscription ${subscription.id} does not contain a subscription item.`,
-    );
+    throw new Error(`Stripe subscription ${subscription.id} does not contain a subscription item.`);
   }
 
   const stripePriceId = item.price.id;
 
   const plan =
     getPlanFromPriceId(stripePriceId) ||
-    (subscription.metadata.plan === "starter" ||
-      subscription.metadata.plan === "pro"
+    (subscription.metadata.plan === "starter" || subscription.metadata.plan === "pro"
       ? subscription.metadata.plan
       : null);
 
   if (!plan) {
-    throw new Error(
-      `Unable to determine plan for Stripe subscription ${subscription.id}.`,
-    );
+    throw new Error(`Unable to determine plan for Stripe subscription ${subscription.id}.`);
   }
 
   if (!SUPPORTED_STATUSES.has(subscription.status)) {
-    throw new Error(
-      `Unsupported Stripe subscription status: ${subscription.status}.`,
-    );
+    throw new Error(`Unsupported Stripe subscription status: ${subscription.status}.`);
   }
 
   const businessId = subscription.metadata.businessId || null;
@@ -92,13 +77,11 @@ async function syncSubscription(subscription: Stripe.Subscription) {
   const business = businessId
     ? await Business.findById(businessId)
     : await Business.findOne({
-      "subscription.stripeCustomerId": stripeCustomerId,
-    });
+        "subscription.stripeCustomerId": stripeCustomerId,
+      });
 
   if (!business) {
-    throw new Error(
-      `Business not found for Stripe subscription ${subscription.id}.`,
-    );
+    throw new Error(`Business not found for Stripe subscription ${subscription.id}.`);
   }
 
   /*
@@ -109,9 +92,7 @@ async function syncSubscription(subscription: Stripe.Subscription) {
     business.subscription?.stripeCustomerId &&
     business.subscription.stripeCustomerId !== stripeCustomerId
   ) {
-    throw new Error(
-      `Stripe customer mismatch for business ${business._id.toString()}.`,
-    );
+    throw new Error(`Stripe customer mismatch for business ${business._id.toString()}.`);
   }
 
   await Business.updateOne(
@@ -134,8 +115,7 @@ async function syncSubscription(subscription: Stripe.Subscription) {
           ? new Date(item.current_period_end * 1000)
           : null,
 
-        "subscription.cancelAtPeriodEnd":
-          subscription.cancel_at_period_end,
+        "subscription.cancelAtPeriodEnd": subscription.cancel_at_period_end,
 
         "subscription.cancelAt": subscription.cancel_at
           ? new Date(subscription.cancel_at * 1000)
@@ -147,8 +127,6 @@ async function syncSubscription(subscription: Stripe.Subscription) {
       },
     },
   );
-
-
 }
 
 export async function POST(request: NextRequest) {
@@ -192,11 +170,7 @@ export async function POST(request: NextRequest) {
 
     const stripe = getStripe();
 
-    const event = stripe.webhooks.constructEvent(
-      rawBody,
-      signature,
-      webhookSecret,
-    );
+    const event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
 
     await connectDB();
 
@@ -204,9 +178,7 @@ export async function POST(request: NextRequest) {
       case "customer.subscription.created":
       case "customer.subscription.updated":
       case "customer.subscription.deleted": {
-        await syncSubscription(
-          event.data.object as Stripe.Subscription,
-        );
+        await syncSubscription(event.data.object as Stripe.Subscription);
 
         break;
       }
@@ -223,10 +195,7 @@ export async function POST(request: NextRequest) {
       received: true,
     });
   } catch (error) {
-    safeLogger.error(
-      "Stripe webhook processing failed.",
-      error,
-    );
+    safeLogger.error("Stripe webhook processing failed.", error);
 
     return NextResponse.json(
       {

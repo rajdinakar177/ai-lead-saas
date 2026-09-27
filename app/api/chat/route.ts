@@ -19,7 +19,9 @@ import {
 import { applyRequestRateLimit } from "@/lib/request-rate-limit";
 import { safeLogger } from "@/lib/security/safe-logger";
 import { getSubscriptionAccess } from "@/lib/subscription-access";
-import { consumeSubscriptionUsage, releaseSubscriptionUsage, } from "@/lib/subscription-usage";
+import { consumeSubscriptionUsage, releaseSubscriptionUsage } from "@/lib/subscription-usage";
+import { getOrCreateAiConversationSession } from "@/lib/ai-conversation-session";
+import { AIConversation } from "@/models/AIConversation";
 /* =========================================================
    TYPES
    ========================================================= */
@@ -27,15 +29,18 @@ import { consumeSubscriptionUsage, releaseSubscriptionUsage, } from "@/lib/subsc
 type RequestBody = {
   leadId?: string | null;
   publicAccessToken?: string | null;
+
+  conversationToken?: string | null;
+
   businessSlug?: string;
   messages: ChatMessage[];
   lead: LeadData;
 };
-
 const MAX_MESSAGES = 50;
 const MAX_MESSAGE_LENGTH = 2000;
 const MAX_BUSINESS_SLUG_LENGTH = 100;
 const MAX_PUBLIC_ACCESS_TOKEN_LENGTH = 200;
+const MAX_CONVERSATION_TOKEN_LENGTH = 200;
 const MAX_LEAD_FIELD_LENGTH = 500;
 
 const LEAD_TEXT_FIELDS = [
@@ -107,6 +112,14 @@ function validateRequestBody(value: unknown): string | null {
     return "Invalid publicAccessToken.";
   }
 
+  if (
+    value.conversationToken !== undefined &&
+    value.conversationToken !== null &&
+    (typeof value.conversationToken !== "string" ||
+      value.conversationToken.length > MAX_CONVERSATION_TOKEN_LENGTH)
+  ) {
+    return "Invalid conversationToken.";
+  }
   if (!isRecord(value.lead)) {
     return "lead is required.";
   }
@@ -341,7 +354,66 @@ export async function POST(request: Request) {
 
       await existingLead.save();
     }
+    const aiConversationSession = await getOrCreateAiConversationSession({
+      business,
+      conversationToken: body.conversationToken ?? null,
+    });
 
+    if (!aiConversationSession.allowed) {
+      if (aiConversationSession.reason === "limit_reached") {
+        return NextResponse.json(
+          {
+            error: "Monthly AI conversation limit reached.",
+            code: "AI_CONVERSATION_LIMIT_REACHED",
+
+            usage: {
+              used: aiConversationSession.used ?? 0,
+              limit: aiConversationSession.limit ?? 0,
+              remaining: aiConversationSession.remaining ?? 0,
+            },
+          },
+          {
+            status: 429,
+          },
+        );
+      }
+
+      if (aiConversationSession.reason === "subscription_required") {
+        return NextResponse.json(
+          {
+            error: "An active subscription is required.",
+          },
+          {
+            status: 403,
+          },
+        );
+      }
+
+      if (aiConversationSession.reason === "billing_period_missing") {
+        safeLogger.error("Business AI billing period is missing.", undefined, {
+          businessId: business._id.toString(),
+        });
+
+        return NextResponse.json(
+          {
+            error: "Subscription billing information is temporarily unavailable.",
+          },
+          {
+            status: 503,
+          },
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error: "Invalid AI conversation.",
+          code: "INVALID_AI_CONVERSATION",
+        },
+        {
+          status: 401,
+        },
+      );
+    }
     /* =====================================================
        GENERATE AI RESPONSE
        ===================================================== */
@@ -431,6 +503,8 @@ export async function POST(request: Request) {
 
         publicAccessToken: existingLead.publicAccessToken,
 
+        conversationToken: aiConversationSession.conversationToken,
+
         messageId: aiMessage._id.toString(),
       });
     }
@@ -451,6 +525,7 @@ export async function POST(request: Request) {
         leadId: null,
 
         publicAccessToken: null,
+        conversationToken: aiConversationSession.conversationToken,
 
         messageId: null,
       });
@@ -477,6 +552,8 @@ export async function POST(request: Request) {
 
         publicAccessToken: null,
 
+        conversationToken: aiConversationSession.conversationToken,
+
         messageId: null,
 
         readyToBook: false,
@@ -490,14 +567,9 @@ export async function POST(request: Request) {
 
        NOW this becomes a real Lead.
        ===================================================== */
-    const subscriptionAccess = getSubscriptionAccess(
-      business.subscription,
-    );
+    const subscriptionAccess = getSubscriptionAccess(business.subscription);
 
-    if (
-      !subscriptionAccess.hasAccess ||
-      !subscriptionAccess.limits
-    ) {
+    if (!subscriptionAccess.hasAccess || !subscriptionAccess.limits) {
       return NextResponse.json(
         {
           error: "An active subscription is required.",
@@ -508,25 +580,18 @@ export async function POST(request: Request) {
       );
     }
 
-    const periodStart =
-      business.subscription?.currentPeriodStart;
+    const periodStart = business.subscription?.currentPeriodStart;
 
-    const periodEnd =
-      business.subscription?.currentPeriodEnd;
+    const periodEnd = business.subscription?.currentPeriodEnd;
 
     if (!periodStart || !periodEnd) {
-      safeLogger.error(
-        "Business subscription billing period is missing.",
-        undefined,
-        {
-          businessId: business._id.toString(),
-        },
-      );
+      safeLogger.error("Business subscription billing period is missing.", undefined, {
+        businessId: business._id.toString(),
+      });
 
       return NextResponse.json(
         {
-          error:
-            "Subscription billing information is temporarily unavailable.",
+          error: "Subscription billing information is temporarily unavailable.",
         },
         {
           status: 503,
@@ -560,8 +625,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const publicAccessToken =
-      randomBytes(32).toString("base64url");
+    const publicAccessToken = randomBytes(32).toString("base64url");
 
     let newLead;
 
@@ -585,9 +649,7 @@ export async function POST(request: Request) {
 
         phone: result.lead.phone,
 
-        status: result.readyToBook
-          ? "qualified"
-          : result.status,
+        status: result.readyToBook ? "qualified" : result.status,
 
         source: "public-lead-page",
       });
@@ -601,15 +663,22 @@ export async function POST(request: Request) {
           amount: 1,
         });
       } catch (rollbackError) {
-        safeLogger.error(
-          "Failed to release reserved lead usage.",
-          rollbackError,
-        );
+        safeLogger.error("Failed to release reserved lead usage.", rollbackError);
       }
 
       throw error;
     }
-
+    await AIConversation.updateOne(
+      {
+        _id: aiConversationSession.conversationId,
+        businessId: business._id,
+      },
+      {
+        $set: {
+          leadId: newLead._id,
+        },
+      },
+    );
     /* =====================================================
        SCHEDULE FIRST FOLLOW-UP FOR NEW LEAD
 
@@ -693,6 +762,8 @@ export async function POST(request: Request) {
       leadId: newLead._id.toString(),
 
       publicAccessToken,
+
+      conversationToken: aiConversationSession.conversationToken,
 
       messageId: aiMessage._id.toString(),
     });

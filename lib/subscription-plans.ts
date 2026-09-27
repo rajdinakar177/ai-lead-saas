@@ -22,15 +22,11 @@ export type SubscriptionPlanConfig = {
   features: SubscriptionPlanFeatures;
 };
 
-export const SUBSCRIPTION_PLANS: Record<
-  PlanId,
-  SubscriptionPlanConfig
-> = {
+export const SUBSCRIPTION_PLANS: Record<PlanId, SubscriptionPlanConfig> = {
   starter: {
     id: "starter",
     name: "Starter",
-    description:
-      "Essential lead capture and qualification tools.",
+    description: "Essential lead capture and qualification tools.",
     priceId: process.env.STRIPE_STARTER_PRICE_ID,
 
     limits: {
@@ -50,8 +46,7 @@ export const SUBSCRIPTION_PLANS: Record<
   pro: {
     id: "pro",
     name: "Pro",
-    description:
-      "Advanced automation and lead management tools.",
+    description: "Advanced automation and lead management tools.",
     priceId: process.env.STRIPE_PRO_PRICE_ID,
 
     limits: {

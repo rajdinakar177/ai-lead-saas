@@ -34,9 +34,7 @@ export type ReserveLeadQuotaResult =
   | {
       allowed: false;
       reason:
-        | "subscription_required"
-        | "billing_period_missing"
-        | "limit_reached";
+        "subscription_required" | "billing_period_missing" | "limit_reached";
       used?: number;
       limit?: number;
       remaining?: number;
@@ -45,9 +43,7 @@ export type ReserveLeadQuotaResult =
 export async function reserveLeadQuota(
   business: BusinessLike,
 ): Promise<ReserveLeadQuotaResult> {
-  const access = getSubscriptionAccess(
-    business.subscription,
-  );
+  const access = getSubscriptionAccess(business.subscription);
 
   if (!access.hasAccess || !access.limits) {
     return {
@@ -56,11 +52,9 @@ export async function reserveLeadQuota(
     };
   }
 
-  const periodStart =
-    business.subscription?.currentPeriodStart;
+  const periodStart = business.subscription?.currentPeriodStart;
 
-  const periodEnd =
-    business.subscription?.currentPeriodEnd;
+  const periodEnd = business.subscription?.currentPeriodEnd;
 
   if (!periodStart || !periodEnd) {
     return {

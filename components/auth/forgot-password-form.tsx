@@ -70,7 +70,10 @@ export function ForgotPasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="mt-8 space-y-5">
       <div>
-        <label htmlFor="email" className="mb-2 block text-sm font-medium text-zinc-300">
+        <label
+          htmlFor="email"
+          className="mb-2 block text-sm font-medium text-zinc-300"
+        >
           Email address
         </label>
 

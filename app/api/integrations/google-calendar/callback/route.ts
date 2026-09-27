@@ -51,9 +51,7 @@ export async function GET(request: NextRequest) {
     const business = await getCurrentBusiness();
 
     if (!business) {
-      return clearOAuthStateCookie(
-        NextResponse.redirect(new URL("/login", request.url)),
-      );
+      return clearOAuthStateCookie(NextResponse.redirect(new URL("/login", request.url)));
     }
 
     const searchParams = request.nextUrl.searchParams;

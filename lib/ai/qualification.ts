@@ -23,12 +23,7 @@ export type LeadData = {
 };
 
 export type QualificationField =
-  | "name"
-  | "phone"
-  | "service"
-  | "location"
-  | "urgency"
-  | "timeline";
+  "name" | "phone" | "service" | "location" | "urgency" | "timeline";
 
 export type AISettings = {
   businessDescription: string;
@@ -97,7 +92,9 @@ function calculateQualificationState(
 } {
   const readyToBook = requiredFields.every((field) => Boolean(lead[field]));
 
-  const collectedFields = requiredFields.filter((field) => Boolean(lead[field])).length;
+  const collectedFields = requiredFields.filter((field) =>
+    Boolean(lead[field]),
+  ).length;
 
   let status: LeadStatus = "new";
 
@@ -611,7 +608,6 @@ function createMockResponse(
   /* =========================================================
      2. PHONE
      ========================================================= */
-
   else if (needs("phone") && !lead.phone) {
     reply = lead.service
       ? `What's the best phone number to reach you about your ${lead.service}?`
@@ -621,7 +617,6 @@ function createMockResponse(
   /* =========================================================
      3. NAME
      ========================================================= */
-
   else if (needs("name") && !lead.name) {
     reply = "What name should I put on the service request?";
   }
@@ -629,7 +624,6 @@ function createMockResponse(
   /* =========================================================
      4. LOCATION
      ========================================================= */
-
   else if (needs("location") && !lead.location) {
     reply =
       "What city, ZIP/postal code, or service location is the property in?";
@@ -638,7 +632,6 @@ function createMockResponse(
   /* =========================================================
      5. URGENCY
      ========================================================= */
-
   else if (needs("urgency") && !lead.urgency) {
     reply = "How urgent is the issue?";
 
@@ -665,7 +658,6 @@ function createMockResponse(
   /* =========================================================
      6. TIMELINE
      ========================================================= */
-
   else if (needs("timeline") && !lead.timeline) {
     reply = "When would you ideally like someone to come out?";
 
@@ -692,7 +684,6 @@ function createMockResponse(
   /* =========================================================
      COMPLETE
      ========================================================= */
-
   else {
     reply =
       "Great — I have everything I need. You can choose an available appointment time below.";
@@ -759,16 +750,18 @@ Business description:
 ${business.aiSettings.businessDescription || "Not provided"}
 
 Services offered:
-${business.aiSettings.services.length
-        ? business.aiSettings.services.join(", ")
-        : "Not specifically configured"
-      }
+${
+  business.aiSettings.services.length
+    ? business.aiSettings.services.join(", ")
+    : "Not specifically configured"
+}
 
 Service areas:
-${business.aiSettings.serviceAreas.length
-        ? business.aiSettings.serviceAreas.join(", ")
-        : "Not specifically configured"
-      }
+${
+  business.aiSettings.serviceAreas.length
+    ? business.aiSettings.serviceAreas.join(", ")
+    : "Not specifically configured"
+}
 
 Conversation tone:
 ${business.aiSettings.tone}
@@ -929,10 +922,7 @@ ${conversation}
      Keeps production OpenAI UI behavior consistent with mock.
      ========================================================= */
 
-  const options = getQualificationOptions(
-    lead,
-    business.aiSettings,
-  );
+  const options = getQualificationOptions(lead, business.aiSettings);
   const reply =
     invalidPhone && business.aiSettings.qualificationFields.includes("phone")
       ? "Please enter a valid phone number."

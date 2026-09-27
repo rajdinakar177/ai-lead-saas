@@ -48,7 +48,9 @@ export function createSmsLockHeartbeat({
           if (!renewed) {
             lockLost = true;
 
-            const error = new Error("SMS conversation lock ownership was lost.");
+            const error = new Error(
+              "SMS conversation lock ownership was lost.",
+            );
 
             safeLogger.error("SMS conversation lock renewal rejected.", error, {
               businessId: businessId?.toString?.() ?? String(businessId),

@@ -35,4 +35,5 @@ adminSessionSchema.index(
   },
 );
 
-export const AdminSession = models.AdminSession || model("AdminSession", adminSessionSchema);
+export const AdminSession =
+  models.AdminSession || model("AdminSession", adminSessionSchema);

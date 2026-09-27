@@ -27,7 +27,9 @@ export async function getGoogleCalendarClient({
   }
 
   if (!integration.refreshToken) {
-    throw new Error("Google Calendar refresh token is missing. Reconnect Google Calendar.");
+    throw new Error(
+      "Google Calendar refresh token is missing. Reconnect Google Calendar.",
+    );
   }
 
   /*
@@ -112,9 +114,13 @@ export async function getGoogleCalendarClient({
         },
       );
     } catch (error) {
-      safeLogger.error("Unable to save refreshed Google Calendar credentials.", error, {
-        businessId,
-      });
+      safeLogger.error(
+        "Unable to save refreshed Google Calendar credentials.",
+        error,
+        {
+          businessId,
+        },
+      );
     }
   });
 

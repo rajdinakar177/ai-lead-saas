@@ -123,8 +123,8 @@ export async function PATCH(request: Request) {
 
     const qualificationFields = Array.isArray(body.qualificationFields)
       ? body.qualificationFields.filter((field): field is QualificationField =>
-        allowedQualificationFields.includes(field as QualificationField),
-      )
+          allowedQualificationFields.includes(field as QualificationField),
+        )
       : [];
 
     const services = cleanStringArray(body.services, MAX_ARRAY_ITEM_LENGTH);

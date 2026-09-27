@@ -44,7 +44,10 @@ export async function POST(request: Request) {
       );
     }
 
-    if (email.length > MAX_EMAIL_LENGTH || Buffer.byteLength(password, "utf8") > MAX_PASSWORD_BYTES) {
+    if (
+      email.length > MAX_EMAIL_LENGTH ||
+      Buffer.byteLength(password, "utf8") > MAX_PASSWORD_BYTES
+    ) {
       return NextResponse.json(
         {
           error: "Invalid email or password.",

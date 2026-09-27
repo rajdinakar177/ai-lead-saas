@@ -50,9 +50,7 @@ export function SubscriptionSettings({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error || "Unable to start checkout.",
-        );
+        throw new Error(data.error || "Unable to start checkout.");
       }
 
       if (!data.url) {
@@ -62,9 +60,7 @@ export function SubscriptionSettings({
       window.location.href = data.url;
     } catch (error) {
       setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to start checkout.",
+        error instanceof Error ? error.message : "Unable to start checkout.",
       );
 
       setLoadingPlan(null);
@@ -83,15 +79,11 @@ export function SubscriptionSettings({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error || "Unable to open billing portal.",
-        );
+        throw new Error(data.error || "Unable to open billing portal.");
       }
 
       if (!data.url) {
-        throw new Error(
-          "Billing portal URL was not returned.",
-        );
+        throw new Error("Billing portal URL was not returned.");
       }
 
       window.location.href = data.url;
@@ -111,8 +103,7 @@ export function SubscriptionSettings({
       id: "starter" as const,
       name: "Starter",
       price: "$49",
-      description:
-        "For businesses getting started with AI lead management.",
+      description: "For businesses getting started with AI lead management.",
       features: [
         "AI lead qualification",
         "Lead management dashboard",
@@ -124,8 +115,7 @@ export function SubscriptionSettings({
       id: "pro" as const,
       name: "Pro",
       price: "$99",
-      description:
-        "For businesses that need more automation and capacity.",
+      description: "For businesses that need more automation and capacity.",
       features: [
         "Everything in Starter",
         "Advanced SMS automation",
@@ -138,9 +128,7 @@ export function SubscriptionSettings({
   return (
     <div>
       <div className="mb-5">
-        <h2 className="font-semibold text-white">
-          Subscription
-        </h2>
+        <h2 className="font-semibold text-white">Subscription</h2>
 
         <p className="mt-1 text-sm text-zinc-600">
           Manage your subscription and billing.
@@ -151,30 +139,21 @@ export function SubscriptionSettings({
         <div className="mb-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm text-zinc-400">
-                Current plan
-              </p>
+              <p className="text-sm text-zinc-400">Current plan</p>
 
               <p className="mt-1 font-medium text-white">
-                {currentPlan === "starter"
-                  ? "Starter"
-                  : "Pro"}
+                {currentPlan === "starter" ? "Starter" : "Pro"}
                 {" · "}
                 <span className="capitalize">
-                  {(currentStatus ?? "none").replaceAll(
-                    "_",
-                    " ",
-                  )}
+                  {(currentStatus ?? "none").replaceAll("_", " ")}
                 </span>
               </p>
 
-              {cancellationDate &&
-                currentStatus === "active" && (
-                  <p className="mt-2 text-sm text-amber-400">
-                    Scheduled to cancel on{" "}
-                    {cancellationDate}
-                  </p>
-                )}
+              {cancellationDate && currentStatus === "active" && (
+                <p className="mt-2 text-sm text-amber-400">
+                  Scheduled to cancel on {cancellationDate}
+                </p>
+              )}
             </div>
 
             {hasManageableSubscription && (
@@ -184,9 +163,7 @@ export function SubscriptionSettings({
                 disabled={billingLoading}
                 className="rounded-lg border border-zinc-700 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {billingLoading
-                  ? "Opening billing..."
-                  : "Manage Billing"}
+                {billingLoading ? "Opening billing..." : "Manage Billing"}
               </button>
             )}
           </div>
@@ -203,26 +180,21 @@ export function SubscriptionSettings({
         {plans.map((plan) => {
           const isCurrentPlan =
             currentPlan === plan.id &&
-            (currentStatus === "active" ||
-              currentStatus === "trialing");
+            (currentStatus === "active" || currentStatus === "trialing");
 
           return (
             <div
               key={plan.id}
               className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6"
             >
-              <h3 className="text-lg font-semibold text-white">
-                {plan.name}
-              </h3>
+              <h3 className="text-lg font-semibold text-white">{plan.name}</h3>
 
               <div className="mt-3">
                 <span className="text-3xl font-bold text-white">
                   {plan.price}
                 </span>
 
-                <span className="text-sm text-zinc-500">
-                  /month
-                </span>
+                <span className="text-sm text-zinc-500">/month</span>
               </div>
 
               <p className="mt-3 text-sm leading-6 text-zinc-500">
@@ -231,10 +203,7 @@ export function SubscriptionSettings({
 
               <ul className="mt-5 space-y-2">
                 {plan.features.map((feature) => (
-                  <li
-                    key={feature}
-                    className="text-sm text-zinc-300"
-                  >
+                  <li key={feature} className="text-sm text-zinc-300">
                     ✓ {feature}
                   </li>
                 ))}

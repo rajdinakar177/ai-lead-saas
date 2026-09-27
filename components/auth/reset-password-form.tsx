@@ -73,7 +73,9 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
         router.refresh();
       }, 2000);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Unable to reset password.");
+      setError(
+        error instanceof Error ? error.message : "Unable to reset password.",
+      );
     } finally {
       setLoading(false);
     }
@@ -83,12 +85,19 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
     return (
       <div className="mt-8 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-4">
         <div className="flex items-start gap-3">
-          <CheckCircle2 size={20} className="mt-0.5 shrink-0 text-emerald-400" />
+          <CheckCircle2
+            size={20}
+            className="mt-0.5 shrink-0 text-emerald-400"
+          />
 
           <div>
-            <p className="font-medium text-emerald-400">Password reset successfully.</p>
+            <p className="font-medium text-emerald-400">
+              Password reset successfully.
+            </p>
 
-            <p className="mt-1 text-sm text-zinc-400">Redirecting you to login...</p>
+            <p className="mt-1 text-sm text-zinc-400">
+              Redirecting you to login...
+            </p>
 
             <Link
               href="/login"

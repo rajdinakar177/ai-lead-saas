@@ -8,17 +8,13 @@ export const dynamic = "force-dynamic";
 export default async function SubscribePage() {
   const business = await requireBusiness();
 
-  const subscriptionStatus =
-    business.subscription?.status ?? "none";
+  const subscriptionStatus = business.subscription?.status ?? "none";
 
   /*
    * Already subscribed businesses should not
    * need to see the initial subscription page.
    */
-  if (
-    subscriptionStatus === "active" ||
-    subscriptionStatus === "trialing"
-  ) {
+  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") {
     redirect("/dashboard");
   }
 
@@ -35,8 +31,7 @@ export default async function SubscribePage() {
           </h1>
 
           <p className="mt-4 text-sm leading-6 text-zinc-500 sm:text-base">
-            Select a plan to activate your account and access your
-            dashboard.
+            Select a plan to activate your account and access your dashboard.
           </p>
         </div>
 

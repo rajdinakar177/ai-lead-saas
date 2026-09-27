@@ -49,7 +49,7 @@ import { getSmsAvailableSlots } from "@/lib/sms/incoming/appointment-availabilit
 import { sendFreshSmsAppointmentOptions } from "@/lib/sms/incoming/appointment-options";
 import { bookSmsAppointmentAtomically } from "@/lib/sms/incoming/appointment-booking";
 import { sendSmsAppointmentNotifications } from "@/lib/sms/incoming/appointment-notifications";
-
+import { reserveLeadQuota, releaseLeadQuota } from "@/lib/lead-quota";
 const VALID_TIMELINES: Timeline[] = ["Today", "Tomorrow", "This week", "Next week"];
 
 /*
@@ -521,7 +521,6 @@ export async function POST(request: Request) {
             }
 
             lead = switchedLead;
-
           } catch (error) {
             await restorePreviousSmsConversation({
               leadId: previousActiveLead._id,
@@ -538,9 +537,9 @@ export async function POST(request: Request) {
         }
 
         /* ===================================================
-           CASE 2:
-           REQUESTED SERVICE DOES NOT HAVE AN OPEN LEAD YET
-           =================================================== */
+        CASE 2:
+        REQUESTED SERVICE DOES NOT HAVE AN OPEN LEAD YET
+        =================================================== */
         else if (
           !existingRequestedLead &&
           normalizeText(lead.service ?? "") !== requestedServiceNormalized
@@ -581,6 +580,27 @@ export async function POST(request: Request) {
             return successResponse();
           }
 
+          const leadQuota = await reserveLeadQuota(business);
+
+          if (!leadQuota.allowed) {
+            await restorePreviousSmsConversation({
+              leadId: previousActiveLead._id,
+
+              businessId: business._id,
+
+              phone: normalizedPhone,
+
+              fenceToken: conversationLockFenceToken!,
+            });
+
+            safeLogger.warn("SMS service lead creation blocked by subscription lead quota.", {
+              businessId: business._id.toString(),
+              reason: leadQuota.reason,
+            });
+
+            return successResponse();
+          }
+
           try {
             const createdLead = await Lead.create({
               businessId: business._id,
@@ -609,8 +629,13 @@ export async function POST(request: Request) {
             });
 
             lead = createdLead;
-
           } catch (error) {
+            try {
+              await releaseLeadQuota(leadQuota.reservation);
+            } catch (quotaError) {
+              safeLogger.error("Failed to release SMS lead quota reservation.", quotaError);
+            }
+
             /*
              * If creation fails, try to restore the previous
              * conversation so the customer is not left without
@@ -702,7 +727,6 @@ export async function POST(request: Request) {
             }
 
             lead = switchedLead;
-
           } catch (error) {
             await restorePreviousSmsConversation({
               leadId: previousActiveLead._id,
@@ -763,7 +787,6 @@ export async function POST(request: Request) {
         }
 
         lead = activation.lead;
-
       }
 
       /* ===================================================
@@ -805,7 +828,6 @@ export async function POST(request: Request) {
           }
 
           lead = activation.lead;
-
         } else {
           const uniqueServices = Array.from(
             new Set(
@@ -883,6 +905,17 @@ export async function POST(request: Request) {
         if (newRequestResult.lead.service) {
           let createdLead: any = null;
 
+          const leadQuota = await reserveLeadQuota(business);
+
+          if (!leadQuota.allowed) {
+            safeLogger.warn("New SMS lead creation blocked by subscription lead quota.", {
+              businessId: business._id.toString(),
+              reason: leadQuota.reason,
+            });
+
+            return successResponse();
+          }
+
           try {
             /*
              * Create the new lead directly as the active
@@ -917,6 +950,12 @@ export async function POST(request: Request) {
               smsFenceToken: conversationLockFenceToken!,
             });
           } catch (error) {
+            try {
+              await releaseLeadQuota(leadQuota.reservation);
+            } catch (quotaError) {
+              safeLogger.error("Failed to release SMS lead quota reservation.", quotaError);
+            }
+
             if (!isMongoDuplicateKeyError(error)) {
               throw error;
             }
@@ -925,10 +964,11 @@ export async function POST(request: Request) {
              * Another request created / activated a lead for
              * this business + phone before this request.
              *
-             * Reload that winner and continue processing the
-             * current inbound SMS against it.
+             * This request did not create the Lead, so its
+             * reserved quota has already been released above.
+             *
+             * Reload the winning active Lead and continue.
              */
-
             const activeWinner = await Lead.findOne({
               businessId: business._id,
 
@@ -952,9 +992,7 @@ export async function POST(request: Request) {
             }
 
             lead = activeWinner;
-
           }
-
           /* ===============================================
              NEW LEAD WAS SUCCESSFULLY CREATED
              =============================================== */

@@ -90,7 +90,7 @@ export async function POST(request: Request) {
       success: true,
     });
   } catch (error) {
-  safeLogger.error("Resend verification error:", error);
+    safeLogger.error("Resend verification error:", error);
 
     return NextResponse.json(
       {

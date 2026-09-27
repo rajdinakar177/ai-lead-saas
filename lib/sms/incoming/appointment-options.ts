@@ -46,7 +46,9 @@ export async function sendFreshSmsAppointmentOptions({
       .map((slot, index) => `${index + 1}. ${slot.label}`)
       .join("\n");
 
-    const optionNumbers = firstThreeSlots.map((_, index) => index + 1).join(", ");
+    const optionNumbers = firstThreeSlots
+      .map((_, index) => index + 1)
+      .join(", ");
 
     reply = `${reason}\n\n${slotLines}\n\nReply with ${optionNumbers}.`;
   } else {
@@ -114,7 +116,9 @@ export async function sendFreshSmsAppointmentOptions({
   });
 
   if (!fencedLead) {
-    throw new Error("Stale SMS worker rejected while refreshing appointment options.");
+    throw new Error(
+      "Stale SMS worker rejected while refreshing appointment options.",
+    );
   }
 
   lead = fencedLead;
@@ -156,9 +160,13 @@ export async function sendFreshSmsAppointmentOptions({
       body: reply,
     });
   } catch (smsError) {
-    safeLogger.error("Fresh SMS appointment options delivery failed.", smsError, {
-      businessId: business._id.toString(),
-      leadId: lead._id.toString(),
-    });
+    safeLogger.error(
+      "Fresh SMS appointment options delivery failed.",
+      smsError,
+      {
+        businessId: business._id.toString(),
+        leadId: lead._id.toString(),
+      },
+    );
   }
 }

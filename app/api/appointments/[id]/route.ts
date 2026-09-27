@@ -56,16 +56,16 @@ export async function PATCH(
       return originError;
     }
     const business = await getCurrentBusiness();
-if (!business) {
-  return NextResponse.json(
-    {
-      error: "Unauthorized.",
-    },
-    {
-      status: 401,
-    },
-  );
-}
+    if (!business) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized.",
+        },
+        {
+          status: 401,
+        },
+      );
+    }
     const { id } = await params;
 
     const body: UpdateAppointmentRequest = await request.json();
@@ -434,10 +434,14 @@ if (!business) {
               },
             );
           } catch (syncErrorSaveError) {
-            safeLogger.error("Unable to save Google Calendar reschedule sync error.", syncErrorSaveError, {
-              appointmentId: appointment._id.toString(),
-              businessId: business._id.toString(),
-            });
+            safeLogger.error(
+              "Unable to save Google Calendar reschedule sync error.",
+              syncErrorSaveError,
+              {
+                appointmentId: appointment._id.toString(),
+                businessId: business._id.toString(),
+              },
+            );
           }
         }
       }
@@ -602,10 +606,14 @@ if (!business) {
               },
             );
           } catch (syncErrorSaveError) {
-            safeLogger.error("Unable to save Google Calendar cancellation sync error.", syncErrorSaveError, {
-              appointmentId: appointment._id.toString(),
-              businessId: business._id.toString(),
-            });
+            safeLogger.error(
+              "Unable to save Google Calendar cancellation sync error.",
+              syncErrorSaveError,
+              {
+                appointmentId: appointment._id.toString(),
+                businessId: business._id.toString(),
+              },
+            );
           }
         }
       }

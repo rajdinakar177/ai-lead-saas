@@ -37,13 +37,9 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
               Account Recovery
             </p>
 
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight">
-              Create a new password.
-            </h1>
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight">Create a new password.</h1>
 
-            <p className="mt-3 text-zinc-500">
-              Choose a new password for your business account.
-            </p>
+            <p className="mt-3 text-zinc-500">Choose a new password for your business account.</p>
           </div>
 
           {token ? (

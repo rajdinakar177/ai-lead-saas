@@ -49,9 +49,13 @@ type AppointmentSlot = {
 type ChatApiResponse = {
   reply: string;
 
-  leadId?: string | null;
+  error?: string;
+  code?: string;
 
+  leadId?: string | null;
   publicAccessToken?: string | null;
+  conversationToken?: string | null;
+
 
   lead: {
     industry: string | null;
@@ -88,7 +92,9 @@ export function DemoChat({
   compact = false,
 }: DemoChatProps) {
   const [leadId, setLeadId] = useState<string | null>(null);
-
+  const [conversationToken, setConversationToken] = useState<string | null>(
+    null,
+  );
   const [publicAccessToken, setPublicAccessToken] = useState<string | null>(
     null,
   );
@@ -189,10 +195,19 @@ export function DemoChat({
         const storageKey = `leadflow:${businessSlug}:leadId`;
 
         const tokenStorageKey = `leadflow:${businessSlug}:publicAccessToken`;
+        const conversationTokenStorageKey = `leadflow:${businessSlug}:conversationToken`;
 
         const storedLeadId = localStorage.getItem(storageKey);
 
         const storedPublicAccessToken = localStorage.getItem(tokenStorageKey);
+
+        const storedConversationToken = localStorage.getItem(
+          conversationTokenStorageKey,
+        );
+
+        if (storedConversationToken) {
+          setConversationToken(storedConversationToken);
+        }
 
         /* ===================================================
            RESTORE EXISTING REAL LEAD
@@ -411,6 +426,7 @@ export function DemoChat({
           leadId,
 
           publicAccessToken,
+          conversationToken,
 
           businessSlug,
 
@@ -423,9 +439,24 @@ export function DemoChat({
       const data: ChatApiResponse = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.reply || "Unable to send message.");
-      }
+        setError(
+          data.error ||
+          data.reply ||
+          "Unable to send message.",
+        );
 
+        return;
+      }
+      if (data.conversationToken) {
+        setConversationToken(data.conversationToken);
+
+        const conversationTokenStorageKey = `leadflow:${businessSlug}:conversationToken`;
+
+        localStorage.setItem(
+          conversationTokenStorageKey,
+          data.conversationToken,
+        );
+      }
       /* =====================================================
          SERVER CREATED A REAL LEAD
 
@@ -643,12 +674,16 @@ export function DemoChat({
       const storageKey = `leadflow:${businessSlug}:leadId`;
 
       const tokenStorageKey = `leadflow:${businessSlug}:publicAccessToken`;
+      const conversationTokenStorageKey = `leadflow:${businessSlug}:conversationToken`;
 
       localStorage.removeItem(storageKey);
 
       localStorage.removeItem(tokenStorageKey);
 
+      localStorage.removeItem(conversationTokenStorageKey);
+
       setPublicAccessToken(null);
+      setConversationToken(null);
 
       /* =====================================================
          Restart means:

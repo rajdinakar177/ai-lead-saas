@@ -36,9 +36,7 @@ export function SubscribePlans() {
       window.location.href = data.url;
     } catch (error) {
       setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to start checkout.",
+        error instanceof Error ? error.message : "Unable to start checkout.",
       );
 
       setLoadingPlan(null);
@@ -85,18 +83,14 @@ export function SubscribePlans() {
             className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-950 p-7"
           >
             <div>
-              <h2 className="text-xl font-semibold text-white">
-                {plan.name}
-              </h2>
+              <h2 className="text-xl font-semibold text-white">{plan.name}</h2>
 
               <div className="mt-4">
                 <span className="text-4xl font-bold text-white">
                   {plan.price}
                 </span>
 
-                <span className="ml-1 text-sm text-zinc-500">
-                  /month
-                </span>
+                <span className="ml-1 text-sm text-zinc-500">/month</span>
               </div>
 
               <p className="mt-4 text-sm leading-6 text-zinc-400">
@@ -105,10 +99,7 @@ export function SubscribePlans() {
 
               <ul className="mt-6 space-y-3">
                 {plan.features.map((feature) => (
-                  <li
-                    key={feature}
-                    className="text-sm text-zinc-300"
-                  >
+                  <li key={feature} className="text-sm text-zinc-300">
                     ✓ {feature}
                   </li>
                 ))}
@@ -121,9 +112,7 @@ export function SubscribePlans() {
               onClick={() => startCheckout(plan.id)}
               className="mt-8 w-full rounded-lg bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isLoading
-                ? "Opening checkout..."
-                : `Choose ${plan.name}`}
+              {isLoading ? "Opening checkout..." : `Choose ${plan.name}`}
             </button>
           </div>
         );

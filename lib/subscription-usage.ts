@@ -20,6 +20,7 @@ type ConsumeUsageResult = {
   limit: number;
   remaining: number;
 };
+
 type ReleaseUsageParams = {
   businessId: string | Types.ObjectId;
   periodStart: Date;
@@ -27,6 +28,14 @@ type ReleaseUsageParams = {
   type: UsageType;
   amount?: number;
 };
+
+function isMongoDuplicateKeyError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return false;
+  }
+
+  return (error as { code?: unknown }).code === 11000;
+}
 
 export async function consumeSubscriptionUsage({
   businessId,
@@ -37,15 +46,11 @@ export async function consumeSubscriptionUsage({
   limit,
 }: ConsumeUsageParams): Promise<ConsumeUsageResult> {
   if (!Number.isInteger(amount) || amount <= 0) {
-    throw new Error(
-      "Usage amount must be a positive integer.",
-    );
+    throw new Error("Usage amount must be a positive integer.");
   }
 
   if (!Number.isInteger(limit) || limit < 0) {
-    throw new Error(
-      "Usage limit must be a non-negative integer.",
-    );
+    throw new Error("Usage limit must be a non-negative integer.");
   }
 
   /*
@@ -64,37 +69,50 @@ export async function consumeSubscriptionUsage({
   /*
    * Make sure the usage document exists first.
    *
-   * We intentionally do this separately from the
-   * conditional increment. Using upsert together with
-   * the limit condition can cause duplicate-key errors
-   * when the document exists but the limit is exceeded.
+   * This is intentionally separate from the
+   * conditional quota increment.
+   *
+   * Two concurrent requests may both observe that
+   * the usage document does not exist and attempt
+   * the initial upsert.
+   *
+   * The unique business + billing-period index
+   * guarantees only one document can be created.
+   * If the other request wins that race, MongoDB
+   * may return E11000 here. That is safe to ignore
+   * because the required usage document now exists.
    */
-  await BusinessUsage.updateOne(
-    {
-      businessId,
-      periodStart,
-      periodEnd,
-    },
-    {
-      $setOnInsert: {
+  try {
+    await BusinessUsage.updateOne(
+      {
         businessId,
         periodStart,
         periodEnd,
       },
-    },
-    {
-      upsert: true,
-      setDefaultsOnInsert: true,
-    },
-  );
+      {
+        $setOnInsert: {
+          businessId,
+          periodStart,
+          periodEnd,
+        },
+      },
+      {
+        upsert: true,
+        setDefaultsOnInsert: true,
+      },
+    );
+  } catch (error) {
+    if (!isMongoDuplicateKeyError(error)) {
+      throw error;
+    }
+  }
 
   /*
    * Atomically increment only when enough usage
    * remains for the requested amount.
    *
-   * MongoDB performs the condition and increment as
-   * one operation, preventing concurrent requests from
-   * independently consuming the same remaining quota.
+   * MongoDB evaluates the quota condition and
+   * increment as one operation.
    */
   const usage = await BusinessUsage.findOneAndUpdate(
     {
@@ -116,6 +134,10 @@ export async function consumeSubscriptionUsage({
     },
   );
 
+  /*
+   * No document matched the conditional increment.
+   * Normally this means the quota has been reached.
+   */
   if (!usage) {
     const existingUsage = await BusinessUsage.findOne({
       businessId,
@@ -123,10 +145,20 @@ export async function consumeSubscriptionUsage({
       periodEnd,
     }).lean();
 
+    /*
+     * The usage document should exist because of the
+     * initialization step above.
+     *
+     * If it does not, something unexpected happened.
+     * Fail closed instead of reporting zero usage and
+     * potentially allowing inconsistent accounting.
+     */
+    if (!existingUsage) {
+      throw new Error("Subscription usage record could not be loaded.");
+    }
+
     const used =
-      typeof existingUsage?.[type] === "number"
-        ? existingUsage[type]
-        : 0;
+      typeof existingUsage[type] === "number" ? existingUsage[type] : 0;
 
     return {
       allowed: false,
@@ -136,10 +168,7 @@ export async function consumeSubscriptionUsage({
     };
   }
 
-  const used =
-    typeof usage[type] === "number"
-      ? usage[type]
-      : 0;
+  const used = typeof usage[type] === "number" ? usage[type] : 0;
 
   return {
     allowed: true,
@@ -149,8 +178,6 @@ export async function consumeSubscriptionUsage({
   };
 }
 
-
-
 export async function releaseSubscriptionUsage({
   businessId,
   periodStart,
@@ -159,11 +186,16 @@ export async function releaseSubscriptionUsage({
   amount = 1,
 }: ReleaseUsageParams): Promise<void> {
   if (!Number.isInteger(amount) || amount <= 0) {
-    throw new Error(
-      "Usage amount must be a positive integer.",
-    );
+    throw new Error("Usage amount must be a positive integer.");
   }
 
+  /*
+   * Only decrement when at least the requested
+   * amount is currently reserved/consumed.
+   *
+   * This prevents usage counters from becoming
+   * negative.
+   */
   await BusinessUsage.updateOne(
     {
       businessId,

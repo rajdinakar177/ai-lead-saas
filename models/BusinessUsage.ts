@@ -1,9 +1,4 @@
-import {
-  Schema,
-  model,
-  models,
-  type InferSchemaType,
-} from "mongoose";
+import { Schema, model, models, type InferSchemaType } from "mongoose";
 
 const businessUsageSchema = new Schema(
   {
@@ -64,9 +59,7 @@ businessUsageSchema.index(
   },
 );
 
-export type BusinessUsageDocument =
-  InferSchemaType<typeof businessUsageSchema>;
+export type BusinessUsageDocument = InferSchemaType<typeof businessUsageSchema>;
 
 export const BusinessUsage =
-  models.BusinessUsage ||
-  model("BusinessUsage", businessUsageSchema);
+  models.BusinessUsage || model("BusinessUsage", businessUsageSchema);

@@ -149,7 +149,10 @@ export async function POST(request: Request) {
        FIND LEAD
        ========================================= */
 
-    const lead = await Lead.findOne({_id: body.leadId,  publicAccessToken: body.publicAccessToken, });
+    const lead = await Lead.findOne({
+      _id: body.leadId,
+      publicAccessToken: body.publicAccessToken,
+    });
 
     if (!lead) {
       return NextResponse.json(

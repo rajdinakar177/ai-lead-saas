@@ -77,7 +77,24 @@ const leadSchema = new Schema(
       default: 0,
       min: 0,
     },
+    /* =====================================================
+       AI CONVERSATION USAGE
+       ===================================================== */
 
+    aiUsage: {
+      /*
+       * Billing period in which this Lead's AI
+       * conversation was counted.
+       *
+       * If this matches the business subscription's
+       * currentPeriodStart, do not consume another
+       * AI conversation for this Lead.
+       */
+      countedPeriodStart: {
+        type: Date,
+        default: null,
+      },
+    },
     smsBookingOptions: {
       offeredAt: {
         type: Date,

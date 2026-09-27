@@ -147,6 +147,7 @@ export async function activateSmsConversation({
   return {
     lead: activeLead,
 
-    requestedLeadActivated: activeLead._id.toString() === targetLeadId.toString(),
+    requestedLeadActivated:
+      activeLead._id.toString() === targetLeadId.toString(),
   };
 }

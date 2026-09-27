@@ -28,9 +28,7 @@ export default async function AdminLoginPage() {
               Super Admin
             </p>
 
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight">
-              Sign in to the platform.
-            </h1>
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight">Sign in to the platform.</h1>
 
             <p className="mt-3 text-zinc-500">
               Access business accounts, subscriptions, payments and platform operations.
@@ -51,9 +49,7 @@ export default async function AdminLoginPage() {
             <ShieldCheck size={24} />
           </div>
 
-          <h2 className="mt-7 text-3xl font-semibold tracking-tight">
-            Platform administration.
-          </h2>
+          <h2 className="mt-7 text-3xl font-semibold tracking-tight">Platform administration.</h2>
 
           <p className="mt-4 leading-7 text-zinc-400">
             This area is restricted to authorized platform administrators.

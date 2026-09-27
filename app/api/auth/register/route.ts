@@ -189,7 +189,7 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
-safeLogger.error("Registration error.", error);
+    safeLogger.error("Registration error.", error);
     return NextResponse.json(
       {
         error: "Unable to create account.",

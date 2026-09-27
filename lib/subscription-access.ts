@@ -23,9 +23,7 @@ export function getSubscriptionAccess(
   const status = subscription?.status ?? "none";
   const planId = subscription?.plan ?? null;
 
-  const hasAccess =
-    status === "active" ||
-    status === "trialing";
+  const hasAccess = status === "active" || status === "trialing";
 
   if (!hasAccess || !planId) {
     return {

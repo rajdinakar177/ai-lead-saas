@@ -39,7 +39,11 @@ export function AdminLogoutButton() {
       disabled={loading}
       className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-500 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {loading ? <LoaderCircle size={18} className="animate-spin" /> : <LogOut size={18} />}
+      {loading ? (
+        <LoaderCircle size={18} className="animate-spin" />
+      ) : (
+        <LogOut size={18} />
+      )}
 
       {loading ? "Logging out..." : "Logout"}
     </button>

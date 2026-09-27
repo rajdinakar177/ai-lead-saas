@@ -25,9 +25,7 @@ type AdminBusinessPageProps = {
   }>;
 };
 
-export default async function AdminBusinessPage({
-  params,
-}: AdminBusinessPageProps) {
+export default async function AdminBusinessPage({ params }: AdminBusinessPageProps) {
   const { businessId } = await params;
 
   if (!Types.ObjectId.isValid(businessId)) {
@@ -68,13 +66,9 @@ export default async function AdminBusinessPage({
 
       <div className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium uppercase tracking-widest text-blue-400">
-            Business
-          </p>
+          <p className="text-sm font-medium uppercase tracking-widest text-blue-400">Business</p>
 
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight">
-            {business.name}
-          </h1>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight">{business.name}</h1>
 
           <div className="mt-2 flex items-center gap-2 text-sm text-zinc-500">
             <Mail size={14} />
@@ -101,9 +95,7 @@ export default async function AdminBusinessPage({
             <div>
               <p className="text-sm text-zinc-500">Total Leads</p>
 
-              <p className="mt-3 text-3xl font-semibold">
-                {totalLeads.toLocaleString()}
-              </p>
+              <p className="mt-3 text-3xl font-semibold">{totalLeads.toLocaleString()}</p>
             </div>
 
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-zinc-400">
@@ -117,9 +109,7 @@ export default async function AdminBusinessPage({
             <div>
               <p className="text-sm text-zinc-500">Total Appointments</p>
 
-              <p className="mt-3 text-3xl font-semibold">
-                {totalAppointments.toLocaleString()}
-              </p>
+              <p className="mt-3 text-3xl font-semibold">{totalAppointments.toLocaleString()}</p>
             </div>
 
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-zinc-400">
@@ -137,43 +127,19 @@ export default async function AdminBusinessPage({
         </div>
 
         <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-          <InfoItem
-            label="Industry"
-            value={business.industry}
-          />
+          <InfoItem label="Industry" value={business.industry} />
 
-          <InfoItem
-            label="Phone"
-            value={business.phone}
-            icon={<Phone size={14} />}
-          />
+          <InfoItem label="Phone" value={business.phone} icon={<Phone size={14} />} />
 
-          <InfoItem
-            label="Country"
-            value={business.country}
-            icon={<MapPin size={14} />}
-          />
+          <InfoItem label="Country" value={business.country} icon={<MapPin size={14} />} />
 
-          <InfoItem
-            label="Country Code"
-            value={business.countryCode}
-          />
+          <InfoItem label="Country Code" value={business.countryCode} />
 
-          <InfoItem
-            label="Timezone"
-            value={business.timezone}
-            icon={<Globe2 size={14} />}
-          />
+          <InfoItem label="Timezone" value={business.timezone} icon={<Globe2 size={14} />} />
 
-          <InfoItem
-            label="Currency"
-            value={business.currency}
-          />
+          <InfoItem label="Currency" value={business.currency} />
 
-          <InfoItem
-            label="Public Slug"
-            value={business.slug}
-          />
+          <InfoItem label="Public Slug" value={business.slug} />
 
           <InfoItem
             label="Joined"
@@ -205,9 +171,7 @@ function InfoItem({
 }) {
   return (
     <div>
-      <p className="text-xs font-medium uppercase tracking-wider text-zinc-600">
-        {label}
-      </p>
+      <p className="text-xs font-medium uppercase tracking-wider text-zinc-600">{label}</p>
 
       <div className="mt-2 flex items-center gap-2 text-sm text-zinc-300">
         {icon}

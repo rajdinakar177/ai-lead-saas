@@ -349,4 +349,3 @@ const businessSchema = new Schema(
 );
 
 export const Business = models.Business || model("Business", businessSchema);
-;

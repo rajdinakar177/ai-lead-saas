@@ -49,11 +49,18 @@ type AdminSidebarContentProps = {
   onNavigate?: () => void;
 };
 
-function AdminSidebarContent({ pathname, onNavigate }: AdminSidebarContentProps) {
+function AdminSidebarContent({
+  pathname,
+  onNavigate,
+}: AdminSidebarContentProps) {
   return (
     <>
       <div className="flex h-16 items-center border-b border-white/10 px-6">
-        <Link href="/admin" onClick={onNavigate} className="flex items-center gap-2">
+        <Link
+          href="/admin"
+          onClick={onNavigate}
+          className="flex items-center gap-2"
+        >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-black">
             <ShieldCheck size={17} />
           </div>
@@ -178,7 +185,10 @@ export function AdminSidebar() {
           </button>
         </div>
 
-        <AdminSidebarContent pathname={pathname} onNavigate={() => setMobileOpen(false)} />
+        <AdminSidebarContent
+          pathname={pathname}
+          onNavigate={() => setMobileOpen(false)}
+        />
       </aside>
     </>
   );
