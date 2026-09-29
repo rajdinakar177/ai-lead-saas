@@ -16,7 +16,7 @@ export default async function PublicLeadPage() {
         description="Share your public lead page or add it to your business website."
       />
 
-      <div className="mt-8 max-w-4xl">
+      <div className="mt-8 max-w-8xl">
         {business.slug ? (
           <>
             <PublicLeadLink slug={business.slug} />

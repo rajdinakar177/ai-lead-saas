@@ -46,7 +46,7 @@ export default async function GoogleCalendarPage() {
         description="Connect your business calendar and automatically sync appointments."
       />
 
-      <div className="mt-8 max-w-4xl">
+      <div className="mt-8 max-w-8xl">
         <GoogleCalendarSettings
           integration={googleCalendar}
           enabled={googleCalendarEnabled}

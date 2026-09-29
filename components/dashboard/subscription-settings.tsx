@@ -3,17 +3,36 @@
 import { useState } from "react";
 
 type PlanId = "starter" | "pro";
-
+type SubscriptionUsage = {
+  leads: {
+    used: number;
+    limit: number;
+  };
+  aiConversations: {
+    used: number;
+    limit: number;
+  };
+  smsSegments: {
+    used: number;
+    limit: number;
+  };
+  appointments: {
+    used: number;
+    limit: number;
+  };
+};
 type SubscriptionSettingsProps = {
   currentPlan?: PlanId | null;
   currentStatus?: string | null;
   cancelAt?: string | null;
+  usage?: SubscriptionUsage | null;
 };
 
 export function SubscriptionSettings({
   currentPlan = null,
   currentStatus = "none",
   cancelAt = null,
+  usage = null,
 }: SubscriptionSettingsProps) {
   const [loadingPlan, setLoadingPlan] = useState<PlanId | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
@@ -26,10 +45,10 @@ export function SubscriptionSettings({
 
   const cancellationDate = cancelAt
     ? new Intl.DateTimeFormat("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }).format(new Date(cancelAt))
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(new Date(cancelAt))
     : null;
 
   async function startCheckout(plan: PlanId) {
@@ -127,7 +146,7 @@ export function SubscriptionSettings({
 
   return (
     <div>
-     
+
 
       {currentPlan && currentStatus !== "none" && (
         <div className="mb-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
@@ -163,7 +182,74 @@ export function SubscriptionSettings({
           </div>
         </div>
       )}
+      {usage && (
+        <div className="mb-5 rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+          <div className="mb-4">
+            <h3 className="font-medium text-white">Current usage</h3>
 
+            <p className="mt-1 text-sm text-zinc-500">
+              Usage for your current billing period.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {[
+              {
+                label: "Leads",
+                ...usage.leads,
+              },
+              {
+                label: "AI Conversations",
+                ...usage.aiConversations,
+              },
+              {
+                label: "SMS Segments",
+                ...usage.smsSegments,
+              },
+              {
+                label: "Appointments",
+                ...usage.appointments,
+              },
+            ].map((item) => {
+              const percentage =
+                item.limit > 0
+                  ? Math.min(100, (item.used / item.limit) * 100)
+                  : 0;
+
+              return (
+                <div
+                  key={item.label}
+                  className="rounded-xl border border-zinc-800 p-4"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-sm text-zinc-400">
+                      {item.label}
+                    </span>
+
+                    <span className="text-sm font-medium text-white">
+                      {item.used.toLocaleString()} /{" "}
+                      {item.limit.toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-800">
+                    <div
+                      className="h-full rounded-full bg-white transition-all"
+                      style={{
+                        width: `${percentage}%`,
+                      }}
+                    />
+                  </div>
+
+                  <p className="mt-2 text-xs text-zinc-600">
+                    {Math.max(0, item.limit - item.used).toLocaleString()} remaining
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {error && (
         <div className="mb-5 rounded-xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-300">
           {error}

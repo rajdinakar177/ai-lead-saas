@@ -45,8 +45,8 @@ export async function sendSmsAppointmentNotifications({
 
   try {
     await sendSmsReply({
+      business,
       to: normalizedPhone,
-
       body: confirmation,
     });
   } catch (smsError) {
