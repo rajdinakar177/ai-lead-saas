@@ -1,28 +1,39 @@
-import { Navbar } from "@/components/navbar";
+import { CTA } from "@/components/cta";
+import { FAQ } from "@/components/faq";
+import { Features } from "@/components/features";
+import { Footer } from "@/components/footer";
 import { Hero } from "@/components/hero";
 import { HowItWorks } from "@/components/how-it-works";
-import { Solutions } from "@/components/solutions";
-import { Features } from "@/components/features";
+import { Navbar } from "@/components/navbar";
 import { Pricing } from "@/components/pricing";
-import { FAQ } from "@/components/faq";
-import { CTA } from "@/components/cta";
-import { Footer } from "@/components/footer";
+import { Solutions } from "@/components/solutions";
 import { Reveal } from "@/components/shared/reveal";
+
 export default function Home() {
   return (
     <>
       <Navbar />
 
-      <main>
+      <main className="overflow-hidden">
         <Hero />
-        <Reveal delay={0.1}>
+
+        <Reveal direction="up">
           <Solutions />
         </Reveal>
-        <Solutions />
+
+        <HowItWorks />
+
         <Features />
+
         <Pricing />
-        <FAQ />
-        <CTA />
+
+        <Reveal direction="up">
+          <FAQ />
+        </Reveal>
+
+        <Reveal direction="up">
+          <CTA />
+        </Reveal>
       </main>
 
       <Footer />

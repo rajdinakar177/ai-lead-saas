@@ -1,55 +1,74 @@
 const faqs = [
   {
-    question: "What happens when I get a new lead?",
+    question: "What happens when a new lead contacts my business?",
     answer:
-      "The lead is captured, stored, and can immediately receive an automated response. The AI can then qualify the lead and guide them toward booking an appointment.",
+      "The lead can enter an AI-assisted conversation that captures relevant service and qualification details. The lead and conversation are then available from your dashboard.",
   },
   {
-    question: "Can the AI work outside business hours?",
+    question: "Can leads contact us outside business hours?",
     answer:
-      "Yes. The system is designed to respond 24/7, so potential customers don't have to wait until your business opens.",
+      "Yes. The lead experience can remain available around the clock, allowing prospects to provide information even when your team is not currently available.",
   },
   {
-    question: "Can I customize the AI?",
+    question: "Can I customize how the AI talks to customers?",
     answer:
-      "Yes. Your business information, services, qualification questions and conversation behavior can be customized.",
+      "Yes. You can configure business information, services, service areas, tone, qualification fields, welcome messaging and additional AI instructions.",
   },
   {
-    question: "Do I need to replace my existing website?",
+    question: "Do I have to replace my existing website?",
     answer:
-      "Not necessarily. The lead capture and automation system can be integrated into an existing website.",
+      "No. The product includes a public lead experience and an embeddable widget so the lead workflow can be connected to an existing website.",
+  },
+  {
+    question: "Can prospects book appointments?",
+    answer:
+      "Yes. Your business can configure availability and qualified prospects can choose from available appointment times.",
+  },
+  {
+    question: "What is included with Pro?",
+    answer:
+      "Pro provides higher monthly usage limits and includes features such as automated follow-ups and Google Calendar integration.",
   },
 ];
 
 export function FAQ() {
   return (
-    <section className="border-t border-white/10 py-24">
+    <section
+      id="faq"
+      className="border-t border-white/[0.07] bg-black py-24 sm:py-32"
+    >
       <div className="mx-auto max-w-4xl px-5 lg:px-8">
         <div className="text-center">
-          <p className="text-sm font-medium uppercase tracking-widest text-blue-400">
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-zinc-500">
             FAQ
           </p>
 
-          <h2 className="mt-4 text-4xl font-semibold tracking-tight text-white">
-            Questions, answered.
+          <h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em] text-white sm:text-5xl">
+            Questions before you start?
           </h2>
         </div>
 
-        <div className="mt-12 divide-y divide-white/10 rounded-3xl border border-white/10">
+        <div className="mt-14 border-t border-white/[0.08]">
           {faqs.map((faq) => (
-            <details key={faq.question} className="group p-6">
-              <summary className="cursor-pointer list-none font-medium text-white">
-                <div className="flex items-center justify-between">
+            <details
+              key={faq.question}
+              className="group border-b border-white/[0.08]"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-5 py-6 text-left">
+                <span className="text-base font-medium text-zinc-200 sm:text-lg">
                   {faq.question}
-                  <span className="ml-4 text-zinc-500 transition group-open:rotate-45">
-                    +
-                  </span>
-                </div>
+                </span>
+
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 text-lg text-zinc-500 transition duration-300 group-open:rotate-45 group-open:bg-white group-open:text-black">
+                  +
+                </span>
               </summary>
 
-              <p className="mt-4 max-w-3xl text-sm leading-7 text-zinc-500">
-                {faq.answer}
-              </p>
+              <div className="faq-content">
+                <p className="max-w-3xl pb-7 pr-10 text-sm leading-7 text-zinc-500 sm:text-base">
+                  {faq.answer}
+                </p>
+              </div>
             </details>
           ))}
         </div>

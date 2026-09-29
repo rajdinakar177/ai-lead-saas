@@ -61,7 +61,90 @@ a {
 .blue-glow {
   box-shadow: 0 0 60px rgba(79, 140, 255, 0.14);
 }
+/* ========================================
+   Landing Page
+======================================== */
 
+.landing-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+
+  background-size: 64px 64px;
+
+  mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    rgba(0, 0, 0, 0.7) 55%,
+    transparent 100%
+  );
+}
+
+.landing-card {
+  position: relative;
+
+  border: 1px solid rgba(255, 255, 255, 0.08);
+
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.045),
+    rgba(255, 255, 255, 0.015)
+  );
+
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.025),
+    0 24px 70px rgba(0, 0, 0, 0.24);
+
+  transition:
+    border-color 300ms ease,
+    background 300ms ease,
+    transform 300ms ease;
+}
+
+.landing-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.065),
+    rgba(255, 255, 255, 0.02)
+  );
+}
+
+.faq-content {
+  display: grid;
+  grid-template-rows: 0fr;
+
+  opacity: 0;
+
+  transition:
+    grid-template-rows 300ms ease,
+    opacity 300ms ease;
+}
+
+details[open] .faq-content {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.faq-content > * {
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 /* ========================================
    LeadFlowAI Appointment Calendar
 ======================================== */
