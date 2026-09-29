@@ -1,7 +1,5 @@
 export type SmsQuotaErrorReason =
-  | "subscription_required"
-  | "billing_period_missing"
-  | "limit_reached";
+  "subscription_required" | "billing_period_missing" | "limit_reached";
 
 export class SmsQuotaError extends Error {
   readonly code = "SMS_LIMIT_REACHED";

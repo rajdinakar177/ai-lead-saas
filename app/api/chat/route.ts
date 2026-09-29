@@ -292,7 +292,10 @@ export async function POST(request: Request) {
         );
       }
     }
+    const subscriptionAccess = getSubscriptionAccess(business.subscription);
 
+    const automatedFollowUpsEnabled =
+      subscriptionAccess.hasAccess && subscriptionAccess.features?.automatedFollowUps === true;
     /* =====================================================
        AI SETTINGS
        ===================================================== */
@@ -470,7 +473,7 @@ export async function POST(request: Request) {
          count 2 -> 48 hours
          =================================================== */
 
-      if (canFollowUp(existingLead.status, existingLead.phone)) {
+      if (automatedFollowUpsEnabled && canFollowUp(existingLead.status, existingLead.phone)) {
         existingLead.followUp = existingLead.followUp ?? {};
 
         const followUpCount = existingLead.followUp.count ?? 0;
@@ -567,7 +570,6 @@ export async function POST(request: Request) {
 
        NOW this becomes a real Lead.
        ===================================================== */
-    const subscriptionAccess = getSubscriptionAccess(business.subscription);
 
     if (!subscriptionAccess.hasAccess || !subscriptionAccess.limits) {
       return NextResponse.json(
@@ -687,8 +689,7 @@ export async function POST(request: Request) {
        If the customer doesn't reply:
        follow-up #1 becomes due in 1 hour.
        ===================================================== */
-
-    if (canFollowUp(newLead.status, newLead.phone)) {
+    if (automatedFollowUpsEnabled && canFollowUp(newLead.status, newLead.phone)) {
       newLead.followUp.enabled = true;
 
       newLead.followUp.count = 0;
@@ -696,6 +697,12 @@ export async function POST(request: Request) {
       newLead.followUp.lastFollowUpAt = null;
 
       newLead.followUp.nextFollowUpAt = getNextFollowUpAt(0);
+
+      await newLead.save();
+    } else {
+      newLead.followUp.enabled = false;
+
+      newLead.followUp.nextFollowUpAt = null;
 
       await newLead.save();
     }

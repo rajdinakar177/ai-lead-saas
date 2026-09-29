@@ -9,6 +9,7 @@ import { encryptToken } from "@/lib/security/token-encryption";
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
 import crypto from "crypto";
 import { safeLogger } from "@/lib/security/safe-logger";
+import { hasSubscriptionFeature } from "@/lib/subscription-access";
 export const dynamic = "force-dynamic";
 function safeStateEqual(storedState: string, returnedState: string) {
   const storedBuffer = Buffer.from(storedState);
@@ -53,7 +54,15 @@ export async function GET(request: NextRequest) {
     if (!business) {
       return clearOAuthStateCookie(NextResponse.redirect(new URL("/login", request.url)));
     }
+    const googleCalendarEnabled = hasSubscriptionFeature(business.subscription, "googleCalendar");
 
+    if (!googleCalendarEnabled) {
+      return clearOAuthStateCookie(
+        NextResponse.redirect(
+          new URL("/dashboard/settings?googleCalendar=pro_required", request.url),
+        ),
+      );
+    }
     const searchParams = request.nextUrl.searchParams;
 
     const code = searchParams.get("code");

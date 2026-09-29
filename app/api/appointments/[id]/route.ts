@@ -17,6 +17,7 @@ import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
 import { deleteAppointmentGoogleEvent } from "@/lib/google-calendar/delete-appointment-event";
 import { validateRequestOrigin } from "@/lib/security/origin-protection";
 import { safeLogger } from "@/lib/security/safe-logger";
+import { hasSubscriptionFeature } from "@/lib/subscription-access";
 type AppointmentStatus = "scheduled" | "confirmed" | "completed" | "cancelled";
 
 type StatusUpdateRequest = {
@@ -66,6 +67,7 @@ export async function PATCH(
         },
       );
     }
+    const googleCalendarEnabled = hasSubscriptionFeature(business.subscription, "googleCalendar");
     const { id } = await params;
 
     const body: UpdateAppointmentRequest = await request.json();
@@ -328,7 +330,7 @@ export async function PATCH(
    the Leadquivo reschedule.
    ========================================= */
 
-      if (appointment.googleCalendarEventId) {
+      if (googleCalendarEnabled && appointment.googleCalendarEventId) {
         try {
           const lead = await Lead.findOne({
             _id: appointment.leadId,
@@ -536,7 +538,7 @@ export async function PATCH(
    Leadquivo cancellation.
    ========================================= */
 
-      if (appointment.googleCalendarEventId) {
+      if (googleCalendarEnabled && appointment.googleCalendarEventId) {
         try {
           const googleResult = await deleteAppointmentGoogleEvent({
             businessId: business._id.toString(),

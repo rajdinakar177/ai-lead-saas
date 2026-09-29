@@ -36,9 +36,7 @@ export type ReserveSmsQuotaResult =
   | {
       allowed: false;
       reason:
-        | "subscription_required"
-        | "billing_period_missing"
-        | "limit_reached";
+        "subscription_required" | "billing_period_missing" | "limit_reached";
       used?: number;
       limit?: number;
       remaining?: number;
@@ -49,14 +47,10 @@ export async function reserveSmsQuota(
   segments: number,
 ): Promise<ReserveSmsQuotaResult> {
   if (!Number.isInteger(segments) || segments <= 0) {
-    throw new Error(
-      "SMS segment amount must be a positive integer.",
-    );
+    throw new Error("SMS segment amount must be a positive integer.");
   }
 
-  const access = getSubscriptionAccess(
-    business.subscription,
-  );
+  const access = getSubscriptionAccess(business.subscription);
 
   if (!access.hasAccess || !access.limits) {
     return {
@@ -65,11 +59,9 @@ export async function reserveSmsQuota(
     };
   }
 
-  const periodStart =
-    business.subscription?.currentPeriodStart;
+  const periodStart = business.subscription?.currentPeriodStart;
 
-  const periodEnd =
-    business.subscription?.currentPeriodEnd;
+  const periodEnd = business.subscription?.currentPeriodEnd;
 
   if (!periodStart || !periodEnd) {
     return {

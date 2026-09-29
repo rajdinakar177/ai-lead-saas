@@ -15,6 +15,8 @@ import { Appointment } from "@/models/Appointment";
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
 import { applyRequestRateLimit } from "@/lib/request-rate-limit";
 import { safeLogger } from "@/lib/security/safe-logger";
+import { reserveAppointmentQuota, releaseAppointmentQuota } from "@/lib/appointment-quota";
+import { hasSubscriptionFeature } from "@/lib/subscription-access";
 type AppointmentRequest = {
   leadId: string;
   publicAccessToken: string;
@@ -245,7 +247,57 @@ export async function POST(request: Request) {
         },
       );
     }
+    const appointmentQuota = await reserveAppointmentQuota(business);
 
+    if (!appointmentQuota.allowed) {
+      if (appointmentQuota.reason === "subscription_required") {
+        return NextResponse.json(
+          {
+            error: "An active subscription is required to book appointments.",
+            code: "SUBSCRIPTION_REQUIRED",
+          },
+          {
+            status: 403,
+          },
+        );
+      }
+
+      if (appointmentQuota.reason === "billing_period_missing") {
+        safeLogger.error(
+          "Business subscription billing period is missing during appointment booking.",
+          undefined,
+          {
+            businessId: business._id.toString(),
+          },
+        );
+
+        return NextResponse.json(
+          {
+            error: "Subscription billing information is temporarily unavailable.",
+            code: "BILLING_PERIOD_MISSING",
+          },
+          {
+            status: 503,
+          },
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error: "Monthly appointment limit reached.",
+          code: "APPOINTMENT_LIMIT_REACHED",
+
+          usage: {
+            used: appointmentQuota.used,
+            limit: appointmentQuota.limit,
+            remaining: appointmentQuota.remaining,
+          },
+        },
+        {
+          status: 429,
+        },
+      );
+    }
     /* =========================================
        ATOMIC DATABASE BOOKING
 
@@ -257,13 +309,25 @@ export async function POST(request: Request) {
        4. Save AI confirmation message
        ========================================= */
 
-    const booking = await bookAppointmentAtomically({
-      lead,
+    let booking;
 
-      label: matchedSlot.label,
+    try {
+      booking = await bookAppointmentAtomically({
+        lead,
 
-      scheduledFor,
-    });
+        label: matchedSlot.label,
+
+        scheduledFor,
+      });
+    } catch (error) {
+      try {
+        await releaseAppointmentQuota(appointmentQuota.reservation);
+      } catch (quotaError) {
+        safeLogger.error("Failed to release appointment quota reservation.", quotaError);
+      }
+
+      throw error;
+    }
 
     const appointment = booking.appointment;
 
@@ -317,122 +381,123 @@ export async function POST(request: Request) {
        - Google failure must NEVER roll back
          the Leadquivo booking
        ========================================= */
+    const googleCalendarEnabled = hasSubscriptionFeature(business.subscription, "googleCalendar");
+    if (googleCalendarEnabled) {
+      try {
+        const googleEvent = await createAppointmentGoogleEvent({
+          businessId: business._id.toString(),
 
-    try {
-      const googleEvent = await createAppointmentGoogleEvent({
-        businessId: business._id.toString(),
+          appointmentId,
 
-        appointmentId,
+          businessName: business.name,
 
-        businessName: business.name,
+          timezone: business.timezone || "UTC",
 
-        timezone: business.timezone || "UTC",
+          slotDurationMinutes: availability.slotDurationMinutes || 60,
 
-        slotDurationMinutes: availability.slotDurationMinutes || 60,
+          scheduledFor: appointment.scheduledFor,
 
-        scheduledFor: appointment.scheduledFor,
+          customerName: lead.name || "Customer",
 
-        customerName: lead.name || "Customer",
+          customerPhone: lead.phone ?? null,
 
-        customerPhone: lead.phone ?? null,
+          customerEmail: lead.email ?? null,
 
-        customerEmail: lead.email ?? null,
+          service: lead.service ?? null,
 
-        service: lead.service ?? null,
+          location: lead.location ?? null,
 
-        location: lead.location ?? null,
+          urgency: lead.urgency ?? null,
 
-        urgency: lead.urgency ?? null,
-
-        timeline: lead.timeline ?? null,
-      });
-
-      /*
-       * null means this business does not
-       * currently have Google Calendar
-       * connected. That is not an error.
-       */
-      if (googleEvent) {
-        await Appointment.updateOne(
-          {
-            _id: appointment._id,
-
-            businessId: business._id,
-          },
-          {
-            $set: {
-              googleCalendarEventId: googleEvent.eventId,
-
-              googleCalendarId: googleEvent.calendarId,
-
-              googleCalendarSyncedAt: new Date(),
-
-              googleCalendarSyncError: null,
-            },
-          },
-        );
+          timeline: lead.timeline ?? null,
+        });
 
         /*
-         * Record successful integration
-         * activity separately as well.
+         * null means this business does not
+         * currently have Google Calendar
+         * connected. That is not an error.
          */
-        await GoogleCalendarIntegration.updateOne(
-          {
-            businessId: business._id,
+        if (googleEvent) {
+          await Appointment.updateOne(
+            {
+              _id: appointment._id,
 
-            connected: true,
-          },
-          {
-            $set: {
-              lastSyncedAt: new Date(),
-
-              lastSyncError: null,
+              businessId: business._id,
             },
-          },
-        );
-      }
-    } catch (googleError) {
-      safeLogger.error("Google Calendar appointment sync failed.", googleError);
+            {
+              $set: {
+                googleCalendarEventId: googleEvent.eventId,
 
-      const errorMessage =
-        googleError instanceof Error
-          ? googleError.message
-          : "Google Calendar synchronization failed.";
+                googleCalendarId: googleEvent.calendarId,
 
-      /*
-       * Save the sync failure on the
-       * appointment for troubleshooting
-       * and future retry support.
-       */
-      try {
-        await Appointment.updateOne(
-          {
-            _id: appointment._id,
+                googleCalendarSyncedAt: new Date(),
 
-            businessId: business._id,
-          },
-          {
-            $set: {
-              googleCalendarSyncError: errorMessage,
+                googleCalendarSyncError: null,
+              },
             },
-          },
-        );
+          );
 
-        await GoogleCalendarIntegration.updateOne(
-          {
-            businessId: business._id,
-          },
-          {
-            $set: {
-              lastSyncError: errorMessage,
+          /*
+           * Record successful integration
+           * activity separately as well.
+           */
+          await GoogleCalendarIntegration.updateOne(
+            {
+              businessId: business._id,
+
+              connected: true,
             },
-          },
-        );
-      } catch (syncErrorSaveError) {
-        safeLogger.error("Unable to save Google Calendar sync error.", syncErrorSaveError);
+            {
+              $set: {
+                lastSyncedAt: new Date(),
+
+                lastSyncError: null,
+              },
+            },
+          );
+        }
+      } catch (googleError) {
+        safeLogger.error("Google Calendar appointment sync failed.", googleError);
+
+        const errorMessage =
+          googleError instanceof Error
+            ? googleError.message
+            : "Google Calendar synchronization failed.";
+
+        /*
+         * Save the sync failure on the
+         * appointment for troubleshooting
+         * and future retry support.
+         */
+        try {
+          await Appointment.updateOne(
+            {
+              _id: appointment._id,
+
+              businessId: business._id,
+            },
+            {
+              $set: {
+                googleCalendarSyncError: errorMessage,
+              },
+            },
+          );
+
+          await GoogleCalendarIntegration.updateOne(
+            {
+              businessId: business._id,
+            },
+            {
+              $set: {
+                lastSyncError: errorMessage,
+              },
+            },
+          );
+        } catch (syncErrorSaveError) {
+          safeLogger.error("Unable to save Google Calendar sync error.", syncErrorSaveError);
+        }
       }
     }
-
     /* =========================================
        SUCCESS RESPONSE
        ========================================= */

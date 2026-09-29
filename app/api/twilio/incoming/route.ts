@@ -6,9 +6,9 @@ import {
   updateLeadWithSmsFence,
   findOneAndUpdateLeadWithSmsFence,
 } from "@/lib/sms/sms-fenced-lead";
-
+import { reserveAppointmentQuota, releaseAppointmentQuota } from "@/lib/appointment-quota";
 import { generateQualificationResponse, type AISettings } from "@/lib/ai/qualification";
-
+import { hasSubscriptionFeature } from "@/lib/subscription-access";
 import { type GeneratedSlot, type Timeline } from "@/lib/availability";
 
 import { sendSmsReply } from "@/lib/sms/send-sms-reply";
@@ -206,7 +206,10 @@ export async function POST(request: Request) {
 
       return successResponse();
     }
-
+    const automatedFollowUpsEnabled = hasSubscriptionFeature(
+      business.subscription,
+      "automatedFollowUps",
+    );
     /* =====================================================
        NORMALIZE CUSTOMER PHONE
        ===================================================== */
@@ -1004,7 +1007,7 @@ export async function POST(request: Request) {
                SCHEDULE FOLLOW-UP FOR NEW SMS LEAD
                ============================================= */
 
-            if (canFollowUp(lead.status, lead.phone)) {
+            if (automatedFollowUpsEnabled && canFollowUp(lead.status, lead.phone)) {
               lead.followUp = lead.followUp ?? {};
 
               lead.followUp.enabled = true;
@@ -1277,7 +1280,38 @@ export async function POST(request: Request) {
 
           return successResponse();
         }
+        const appointmentQuota = await reserveAppointmentQuota(business);
 
+        if (!appointmentQuota.allowed) {
+          safeLogger.warn("SMS appointment booking blocked by subscription appointment quota.", {
+            businessId: business._id.toString(),
+            reason: appointmentQuota.reason,
+          });
+
+          try {
+            await assertSmsConversationOwnership({
+              businessId: business._id,
+
+              phone: normalizedPhone,
+
+              ownerToken: conversationLockOwner!,
+
+              fenceToken: conversationLockFenceToken!,
+            });
+
+            await sendSmsReply({
+              business,
+
+              to: normalizedPhone,
+
+              body: "We're unable to book another appointment right now. Please contact the business directly for assistance.",
+            });
+          } catch (smsError) {
+            safeLogger.error("SMS appointment quota notice failed.", smsError);
+          }
+
+          return successResponse();
+        }
         try {
           /* =============================================
              ATOMIC SMS APPOINTMENT BOOKING
@@ -1333,11 +1367,14 @@ export async function POST(request: Request) {
 
           return successResponse();
         } catch (error) {
+          try {
+            await releaseAppointmentQuota(appointmentQuota.reservation);
+          } catch (quotaError) {
+            safeLogger.error("Failed to release SMS appointment quota reservation.", quotaError);
+          }
+
           /* =============================================
              DUPLICATE APPOINTMENT SLOT
-        
-             MongoDB transaction automatically rolls back the Lead
-             update and confirmation Message as well.
              ============================================= */
 
           if (isMongoDuplicateKeyError(error)) {
@@ -1485,7 +1522,7 @@ export async function POST(request: Request) {
        SCHEDULE FRESH FOLLOW-UP AFTER AI RESPONSE
        ===================================================== */
 
-    if (canFollowUp(lead.status, lead.phone)) {
+    if (automatedFollowUpsEnabled && canFollowUp(lead.status, lead.phone)) {
       lead.followUp = lead.followUp ?? {};
 
       const followUpCount = lead.followUp.count ?? 0;

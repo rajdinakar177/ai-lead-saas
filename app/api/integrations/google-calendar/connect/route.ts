@@ -5,6 +5,7 @@ import { getCurrentBusiness } from "@/lib/auth";
 
 import { getGoogleCalendarAuthorizationUrl } from "@/lib/google-calendar/oauth";
 import { safeLogger } from "@/lib/security/safe-logger";
+import { hasSubscriptionFeature } from "@/lib/subscription-access";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
@@ -21,7 +22,19 @@ export async function GET() {
         },
       );
     }
+    const googleCalendarEnabled = hasSubscriptionFeature(business.subscription, "googleCalendar");
 
+    if (!googleCalendarEnabled) {
+      return NextResponse.json(
+        {
+          error: "Google Calendar integration requires the Pro plan.",
+          code: "PRO_FEATURE_REQUIRED",
+        },
+        {
+          status: 403,
+        },
+      );
+    }
     /*
      * Generate a cryptographically
      * secure OAuth state.

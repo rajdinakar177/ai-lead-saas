@@ -3,18 +3,11 @@ import { Types } from "mongoose";
 import { safeLogger } from "@/lib/security/safe-logger";
 import { sendSms } from "@/lib/sms/send-sms";
 
-import {
-  reserveSmsQuota,
-  releaseSmsQuota,
-} from "@/lib/sms-quota";
+import { reserveSmsQuota, releaseSmsQuota } from "@/lib/sms-quota";
 
-import {
-  calculateSmsSegments,
-} from "@/lib/sms/sms-segments";
+import { calculateSmsSegments } from "@/lib/sms/sms-segments";
 
-import {
-  SmsQuotaError,
-} from "@/lib/sms/sms-quota-error";
+import { SmsQuotaError } from "@/lib/sms/sms-quota-error";
 
 type BusinessLike = {
   _id: string | Types.ObjectId;
@@ -35,38 +28,26 @@ type SendSmsReplyParams = {
 
 type SmsMode = "mock" | "twilio";
 
-export async function sendSmsReply({
-  business,
-  to,
-  body,
-}: SendSmsReplyParams) {
-  const mode = (
-    process.env.SMS_MODE ?? "mock"
-  ) as SmsMode;
+export async function sendSmsReply({ business, to, body }: SendSmsReplyParams) {
+  const mode = (process.env.SMS_MODE ?? "mock") as SmsMode;
 
   /*
    * Calculate the number of segments BEFORE sending.
    */
-  
-  const segmentInfo =
-    calculateSmsSegments(body);
-safeLogger.info("Mock SMS outbound.", {
-  segments: segmentInfo.segments,
-  encoding: segmentInfo.encoding,
-});
+
+  const segmentInfo = calculateSmsSegments(body);
+  safeLogger.info("Mock SMS outbound.", {
+    segments: segmentInfo.segments,
+    encoding: segmentInfo.encoding,
+  });
   if (segmentInfo.segments <= 0) {
-    throw new Error(
-      "Cannot send an empty SMS message.",
-    );
+    throw new Error("Cannot send an empty SMS message.");
   }
 
   /*
    * Atomically reserve SMS quota.
    */
-  const quota = await reserveSmsQuota(
-    business,
-    segmentInfo.segments,
-  );
+  const quota = await reserveSmsQuota(business, segmentInfo.segments);
 
   if (!quota.allowed) {
     throw new SmsQuotaError({
@@ -133,9 +114,7 @@ safeLogger.info("Mock SMS outbound.", {
       };
     }
 
-    throw new Error(
-      `Invalid SMS_MODE: ${mode}`,
-    );
+    throw new Error(`Invalid SMS_MODE: ${mode}`);
   } catch (error) {
     /*
      * We reserved quota before attempting delivery.
@@ -143,9 +122,7 @@ safeLogger.info("Mock SMS outbound.", {
      * If delivery itself fails, release that reservation.
      */
     try {
-      await releaseSmsQuota(
-        quota.reservation,
-      );
+      await releaseSmsQuota(quota.reservation);
     } catch (quotaError) {
       safeLogger.error(
         "Failed to release SMS quota after outbound SMS failure.",

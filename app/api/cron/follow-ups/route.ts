@@ -8,6 +8,8 @@ import { sendSmsReply } from "@/lib/sms/send-sms-reply";
 import { safeLogger } from "@/lib/security/safe-logger";
 import { Lead } from "@/models/Lead";
 import { Message } from "@/models/Message";
+import { Business } from "@/models/Business";
+import { hasSubscriptionFeature } from "@/lib/subscription-access";
 
 /* =========================================================
    SETTINGS
@@ -121,7 +123,7 @@ export async function GET(request: Request) {
         "followUp.nextFollowUpAt": 1,
       })
       .limit(100)
-      .select("_id followUp")
+      .select("_id businessId followUp")
       .lean();
 
     let claimed = 0;
@@ -134,6 +136,48 @@ export async function GET(request: Request) {
        ===================================================== */
 
     for (const candidate of dueLeads) {
+      const business = await Business.findById(candidate.businessId).lean();
+
+      if (!business) {
+        await Lead.updateOne(
+          {
+            _id: candidate._id,
+          },
+          {
+            $set: {
+              "followUp.enabled": false,
+              "followUp.nextFollowUpAt": null,
+            },
+          },
+        );
+
+        skipped++;
+
+        continue;
+      }
+
+      const automatedFollowUpsEnabled = hasSubscriptionFeature(
+        business.subscription,
+        "automatedFollowUps",
+      );
+
+      if (!automatedFollowUpsEnabled) {
+        await Lead.updateOne(
+          {
+            _id: candidate._id,
+          },
+          {
+            $set: {
+              "followUp.enabled": false,
+              "followUp.nextFollowUpAt": null,
+            },
+          },
+        );
+
+        skipped++;
+
+        continue;
+      }
       /*
        * We remember the exact state seen in the candidate.
        *
@@ -199,14 +243,8 @@ export async function GET(request: Request) {
       if (!lead) {
         skipped++;
 
-        if (!lead) {
-          skipped++;
-          continue;
-        }
-
         continue;
       }
-
       claimed++;
 
       try {
@@ -273,10 +311,6 @@ export async function GET(request: Request) {
         if (!stillClaimed) {
           skipped++;
 
-          if (!stillClaimed) {
-            skipped++;
-            continue;
-          }
           continue;
         }
 
@@ -291,6 +325,8 @@ export async function GET(request: Request) {
            ================================================= */
 
         await sendSmsReply({
+          business,
+
           to: stillClaimed.phone,
 
           body: followUpMessage,

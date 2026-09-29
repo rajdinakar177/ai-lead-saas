@@ -44,9 +44,7 @@ function getGsm7Units(text: string): number | null {
   return units;
 }
 
-export function calculateSmsSegments(
-  text: string,
-): SmsSegmentInfo {
+export function calculateSmsSegments(text: string): SmsSegmentInfo {
   if (!text) {
     return {
       encoding: "GSM-7",
@@ -63,10 +61,7 @@ export function calculateSmsSegments(
    * GSM-7
    */
   if (gsmUnits !== null) {
-    const segments =
-      gsmUnits <= 160
-        ? 1
-        : Math.ceil(gsmUnits / 153);
+    const segments = gsmUnits <= 160 ? 1 : Math.ceil(gsmUnits / 153);
 
     return {
       encoding: "GSM-7",
@@ -87,10 +82,7 @@ export function calculateSmsSegments(
    */
   const unicodeUnits = Array.from(text).length;
 
-  const segments =
-    unicodeUnits <= 70
-      ? 1
-      : Math.ceil(unicodeUnits / 67);
+  const segments = unicodeUnits <= 70 ? 1 : Math.ceil(unicodeUnits / 67);
 
   return {
     encoding: "UCS-2",

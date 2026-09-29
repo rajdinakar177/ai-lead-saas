@@ -56,7 +56,6 @@ type ChatApiResponse = {
   publicAccessToken?: string | null;
   conversationToken?: string | null;
 
-
   lead: {
     industry: string | null;
     service: string | null;
@@ -439,11 +438,7 @@ export function DemoChat({
       const data: ChatApiResponse = await response.json();
 
       if (!response.ok) {
-        setError(
-          data.error ||
-          data.reply ||
-          "Unable to send message.",
-        );
+        setError(data.error || data.reply || "Unable to send message.");
 
         return;
       }
@@ -610,7 +605,9 @@ export function DemoChat({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Unable to save appointment.");
+        setError(data.error || "Unable to save appointment.");
+
+        return;
       }
 
       const userMessage: Message = {
@@ -813,24 +810,28 @@ export function DemoChat({
         {/* MESSAGES */}
 
         <div
-          className={`space-y-5 overflow-y-auto px-5 py-6 ${compact ? "h-[430px]" : "h-[500px]"
-            }`}
+          className={`space-y-5 overflow-y-auto px-5 py-6 ${
+            compact ? "h-[430px]" : "h-[500px]"
+          }`}
         >
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"
-                }`}
+              className={`flex ${
+                message.sender === "user" ? "justify-end" : "justify-start"
+              }`}
             >
               <div
-                className={`flex max-w-[85%] gap-3 ${message.sender === "user" ? "flex-row-reverse" : "flex-row"
-                  }`}
+                className={`flex max-w-[85%] gap-3 ${
+                  message.sender === "user" ? "flex-row-reverse" : "flex-row"
+                }`}
               >
                 <div
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${message.sender === "user"
-                    ? "bg-white text-black"
-                    : "bg-violet-500/15 text-blue-400"
-                    }`}
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                    message.sender === "user"
+                      ? "bg-white text-black"
+                      : "bg-violet-500/15 text-blue-400"
+                  }`}
                 >
                   {message.sender === "user" ? (
                     <User size={15} />
@@ -840,10 +841,11 @@ export function DemoChat({
                 </div>
 
                 <div
-                  className={`rounded-2xl px-4 py-3 text-sm leading-6 ${message.sender === "user"
-                    ? "rounded-tr-md bg-white text-black"
-                    : "rounded-tl-md border border-white/10 bg-white/[0.04] text-zinc-200"
-                    }`}
+                  className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
+                    message.sender === "user"
+                      ? "rounded-tr-md bg-white text-black"
+                      : "rounded-tl-md border border-white/10 bg-white/[0.04] text-zinc-200"
+                  }`}
                 >
                   {message.text}
                 </div>
