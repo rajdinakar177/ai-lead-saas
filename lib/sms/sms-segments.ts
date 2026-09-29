@@ -72,15 +72,14 @@ export function calculateSmsSegments(text: string): SmsSegmentInfo {
     };
   }
 
-  /*
-   * UCS-2 / Unicode.
-   *
-   * Array.from() is preferable to text.length because
-   * JS strings use UTF-16 code units.
-   *
-   * This gives us a practical pre-send estimate.
-   */
-  const unicodeUnits = Array.from(text).length;
+/*
+ * UCS-2 / Unicode.
+ *
+ * JavaScript string length counts UTF-16 code units,
+ * which gives us a closer pre-send estimate for
+ * Twilio SMS segmentation, including surrogate pairs.
+ */
+const unicodeUnits = text.length;
 
   const segments = unicodeUnits <= 70 ? 1 : Math.ceil(unicodeUnits / 67);
 
