@@ -31,7 +31,7 @@ export function GoogleCalendarSettings({
   const connected = integration?.connected === true;
 
   const [disconnecting, setDisconnecting] = useState(false);
-const [billingLoading, setBillingLoading] = useState(false);
+  const [billingLoading, setBillingLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function handleConnect() {
@@ -90,42 +90,42 @@ const [billingLoading, setBillingLoading] = useState(false);
       setDisconnecting(false);
     }
   }
-async function handleUpgrade() {
-  if (billingLoading) {
-    return;
-  }
+  async function handleUpgrade() {
+    if (billingLoading) {
+      return;
+    }
 
-  try {
-    setBillingLoading(true);
-    setError(null);
+    try {
+      setBillingLoading(true);
+      setError(null);
 
-    const response = await fetch("/api/billing/portal", {
-      method: "POST",
-    });
+      const response = await fetch("/api/billing/portal", {
+        method: "POST",
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(
-        data.error || "Unable to open billing portal.",
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Unable to open billing portal.",
+        );
+      }
+
+      if (!data.url) {
+        throw new Error("Billing portal URL was not returned.");
+      }
+
+      window.location.href = data.url;
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Unable to open billing portal.",
       );
+
+      setBillingLoading(false);
     }
-
-    if (!data.url) {
-      throw new Error("Billing portal URL was not returned.");
-    }
-
-    window.location.href = data.url;
-  } catch (error) {
-    setError(
-      error instanceof Error
-        ? error.message
-        : "Unable to open billing portal.",
-    );
-
-    setBillingLoading(false);
   }
-}
   return (
     <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
       <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
@@ -278,14 +278,14 @@ async function handleUpgrade() {
               </button>
             )}
 
-         <button
-  type="button"
-  onClick={handleUpgrade}
-  disabled={billingLoading || disconnecting}
-  className="inline-flex w-fit items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
->
-  {billingLoading ? "Opening billing..." : "Upgrade to Pro"}
-</button>
+            <button
+              type="button"
+              onClick={handleUpgrade}
+              disabled={billingLoading || disconnecting}
+              className="inline-flex w-fit items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {billingLoading ? "Opening billing..." : "Upgrade to Pro"}
+            </button>
           </div>
         </div>
       ) : (

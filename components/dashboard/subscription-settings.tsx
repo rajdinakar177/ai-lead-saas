@@ -127,13 +127,7 @@ export function SubscriptionSettings({
 
   return (
     <div>
-      <div className="mb-5">
-        <h2 className="font-semibold text-white">Subscription</h2>
-
-        <p className="mt-1 text-sm text-zinc-600">
-          Manage your subscription and billing.
-        </p>
-      </div>
+     
 
       {currentPlan && currentStatus !== "none" && (
         <div className="mb-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
