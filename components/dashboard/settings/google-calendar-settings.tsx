@@ -18,18 +18,27 @@ type Props = {
     googleEmail: string | null;
     calendarId: string;
   } | null;
+
+  enabled: boolean;
 };
 
-export function GoogleCalendarSettings({ integration }: Props) {
+export function GoogleCalendarSettings({
+  integration,
+  enabled,
+}: Props) {
   const router = useRouter();
 
   const connected = integration?.connected === true;
 
   const [disconnecting, setDisconnecting] = useState(false);
-
+const [billingLoading, setBillingLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function handleConnect() {
+    if (!enabled) {
+      return;
+    }
+
     window.location.href = "/api/integrations/google-calendar/connect";
   }
 
@@ -60,7 +69,9 @@ export function GoogleCalendarSettings({ integration }: Props) {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Unable to disconnect Google Calendar.");
+        throw new Error(
+          data.error || "Unable to disconnect Google Calendar.",
+        );
       }
 
       /*
@@ -79,7 +90,42 @@ export function GoogleCalendarSettings({ integration }: Props) {
       setDisconnecting(false);
     }
   }
+async function handleUpgrade() {
+  if (billingLoading) {
+    return;
+  }
 
+  try {
+    setBillingLoading(true);
+    setError(null);
+
+    const response = await fetch("/api/billing/portal", {
+      method: "POST",
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || "Unable to open billing portal.",
+      );
+    }
+
+    if (!data.url) {
+      throw new Error("Billing portal URL was not returned.");
+    }
+
+    window.location.href = data.url;
+  } catch (error) {
+    setError(
+      error instanceof Error
+        ? error.message
+        : "Unable to open billing portal.",
+    );
+
+    setBillingLoading(false);
+  }
+}
   return (
     <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 sm:p-8">
       <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
@@ -89,7 +135,9 @@ export function GoogleCalendarSettings({ integration }: Props) {
           </div>
 
           <div>
-            <h3 className="font-semibold text-white">Google Calendar</h3>
+            <h3 className="font-semibold text-white">
+              Google Calendar
+            </h3>
 
             <p className="mt-1 max-w-xl text-sm leading-6 text-zinc-500">
               Connect your Google Calendar so Leadquivo appointments can stay
@@ -98,10 +146,14 @@ export function GoogleCalendarSettings({ integration }: Props) {
           </div>
         </div>
 
-        {connected ? (
+        {connected && enabled ? (
           <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1.5 text-xs font-medium text-emerald-400">
             <CheckCircle2 size={14} />
             Connected
+          </div>
+        ) : !enabled ? (
+          <div className="inline-flex w-fit items-center rounded-full border border-violet-500/20 bg-violet-500/5 px-3 py-1.5 text-xs font-medium text-violet-300">
+            Pro feature
           </div>
         ) : (
           <div className="inline-flex w-fit items-center rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-500">
@@ -116,7 +168,10 @@ export function GoogleCalendarSettings({ integration }: Props) {
         </div>
       )}
 
-      {connected ? (
+      {connected && enabled ? (
+        /*
+         * PRO + CONNECTED
+         */
         <div className="mt-7">
           <div className="grid gap-4 sm:grid-cols-2">
             <InfoCard
@@ -136,8 +191,8 @@ export function GoogleCalendarSettings({ integration }: Props) {
 
           <div className="mt-6 flex flex-col gap-4 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-zinc-500">
-              New bookings, reschedules and cancellations are synced with Google
-              Calendar.
+              New bookings, reschedules and cancellations are synced with
+              Google Calendar.
             </p>
 
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -159,7 +214,10 @@ export function GoogleCalendarSettings({ integration }: Props) {
               >
                 {disconnecting ? (
                   <>
-                    <LoaderCircle size={16} className="animate-spin" />
+                    <LoaderCircle
+                      size={16}
+                      className="animate-spin"
+                    />
                     Disconnecting...
                   </>
                 ) : (
@@ -172,7 +230,68 @@ export function GoogleCalendarSettings({ integration }: Props) {
             </div>
           </div>
         </div>
+      ) : !enabled ? (
+        /*
+         * STARTER / NO PRO ACCESS
+         */
+        <div className="mt-7 flex flex-col gap-4 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium text-white">
+              Google Calendar is available on Pro
+            </p>
+
+            <p className="mt-1 max-w-xl text-sm leading-6 text-zinc-500">
+              Upgrade to Pro to automatically sync bookings, reschedules and
+              cancellations with Google Calendar.
+            </p>
+
+            {connected && (
+              <p className="mt-2 text-xs text-amber-400">
+                A Google account was previously connected. Calendar syncing is
+                paused while this feature is unavailable.
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {connected && (
+              <button
+                type="button"
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="inline-flex w-fit items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-2.5 text-sm font-medium text-red-400 transition hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {disconnecting ? (
+                  <>
+                    <LoaderCircle
+                      size={16}
+                      className="animate-spin"
+                    />
+                    Disconnecting...
+                  </>
+                ) : (
+                  <>
+                    <Unplug size={16} />
+                    Disconnect
+                  </>
+                )}
+              </button>
+            )}
+
+         <button
+  type="button"
+  onClick={handleUpgrade}
+  disabled={billingLoading || disconnecting}
+  className="inline-flex w-fit items-center justify-center rounded-xl bg-white px-5 py-3 text-sm font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+>
+  {billingLoading ? "Opening billing..." : "Upgrade to Pro"}
+</button>
+          </div>
+        </div>
       ) : (
+        /*
+         * PRO + NOT CONNECTED
+         */
         <div className="mt-7 flex flex-col gap-4 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-medium text-white">
@@ -198,10 +317,18 @@ export function GoogleCalendarSettings({ integration }: Props) {
   );
 }
 
-function InfoCard({ label, value }: { label: string; value: string }) {
+function InfoCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
     <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-      <p className="text-xs uppercase tracking-wider text-zinc-600">{label}</p>
+      <p className="text-xs uppercase tracking-wider text-zinc-600">
+        {label}
+      </p>
 
       <p className="mt-2 break-all text-sm font-medium text-zinc-200">
         {value}

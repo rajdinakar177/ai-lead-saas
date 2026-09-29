@@ -8,7 +8,7 @@ import { requireBusiness } from "@/lib/auth";
 import { connectDB } from "@/lib/mongodb";
 import { SubscriptionSettings } from "@/components/dashboard/settings/subscription-settings";
 import { GoogleCalendarIntegration } from "@/models/GoogleCalendarIntegration";
-
+import { hasSubscriptionFeature } from "@/lib/subscription-access";
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
@@ -31,14 +31,17 @@ export default async function SettingsPage() {
 
   const googleCalendar = googleIntegration
     ? {
-        connected: googleIntegration.connected === true,
+      connected: googleIntegration.connected === true,
 
-        googleEmail: googleIntegration.googleEmail ?? null,
+      googleEmail: googleIntegration.googleEmail ?? null,
 
-        calendarId: googleIntegration.calendarId || "primary",
-      }
+      calendarId: googleIntegration.calendarId || "primary",
+    }
     : null;
-
+  const googleCalendarEnabled = hasSubscriptionFeature(
+    business.subscription,
+    "googleCalendar",
+  );
   return (
     <div>
       <DashboardHeader
@@ -88,7 +91,10 @@ export default async function SettingsPage() {
           </p>
         </div>
 
-        <GoogleCalendarSettings integration={googleCalendar} />
+        <GoogleCalendarSettings
+          integration={googleCalendar}
+          enabled={googleCalendarEnabled}
+        />
       </div>
 
       {/* PUBLIC LEAD PAGE */}
