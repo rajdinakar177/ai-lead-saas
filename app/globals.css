@@ -1,23 +1,55 @@
 @import "tailwindcss";
 
 :root {
-  --background: #08090b;
-  --foreground: #f8fafc;
+  /* ========================================
+     Brand
+  ======================================== */
 
-  --surface: #0f1115;
-  --card: #12151b;
+  --background: #050505;
+  --foreground: #ffffff;
 
-  --muted: #94a3b8;
+  --surface: #080808;
+  --surface-secondary: #0c0c0c;
+  --card: #0a0a0a;
+  --card-hover: #0f0f0f;
+
+  --muted: #71717a;
+  --muted-light: #a1a1aa;
+  --muted-dark: #52525b;
+
+  /* ========================================
+     Borders
+  ======================================== */
 
   --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(255, 255, 255, 0.15);
+  --border-strong: rgba(255, 255, 255, 0.22);
 
-  --accent: #4f8cff;
-  --accent-secondary: #22d3ee;
+  /* ========================================
+     Brand Accent
+  ======================================== */
+
+  --accent: #ffffff;
+  --accent-foreground: #000000;
+
+  /* ========================================
+     Transparent Surfaces
+  ======================================== */
+
+  --surface-subtle: rgba(255, 255, 255, 0.02);
+  --surface-soft: rgba(255, 255, 255, 0.035);
+  --surface-hover: rgba(255, 255, 255, 0.06);
+
+  /* ========================================
+     Status Colors
+     Keep these because they communicate state
+  ======================================== */
 
   --success: #34d399;
   --warning: #fbbf24;
   --danger: #fb7185;
 }
+
 * {
   box-sizing: border-box;
 }
@@ -30,8 +62,17 @@ body {
   margin: 0;
 
   background:
-    radial-gradient(circle at 20% 0%, rgba(79, 140, 255, 0.08), transparent 35%),
-    radial-gradient(circle at 85% 15%, rgba(34, 211, 238, 0.05), transparent 30%), var(--background);
+    radial-gradient(
+      circle at 20% 0%,
+      rgba(255, 255, 255, 0.035),
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 85% 15%,
+      rgba(255, 255, 255, 0.02),
+      transparent 30%
+    ),
+    var(--background);
 
   color: var(--foreground);
 
@@ -39,8 +80,10 @@ body {
 
   min-height: 100vh;
 }
+
 ::selection {
-  background: rgba(139, 92, 246, 0.35);
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--foreground);
 }
 
 button,
@@ -49,26 +92,35 @@ a {
 }
 
 .glass-card {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.018));
+  background: linear-gradient(
+    180deg,
+    var(--surface-hover),
+    var(--surface-subtle)
+  );
 
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
 
   box-shadow: 0 20px 70px rgba(0, 0, 0, 0.28);
 
   backdrop-filter: blur(20px);
 }
 
-.blue-glow {
-  box-shadow: 0 0 60px rgba(79, 140, 255, 0.14);
+.brand-glow {
+  box-shadow: 0 0 60px rgba(255, 255, 255, 0.08);
 }
+
 /* ========================================
    Landing Page
 ======================================== */
 
 .landing-grid {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    linear-gradient(var(--surface-soft) 1px, transparent 1px),
+    linear-gradient(
+      90deg,
+      var(--surface-soft) 1px,
+      transparent 1px
+    );
 
   background-size: 64px 64px;
 
@@ -83,12 +135,12 @@ a {
 .landing-card {
   position: relative;
 
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
 
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.045),
-    rgba(255, 255, 255, 0.015)
+    var(--surface-soft),
+    var(--surface-subtle)
   );
 
   box-shadow:
@@ -102,12 +154,12 @@ a {
 }
 
 .landing-card:hover {
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: var(--border-hover);
 
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.065),
-    rgba(255, 255, 255, 0.02)
+    var(--surface-hover),
+    var(--surface-subtle)
   );
 }
 
@@ -131,258 +183,29 @@ details[open] .faq-content {
   overflow: hidden;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-/* ========================================
-   LeadFlowAI Appointment Calendar
-======================================== */
-
-.appointments-calendar {
-  --fc-border-color: rgba(255, 255, 255, 0.1);
-  --fc-page-bg-color: transparent;
-  --fc-neutral-bg-color: rgba(255, 255, 255, 0.03);
-  --fc-list-event-hover-bg-color: rgba(255, 255, 255, 0.05);
-
-  --fc-button-bg-color: rgba(255, 255, 255, 0.08);
-  --fc-button-border-color: rgba(255, 255, 255, 0.1);
-  --fc-button-hover-bg-color: rgba(255, 255, 255, 0.14);
-  --fc-button-hover-border-color: rgba(255, 255, 255, 0.15);
-  --fc-button-active-bg-color: rgba(59, 130, 246, 0.25);
-  --fc-button-active-border-color: rgba(59, 130, 246, 0.4);
-
-  --fc-today-bg-color: rgba(59, 130, 246, 0.06);
-}
-
-.appointments-calendar .fc {
-  color: #f4f4f5;
-}
-
-.appointments-calendar .fc-toolbar-title {
-  font-size: 1.35rem;
-  font-weight: 600;
-}
-
-.appointments-calendar .fc-button {
-  box-shadow: none !important;
-  text-transform: capitalize;
-}
-
-.appointments-calendar .fc-col-header-cell {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.appointments-calendar .fc-col-header-cell-cushion {
-  padding: 10px 4px;
-  color: #a1a1aa;
-  font-size: 0.8rem;
-  font-weight: 500;
-}
-
-.appointments-calendar .fc-daygrid-day-number {
-  padding: 7px;
-  color: #d4d4d8;
-  font-size: 0.8rem;
-}
-
-.appointments-calendar .fc-day-other .fc-daygrid-day-number {
-  color: #52525b;
-}
-
-.appointments-calendar .fc-event {
-  cursor: pointer;
-  border-radius: 6px;
-  padding: 2px 4px;
-  font-size: 0.75rem;
-  transition:
-    opacity 150ms ease,
-    transform 150ms ease;
-}
-
-.appointments-calendar .fc-event:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Scheduled */
-.appointments-calendar .lf-calendar-event-scheduled {
-  border-color: rgba(59, 130, 246, 0.45);
-  background: rgba(59, 130, 246, 0.18);
-  color: #bfdbfe;
-}
-
-/* Confirmed */
-.appointments-calendar .lf-calendar-event-confirmed {
-  border-color: rgba(16, 185, 129, 0.45);
-  background: rgba(16, 185, 129, 0.18);
-  color: #a7f3d0;
-}
-
-/* Completed */
-.appointments-calendar .lf-calendar-event-completed {
-  border-color: rgba(161, 161, 170, 0.35);
-  background: rgba(161, 161, 170, 0.12);
-  color: #d4d4d8;
-}
-
-/* Cancelled */
-.appointments-calendar .lf-calendar-event-cancelled {
-  border-color: rgba(244, 63, 94, 0.35);
-  background: rgba(244, 63, 94, 0.1);
-  color: #fda4af;
-  opacity: 0.65;
-  text-decoration: line-through;
-}
 
 /* ========================================
-   Appointment Calendar - Mobile
+   AI Demo / Lead Chat
 ======================================== */
 
-@media (max-width: 639px) {
-  /*
-   * Stack the FullCalendar toolbar.
-   */
-  .appointments-calendar .fc-header-toolbar {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-    margin-bottom: 16px !important;
-  }
-
-  .appointments-calendar .fc-toolbar-chunk {
-    display: flex;
-    justify-content: center;
-  }
-
-  /*
-   * Calendar title.
-   */
-  .appointments-calendar .fc-toolbar-title {
-    font-size: 1.05rem;
-    text-align: center;
-  }
-
-  /*
-   * Make toolbar buttons smaller.
-   */
-  .appointments-calendar .fc-button {
-    padding: 6px 9px;
-    font-size: 0.75rem;
-  }
-
-  /*
-   * Keep Month / Week / Day usable
-   * without overflowing.
-   */
-  .appointments-calendar .fc-button-group {
-    max-width: 100%;
-  }
-
-  /*
-   * Day headings.
-   */
-  .appointments-calendar .fc-col-header-cell-cushion {
-    padding: 8px 2px;
-    font-size: 0.68rem;
-  }
-
-  /*
-   * Day numbers.
-   */
-  .appointments-calendar .fc-daygrid-day-number {
-    padding: 5px;
-    font-size: 0.7rem;
-  }
-
-  /*
-   * Calendar events need to stay
-   * readable inside narrow day cells.
-   */
-  .appointments-calendar .fc-event {
-    padding: 1px 2px;
-    border-radius: 4px;
-    font-size: 0.65rem;
-  }
-
-  .appointments-calendar .fc-daygrid-event {
-    margin-left: 1px;
-    margin-right: 1px;
-  }
-
-  /*
-   * Prevent event text from forcing
-   * the calendar wider than the screen.
-   */
-  .appointments-calendar .fc-event-main {
-    min-width: 0;
-    overflow: hidden;
-  }
-
-  .appointments-calendar .fc-event-title {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  /*
-   * FullCalendar tables should remain
-   * inside the available dashboard width.
-   */
-  .appointments-calendar .fc,
-  .appointments-calendar .fc-view-harness,
-  .appointments-calendar .fc-scrollgrid {
-    max-width: 100%;
-  }
+.demo-chat-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-hover) transparent;
 }
 
-/* ========================================
-   Mobile Month Calendar Events
-======================================== */
+.demo-chat-scroll::-webkit-scrollbar {
+  width: 5px;
+}
 
-@media (max-width: 639px) {
-  /*
-   * Month cells are very narrow on mobile.
-   * Hide the long appointment title and
-   * keep only the appointment time.
-   */
-  .appointments-calendar .fc-dayGridMonth-view .fc-event-title {
-    display: none;
-  }
+.demo-chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
 
-  .appointments-calendar .fc-dayGridMonth-view .fc-event-time {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+.demo-chat-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--border-hover);
+}
 
-    font-size: 0.62rem;
-    font-weight: 600;
-  }
-
-  .appointments-calendar .fc-dayGridMonth-view .fc-daygrid-event {
-    min-width: 0;
-    margin: 1px;
-    padding: 2px;
-  }
-
-  /*
-   * Keep fuller appointment information
-   * available in Week and Day views.
-   */
-  .appointments-calendar .fc-timeGridWeek-view .fc-event-title,
-  .appointments-calendar .fc-timeGridDay-view .fc-event-title {
-    white-space: normal;
-  }
+.demo-chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
 }

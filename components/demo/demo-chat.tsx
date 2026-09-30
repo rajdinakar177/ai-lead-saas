@@ -3,13 +3,19 @@
 import {
   Bot,
   CalendarDays,
+  Check,
   CheckCircle2,
+  CircleDot,
   Flame,
   LoaderCircle,
+  MapPin,
   RefreshCcw,
   Send,
+  Sparkles,
   User,
 } from "lucide-react";
+
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 
@@ -90,6 +96,7 @@ export function DemoChat({
   businessName,
   compact = false,
 }: DemoChatProps) {
+    const reduceMotion = useReducedMotion();
   const [leadId, setLeadId] = useState<string | null>(null);
   const [conversationToken, setConversationToken] = useState<string | null>(
     null,
@@ -758,10 +765,19 @@ export function DemoChat({
 
   if (initializing) {
     return (
-      <div className="flex min-h-[500px] items-center justify-center rounded-3xl border border-white/10 bg-zinc-950">
-        <div className="flex items-center gap-3 text-sm text-zinc-400">
-          <LoaderCircle size={18} className="animate-spin" />
-          Loading conversation...
+      <div className="flex min-h-[600px] items-center justify-center overflow-hidden rounded-[2rem] border border-white/[0.08] bg-[#080808]">
+        <div className="text-center">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
+            <LoaderCircle size={19} className="animate-spin text-white" />
+          </div>
+
+          <p className="mt-4 text-sm font-medium text-zinc-300">
+            Starting AI conversation
+          </p>
+
+          <p className="mt-1 text-xs text-zinc-600">
+            Preparing the demo experience...
+          </p>
         </div>
       </div>
     );
@@ -771,27 +787,53 @@ export function DemoChat({
      UI
      ========================================================= */
 
-  return (
+   return (
     <div
-      className={compact ? "w-full" : "grid gap-6 lg:grid-cols-[1.4fr_0.8fr]"}
+      className={
+        compact
+          ? "w-full"
+          : "grid items-start gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(300px,0.55fr)]"
+      }
     >
       {/* CHAT */}
 
-      <div className="overflow-hidden rounded-3xl border border-white/10 bg-zinc-950">
+      <motion.section
+        initial={
+          reduceMotion
+            ? false
+            : {
+                opacity: 0,
+                y: 30,
+              }
+        }
+        animate={{
+          opacity: 1,
+          y: 0,
+        }}
+        transition={{
+          duration: 0.65,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+        className="overflow-hidden rounded-[2rem] border border-white/[0.09] bg-[#080808] shadow-[0_30px_100px_rgba(0,0,0,0.45)]"
+      >
         {/* HEADER */}
 
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-500/15 text-blue-400">
-              <Bot size={20} />
+        <div className="flex items-center justify-between gap-4 border-b border-white/[0.07] px-4 py-4 sm:px-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-black">
+              <Bot size={19} />
+
+              <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-[3px] border-[#080808] bg-white" />
             </div>
 
-            <div>
-              <p className="font-medium">{businessName} AI</p>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-white sm:text-base">
+                {businessName}
+              </p>
 
-              <div className="flex items-center gap-2 text-xs text-zinc-500">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                Powered by AI
+              <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-zinc-600 sm:text-xs">
+                <Sparkles size={11} />
+                AI lead assistant
               </div>
             </div>
           </div>
@@ -799,162 +841,311 @@ export function DemoChat({
           <button
             type="button"
             onClick={restartDemo}
-            disabled={loading}
-            className="flex items-center gap-2 rounded-full border border-white/10 px-3 py-2 text-xs text-zinc-400 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
+            disabled={loading || initializing}
+            className="group flex h-9 items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 text-xs text-zinc-500 transition hover:border-white/15 hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <RefreshCcw size={14} />
-            Restart
+            <RefreshCcw
+              size={13}
+              className="transition-transform duration-500 group-hover:rotate-180"
+            />
+
+            <span className="hidden sm:inline">Restart</span>
           </button>
         </div>
 
-        {/* MESSAGES */}
+        {/* CONVERSATION */}
 
         <div
-          className={`space-y-5 overflow-y-auto px-5 py-6 ${
-            compact ? "h-[430px]" : "h-[500px]"
+          className={`demo-chat-scroll overflow-y-auto px-4 py-5 sm:px-5 sm:py-6 ${
+            compact ? "h-[430px]" : "h-[540px]"
           }`}
         >
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${
-                message.sender === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
-              <div
-                className={`flex max-w-[85%] gap-3 ${
-                  message.sender === "user" ? "flex-row-reverse" : "flex-row"
-                }`}
+          <div className="space-y-5">
+            <AnimatePresence initial={false}>
+              {messages.map((message) => {
+                const isUser = message.sender === "user";
+
+                return (
+                  <motion.div
+                    key={message.id}
+                    initial={
+                      reduceMotion
+                        ? false
+                        : {
+                            opacity: 0,
+                            y: 14,
+                            x: isUser ? 15 : -15,
+                          }
+                    }
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                      x: 0,
+                    }}
+                    transition={{
+                      duration: 0.35,
+                      ease: [0.22, 1, 0.36, 1],
+                    }}
+                    className={`flex ${
+                      isUser ? "justify-end" : "justify-start"
+                    }`}
+                  >
+                    <div
+                      className={`flex max-w-[92%] items-end gap-2.5 sm:max-w-[82%] ${
+                        isUser ? "flex-row-reverse" : ""
+                      }`}
+                    >
+                      <div
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                          isUser
+                            ? "border border-white/10 bg-white/[0.04] text-zinc-400"
+                            : "bg-white text-black"
+                        }`}
+                      >
+                        {isUser ? <User size={13} /> : <Bot size={13} />}
+                      </div>
+
+                      <div>
+                        {!isUser ? (
+                          <p className="mb-1.5 ml-1 text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-700">
+                            AI Assistant
+                          </p>
+                        ) : null}
+
+                        <div
+                          className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
+                            isUser
+                              ? "rounded-br-md bg-white text-black"
+                              : "rounded-bl-md border border-white/[0.08] bg-white/[0.035] text-zinc-300"
+                          }`}
+                        >
+                          {message.text}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+
+            {loading ? (
+              <motion.div
+                initial={
+                  reduceMotion
+                    ? false
+                    : {
+                        opacity: 0,
+                        y: 10,
+                      }
+                }
+                animate={{
+                  opacity: 1,
+                  y: 0,
+                }}
+                className="flex justify-start"
               >
-                <div
-                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                    message.sender === "user"
-                      ? "bg-white text-black"
-                      : "bg-violet-500/15 text-blue-400"
-                  }`}
-                >
-                  {message.sender === "user" ? (
-                    <User size={15} />
-                  ) : (
-                    <Bot size={15} />
-                  )}
-                </div>
+                <div className="flex items-end gap-2.5">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white text-black">
+                    <Bot size={13} />
+                  </div>
 
-                <div
-                  className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
-                    message.sender === "user"
-                      ? "rounded-tr-md bg-white text-black"
-                      : "rounded-tl-md border border-white/10 bg-white/[0.04] text-zinc-200"
-                  }`}
-                >
-                  {message.text}
-                </div>
-              </div>
-            </div>
-          ))}
+                  <div>
+                    <p className="mb-1.5 ml-1 text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-700">
+                      AI Assistant
+                    </p>
 
-          {loading && (
-            <div className="flex justify-start">
-              <div className="flex gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-500/15 text-blue-400">
-                  <Bot size={15} />
+                    <div className="flex h-11 items-center gap-1.5 rounded-2xl rounded-bl-md border border-white/[0.08] bg-white/[0.035] px-4">
+                      {[0, 1, 2].map((dot) => (
+                        <motion.span
+                          key={dot}
+                          animate={
+                            reduceMotion
+                              ? undefined
+                              : {
+                                  opacity: [0.25, 1, 0.25],
+                                  y: [0, -3, 0],
+                                }
+                          }
+                          transition={{
+                            duration: 1,
+                            repeat: Infinity,
+                            delay: dot * 0.15,
+                          }}
+                          className="h-1.5 w-1.5 rounded-full bg-zinc-400"
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </div>
+              </motion.div>
+            ) : null}
 
-                <div className="flex items-center gap-2 rounded-2xl rounded-tl-md border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-zinc-400">
-                  <LoaderCircle size={16} className="animate-spin" />
-                  Thinking...
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
+            <div ref={messagesEndRef} />
+          </div>
         </div>
 
-        {/* INPUT */}
+        {/* ACTION AREA */}
 
-        <div className="border-t border-white/10 p-5">
+        <div className="border-t border-white/[0.07] bg-black/30 p-4 sm:p-5">
           {/* QUICK REPLIES */}
 
-          {options.length > 0 && !loading && !readyToBook && !completed && (
-            <div className="mb-4 flex flex-wrap gap-2">
-              {options.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => handleOptionClick(option)}
-                  disabled={loading}
-                  className="rounded-full border border-violet-500/30 bg-violet-500/10 px-4 py-2.5 text-sm text-violet-200 transition hover:border-violet-400/50 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-          )}
+          <AnimatePresence>
+            {options.length > 0 &&
+            !loading &&
+            !readyToBook &&
+            !completed ? (
+              <motion.div
+                initial={
+                  reduceMotion
+                    ? false
+                    : {
+                        opacity: 0,
+                        y: 8,
+                      }
+                }
+                animate={{
+                  opacity: 1,
+                  y: 0,
+                }}
+                exit={{
+                  opacity: 0,
+                }}
+                className="mb-4"
+              >
+                <p className="mb-2.5 text-[10px] font-medium uppercase tracking-[0.14em] text-zinc-700">
+                  Quick replies
+                </p>
+
+                <div className="flex flex-wrap gap-2">
+                  {options.map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => handleOptionClick(option)}
+                      disabled={loading}
+                      className="rounded-xl border border-white/[0.09] bg-white/[0.035] px-3.5 py-2.5 text-xs font-medium text-zinc-300 transition hover:border-white/20 hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-40 sm:text-sm"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
 
           {/* ERROR */}
 
-          {error && (
-            <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+          {error ? (
+            <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-xs leading-5 text-red-300 sm:text-sm">
               {error}
             </div>
-          )}
+          ) : null}
 
-          {/* APPOINTMENTS */}
+          {/* BOOKING */}
 
           {readyToBook && !completed ? (
-            <div>
-              <p className="mb-3 text-sm text-zinc-400">
-                {lead.timeline
-                  ? `Available appointments for ${lead.timeline.toLowerCase()}:`
-                  : "Choose an available appointment:"}
-              </p>
+            <motion.div
+              initial={
+                reduceMotion
+                  ? false
+                  : {
+                      opacity: 0,
+                      y: 12,
+                    }
+              }
+              animate={{
+                opacity: 1,
+                y: 0,
+              }}
+            >
+              <div className="mb-3 flex items-center gap-2">
+                <CalendarDays size={15} className="text-white" />
+
+                <p className="text-sm font-medium text-zinc-300">
+                  {lead.timeline
+                    ? `Available times for ${lead.timeline.toLowerCase()}`
+                    : "Choose an available appointment"}
+                </p>
+              </div>
 
               {loadingSlots ? (
-                <div className="flex items-center gap-2 text-sm text-zinc-500">
-                  <LoaderCircle size={16} className="animate-spin" />
-                  Loading available appointments...
+                <div className="flex items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.025] px-4 py-3 text-sm text-zinc-500">
+                  <LoaderCircle size={15} className="animate-spin" />
+                  Checking availability...
                 </div>
               ) : appointmentSlots.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
+                <div className="grid gap-2 sm:grid-cols-2">
                   {appointmentSlots.map((slot) => (
                     <button
                       key={slot.scheduledFor}
                       type="button"
                       onClick={() => chooseAppointment(slot)}
                       disabled={loading}
-                      className="rounded-full border border-violet-500/30 bg-blue-500/10 px-4 py-2.5 text-sm text-violet-200 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="group flex items-center justify-between rounded-xl border border-white/[0.09] bg-white/[0.025] px-4 py-3 text-left text-sm text-zinc-300 transition hover:border-white/20 hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
                     >
-                      {slot.label}
+                      <span>{slot.label}</span>
+
+                      <CalendarDays
+                        size={14}
+                        className="text-zinc-600 transition group-hover:text-black"
+                      />
                     </button>
                   ))}
                 </div>
               ) : (
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-zinc-500">
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] px-4 py-3 text-sm text-zinc-500">
                   No appointment times are currently available for this period.
                 </div>
               )}
-            </div>
+            </motion.div>
           ) : completed ? (
-            <div className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-400/20 bg-emerald-400/5 px-4 py-3 text-sm text-emerald-400">
-              <CheckCircle2 size={18} />
-              Lead qualified and appointment booked
-            </div>
+            <motion.div
+              initial={
+                reduceMotion
+                  ? false
+                  : {
+                      opacity: 0,
+                      scale: 0.97,
+                    }
+              }
+              animate={{
+                opacity: 1,
+                scale: 1,
+              }}
+              className="flex items-center gap-3 rounded-2xl border border-white/15 bg-white px-4 py-3 text-black"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-white">
+                <Check size={15} />
+              </div>
+
+              <div>
+                <p className="text-sm font-semibold">
+                  Appointment booked
+                </p>
+
+                <p className="mt-0.5 text-xs text-zinc-600">
+                  The lead qualification flow is complete.
+                </p>
+              </div>
+            </motion.div>
           ) : (
-            <form onSubmit={handleSubmit} className="flex gap-3">
-              <input
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder="Describe what you need..."
-                disabled={loading}
-                autoComplete="off"
-                className="flex-1 rounded-full border border-white/10 bg-white/[0.04] px-5 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-violet-500/50 disabled:cursor-not-allowed disabled:opacity-60"
-              />
+            <form onSubmit={handleSubmit} className="flex items-center gap-2.5">
+              <div className="relative min-w-0 flex-1">
+                <input
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  placeholder="Type your message..."
+                  disabled={loading}
+                  autoComplete="off"
+                  className="h-12 w-full rounded-xl border border-white/[0.09] bg-white/[0.035] px-4 pr-12 text-sm text-white outline-none transition placeholder:text-zinc-700 focus:border-white/20 focus:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </div>
 
               <button
                 type="submit"
                 disabled={loading || !input.trim()}
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label="Send message"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-black transition hover:scale-[1.03] hover:bg-zinc-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
               >
                 {loading ? (
                   <LoaderCircle size={17} className="animate-spin" />
@@ -965,13 +1156,33 @@ export function DemoChat({
             </form>
           )}
         </div>
-      </div>
+      </motion.section>
 
-      {/* LEAD SUMMARY */}
+      {/* LIVE QUALIFICATION */}
 
-      {!compact && (
-        <LeadSummary lead={lead} status={status} completed={completed} />
-      )}
+      {!compact ? (
+        <motion.div
+          initial={
+            reduceMotion
+              ? false
+              : {
+                  opacity: 0,
+                  x: 45,
+                }
+          }
+          animate={{
+            opacity: 1,
+            x: 0,
+          }}
+          transition={{
+            duration: 0.65,
+            delay: 0.12,
+            ease: [0.22, 1, 0.36, 1],
+          }}
+        >
+          <LeadSummary lead={lead} status={status} completed={completed} />
+        </motion.div>
+      ) : null}
     </div>
   );
 }
@@ -989,71 +1200,140 @@ function LeadSummary({
   status: LeadStatus;
   completed: boolean;
 }) {
-  return (
-    <aside className="h-fit rounded-3xl border border-white/10 bg-white/[0.03] p-6 lg:sticky lg:top-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-zinc-500">Live Lead Profile</p>
+  const qualificationFields = [
+    lead.industry,
+    lead.service,
+    lead.location,
+    lead.urgency,
+    lead.timeline,
+    lead.name,
+    lead.phone,
+  ];
 
-          <h2 className="mt-1 text-xl font-semibold">Qualification</h2>
+  const completedFields = qualificationFields.filter(Boolean).length;
+
+  const progress = Math.round(
+    (completedFields / qualificationFields.length) * 100,
+  );
+
+  return (
+    <aside className="overflow-hidden rounded-[2rem] border border-white/[0.09] bg-[#080808] lg:sticky lg:top-24">
+      <div className="border-b border-white/[0.07] p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-600">
+              <CircleDot size={11} />
+              Live qualification
+            </div>
+
+            <h2 className="mt-3 text-xl font-semibold tracking-tight text-white">
+              Lead profile
+            </h2>
+          </div>
+
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.035] text-white">
+            <Flame size={17} />
+          </div>
         </div>
 
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-400">
-          <Flame size={19} />
+        <div className="mt-6">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-zinc-600">Profile captured</span>
+
+            <span className="font-medium text-zinc-300">
+              {completed ? "Complete" : `${progress}%`}
+            </span>
+          </div>
+
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+            <motion.div
+              initial={{
+                width: 0,
+              }}
+              animate={{
+                width: completed ? "100%" : `${progress}%`,
+              }}
+              transition={{
+                duration: 0.5,
+                ease: [0.22, 1, 0.36, 1],
+              }}
+              className="h-full rounded-full bg-white"
+            />
+          </div>
         </div>
       </div>
 
-      <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4">
-        <p className="text-xs uppercase tracking-wider text-zinc-600">
-          Lead Status
-        </p>
+      <div className="p-5 sm:p-6">
+        <div className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.025] px-4 py-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-700">
+              Current status
+            </p>
 
-        <div className="mt-2 flex items-center justify-between gap-3">
-          <span className="font-medium text-white">
-            {completed ? "Appointment Booked" : "Qualifying"}
-          </span>
+            <p className="mt-1 text-sm font-medium text-zinc-200">
+              {completed ? "Appointment booked" : "Qualifying lead"}
+            </p>
+          </div>
 
           <StatusBadge status={status} />
         </div>
-      </div>
 
-      <div className="mt-5 space-y-4">
-        <SummaryRow label="Industry" value={lead.industry} />
+        <div className="mt-6">
+          <p className="mb-4 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-700">
+            Captured details
+          </p>
 
-        <SummaryRow label="Service" value={lead.service} />
-
-        <SummaryRow label="Location" value={lead.location} />
-
-        <SummaryRow label="Urgency" value={lead.urgency} />
-
-        <SummaryRow label="Timeline" value={lead.timeline} />
-
-        <SummaryRow label="Name" value={lead.name} />
-
-        <SummaryRow label="Phone" value={lead.phone} />
-      </div>
-
-      {lead.appointment && (
-        <div className="mt-6 rounded-2xl border border-blue-500/20 bg-violet-500/5 p-4">
-          <div className="flex items-center gap-3">
-            <CalendarDays size={19} className="text-blue-400" />
-
-            <div>
-              <p className="text-xs text-zinc-500">Appointment</p>
-
-              <p className="mt-1 text-sm font-medium text-white">
-                {lead.appointment}
-              </p>
-            </div>
+          <div>
+            <SummaryRow label="Industry" value={lead.industry} />
+            <SummaryRow label="Service" value={lead.service} />
+            <SummaryRow label="Location" value={lead.location} />
+            <SummaryRow label="Urgency" value={lead.urgency} />
+            <SummaryRow label="Timeline" value={lead.timeline} />
+            <SummaryRow label="Name" value={lead.name} />
+            <SummaryRow label="Phone" value={lead.phone} />
           </div>
         </div>
-      )}
 
-      <div className="mt-6 border-t border-white/10 pt-5">
-        <p className="text-xs leading-5 text-zinc-600">
-          Lead qualification information is extracted from the conversation in
-          real time.
-        </p>
+        {lead.appointment ? (
+          <motion.div
+            initial={{
+              opacity: 0,
+              y: 8,
+            }}
+            animate={{
+              opacity: 1,
+              y: 0,
+            }}
+            className="mt-6 rounded-xl bg-white p-4 text-black"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-black text-white">
+                <CalendarDays size={16} />
+              </div>
+
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                  Appointment
+                </p>
+
+                <p className="mt-1 text-sm font-semibold">
+                  {lead.appointment}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        ) : null}
+
+        <div className="mt-6 border-t border-white/[0.07] pt-5">
+          <div className="flex gap-3">
+            <MapPin size={14} className="mt-0.5 shrink-0 text-zinc-700" />
+
+            <p className="text-xs leading-5 text-zinc-700">
+              Qualification details update automatically as the conversation
+              progresses.
+            </p>
+          </div>
+        </div>
       </div>
     </aside>
   );
@@ -1064,19 +1344,21 @@ function LeadSummary({
    ========================================================= */
 
 function StatusBadge({ status }: { status: LeadStatus }) {
-  const styles = {
-    new: "bg-zinc-500/10 text-zinc-400",
-
-    warm: "bg-amber-500/10 text-amber-400",
-
-    hot: "bg-red-500/10 text-red-400",
+  const labels: Record<LeadStatus, string> = {
+    new: "New",
+    warm: "Warm",
+    hot: "Hot",
   };
 
   return (
     <span
-      className={`rounded-full px-3 py-1 text-xs font-medium capitalize ${styles[status]}`}
+      className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] ${
+        status === "hot"
+          ? "border-white bg-white text-black"
+          : "border-white/10 bg-white/[0.035] text-zinc-400"
+      }`}
     >
-      {status}
+      {labels[status]}
     </span>
   );
 }
