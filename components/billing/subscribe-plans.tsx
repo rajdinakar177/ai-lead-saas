@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
+import { formatMonthlyPrice } from "@/lib/plan-pricing";
 type PlanId = "starter" | "pro";
 
 export function SubscribePlans() {
@@ -47,7 +47,7 @@ export function SubscribePlans() {
     {
       id: "starter" as const,
       name: "Starter",
-      price: "$49",
+      price: formatMonthlyPrice("starter"),
       description:
         "Everything you need to start capturing and qualifying leads.",
       features: [
@@ -60,7 +60,7 @@ export function SubscribePlans() {
     {
       id: "pro" as const,
       name: "Pro",
-      price: "$99",
+      price: formatMonthlyPrice("pro"),
       description:
         "More automation and capacity for growing service businesses.",
       features: [

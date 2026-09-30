@@ -2,15 +2,13 @@ import twilio from "twilio";
 
 type SendSmsParams = {
   to: string;
+  from: string;
   body: string;
 };
 
-export async function sendSms({ to, body }: SendSmsParams) {
+export async function sendSms({ to, from, body }: SendSmsParams) {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
-
   const authToken = process.env.TWILIO_AUTH_TOKEN;
-
-  const from = process.env.TWILIO_PHONE_NUMBER;
 
   if (!accountSid) {
     throw new Error("TWILIO_ACCOUNT_SID is not configured.");
@@ -20,8 +18,8 @@ export async function sendSms({ to, body }: SendSmsParams) {
     throw new Error("TWILIO_AUTH_TOKEN is not configured.");
   }
 
-  if (!from) {
-    throw new Error("TWILIO_PHONE_NUMBER is not configured.");
+  if (!/^\+1\d{10}$/.test(from)) {
+    throw new Error("A valid US business SMS number is required.");
   }
 
   const client = twilio(accountSid, authToken);

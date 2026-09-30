@@ -199,8 +199,8 @@ export async function POST(request: Request) {
       twilioPhoneNumber: to,
     }).lean();
 
-    if (!business) {
-      safeLogger.warn("No business found for incoming Twilio SMS.", {
+    if (!business || business.twilioSmsStatus !== "ready") {
+      safeLogger.warn("No SMS-ready business found for incoming Twilio SMS.", {
         messageSid,
       });
 

@@ -6,6 +6,7 @@ import {
   CreditCard,
   LayoutDashboard,
   Menu,
+  MessageSquare,
   ReceiptText,
   ServerCog,
   ShieldCheck,
@@ -17,6 +18,7 @@ import { usePathname } from "next/navigation";
 import { AdminLogoutButton } from "@/components/admin/admin-logout-button";
 
 const navigation = [
+  { label: "SMS numbers", href: "/admin/sms-numbers", icon: MessageSquare },
   {
     label: "Overview",
     href: "/admin",

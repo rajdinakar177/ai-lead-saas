@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
+import { formatMonthlyPrice } from "@/lib/plan-pricing";
 type PlanId = "starter" | "pro";
 type SubscriptionUsage = {
   leads: {
@@ -121,7 +121,7 @@ export function SubscriptionSettings({
     {
       id: "starter" as const,
       name: "Starter",
-      price: "$49",
+      price: formatMonthlyPrice("starter"),
       description: "For businesses getting started with AI lead management.",
       features: [
         "AI lead qualification",
@@ -133,7 +133,7 @@ export function SubscriptionSettings({
     {
       id: "pro" as const,
       name: "Pro",
-      price: "$99",
+      price: formatMonthlyPrice("pro"),
       description: "For businesses that need more automation and capacity.",
       features: [
         "Everything in Starter",

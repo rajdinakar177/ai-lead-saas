@@ -106,7 +106,27 @@ const businessSchema = new Schema(
       type: String,
       default: null,
       trim: true,
-      index: true,
+    },
+    twilioNumberSid: { type: String, default: null },
+    twilioSmsStatus: {
+      type: String,
+      enum: [
+        "unconfigured",
+        "requested",
+        "provisioning",
+        "needs_review",
+        "registration_pending",
+        "ready",
+      ],
+      default: "unconfigured",
+    },
+    twilioSetup: {
+      areaCode: { type: String, default: null },
+      requestedAt: { type: Date, default: null },
+      purchaseToken: { type: String, default: null },
+      purchaseStartedAt: { type: Date, default: null },
+      approvedAt: { type: Date, default: null },
+      approvedBy: { type: Schema.Types.ObjectId, ref: "Admin", default: null },
     },
     availability: {
       slotDurationMinutes: {

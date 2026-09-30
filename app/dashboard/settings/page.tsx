@@ -1,7 +1,9 @@
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { BusinessSettingsForm } from "@/components/dashboard/settings/business-settings-form";
+import { SmsNumberSettings } from "@/components/dashboard/settings/sms-number-settings";
 
 import { requireBusiness } from "@/lib/auth";
+import { smsSetupView } from "@/lib/sms/number-setup";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +18,6 @@ export default async function SettingsPage() {
       />
 
       <div className="mb-8 mt-8 max-w-4xl">
-      
-
         <BusinessSettingsForm
           business={{
             name: business.name,
@@ -26,6 +26,8 @@ export default async function SettingsPage() {
             phone: business.phone ?? "",
           }}
         />
+
+        <SmsNumberSettings setup={smsSetupView(business)} />
       </div>
     </div>
   );

@@ -1,12 +1,12 @@
 import { ArrowRight, Check } from "lucide-react";
 import Link from "next/link";
-
+import { formatMonthlyPrice } from "@/lib/plan-pricing";
 import { Reveal } from "@/components/shared/reveal";
 
 const plans = [
   {
     name: "Starter",
-    price: "$49",
+    price: formatMonthlyPrice("starter"),
     description:
       "Core lead capture, AI conversations and appointment tools for growing service businesses.",
     features: [
@@ -20,7 +20,7 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "$99",
+    price: formatMonthlyPrice("pro"),
     description:
       "Higher usage plus automation and calendar tools for businesses ready to scale.",
     featured: true,

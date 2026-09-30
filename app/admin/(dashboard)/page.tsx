@@ -5,13 +5,13 @@ import {
   DollarSign,
   Users,
 } from "lucide-react";
-
+import { PLAN_PRICING } from "@/lib/plan-pricing";
 import { connectDB } from "@/lib/mongodb";
 import { Business } from "@/models/Business";
 import { Lead } from "@/models/Lead";
 
-const STARTER_MONTHLY_PRICE = 49;
-const PRO_MONTHLY_PRICE = 99;
+const STARTER_MONTHLY_PRICE = PLAN_PRICING.starter.monthlyUsd;
+const PRO_MONTHLY_PRICE = PLAN_PRICING.pro.monthlyUsd;
 
 export default async function AdminPage() {
   await connectDB();
