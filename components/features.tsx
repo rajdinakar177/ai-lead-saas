@@ -63,7 +63,9 @@ export function Features() {
 
             <h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em] text-white sm:text-5xl lg:text-6xl">
               Built around the moments
-              <span className="block text-zinc-600">that turn leads into jobs.</span>
+              <span className="block text-zinc-600">
+                that turn leads into jobs.
+              </span>
             </h2>
           </div>
         </Reveal>

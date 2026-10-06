@@ -42,9 +42,7 @@ export default async function SubscriptionPage() {
           currentPlan={business.subscription?.plan ?? null}
           currentStatus={business.subscription?.status ?? "none"}
           cancelAt={
-            business.subscription?.cancelAt
-              ? business.subscription.cancelAt.toISOString()
-              : null
+            business.subscription?.cancelAt ? business.subscription.cancelAt.toISOString() : null
           }
           usage={
             access.limits

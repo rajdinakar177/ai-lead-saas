@@ -22,13 +22,9 @@ export default async function SubscribePage() {
     <main className="min-h-screen bg-[#050505] px-4 py-16 text-white sm:px-6">
       <div className="mx-auto max-w-4xl">
         <div className="mx-auto mb-10 max-w-2xl text-center">
-          <p className="text-sm font-medium text-zinc-400">
-            Subscription required
-          </p>
+          <p className="text-sm font-medium text-zinc-400">Subscription required</p>
 
-          <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
-            Choose your plan
-          </h1>
+          <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Choose your plan</h1>
 
           <p className="mt-4 text-sm leading-6 text-zinc-500 sm:text-base">
             Select a plan to activate your account and access your dashboard.

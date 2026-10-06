@@ -127,8 +127,7 @@ export const DEMO_SERVICE_OPTIONS: Option[] = [
 ];
 
 const PROMPTS: Record<Step, string> = {
-  service:
-    "What do you need help with: roofing, air conditioning, or heating?",
+  service: "What do you need help with: roofing, air conditioning, or heating?",
 
   state:
     "Which US state is the property in? Enter the full name, like Texas, or the abbreviation, TX.",
@@ -139,8 +138,7 @@ const PROMPTS: Record<Step, string> = {
   zipCode:
     "What's the property's 5-digit ZIP code? I'll check that it matches your state.",
 
-  city:
-    "Which city is the property in? I'll check that it matches your ZIP code and state.",
+  city: "Which city is the property in? I'll check that it matches your ZIP code and state.",
 
   urgency:
     "How urgent is the problem? Does it need attention right away, or can it wait?",
@@ -148,8 +146,7 @@ const PROMPTS: Record<Step, string> = {
   timeline:
     "When would you like someone to visit: today, tomorrow, this week, or next week?",
 
-  name:
-    "Who should the team ask for? Please enter your name. A sample name is fine for this demo.",
+  name: "Who should the team ask for? Please enter your name. A sample name is fine for this demo.",
 
   phone:
     "What's the best US phone number to reach you? Enter 10 digits, or +1 followed by 10 digits. No SMS will be sent in this demo.",
@@ -226,28 +223,17 @@ function response(
   return {
     lead,
 
-    reply:
-      message ??
-      (step ? PROMPTS[step] : completedReply),
+    reply: message ?? (step ? PROMPTS[step] : completedReply),
 
-    options:
-      customOptions ??
-      (step ? OPTIONS[step] ?? [] : []),
+    options: customOptions ?? (step ? (OPTIONS[step] ?? []) : []),
 
     readyToBook: !step,
 
-    status:
-      !step
-        ? "hot"
-        : lead.service
-          ? "warm"
-          : "new",
+    status: !step ? "hot" : lead.service ? "warm" : "new",
   };
 }
 
-function readState(
-  text: string,
-): [string, string] | undefined {
+function readState(text: string): [string, string] | undefined {
   const value = text
     .replace(
       /^(?:i live in|i am in|i'm in|my state is|the state is|state:?)\s+/i,
@@ -263,12 +249,8 @@ function readState(
     return (
       code.toLowerCase() === normalized ||
       name.toLowerCase() === normalized ||
-      (
-        code === "DC" &&
-        /^(?:washington,? dc|washington d\.c\.?|d\.c\.?)$/i.test(
-          value,
-        )
-      )
+      (code === "DC" &&
+        /^(?:washington,? dc|washington d\.c\.?|d\.c\.?)$/i.test(value))
     );
   });
 }
@@ -291,9 +273,7 @@ function getCityOptions(places: ZipPlace[]): Option[] {
     }));
 }
 
-async function lookupZip(
-  zip: string,
-): Promise<ZipPlace[]> {
+async function lookupZip(zip: string): Promise<ZipPlace[]> {
   const cached = zipCache.get(zip);
 
   if (cached && cached.expires > Date.now()) {
@@ -308,14 +288,11 @@ async function lookupZip(
 
   try {
     // Only the ZIP code is sent to this service.
-    const result = await fetch(
-      `https://api.zippopotam.us/us/${zip}`,
-      {
-        signal: controller.signal,
-        credentials: "omit",
-        referrerPolicy: "no-referrer",
-      },
-    );
+    const result = await fetch(`https://api.zippopotam.us/us/${zip}`, {
+      signal: controller.signal,
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+    });
 
     if (result.status === 404) {
       return [];
@@ -327,44 +304,36 @@ async function lookupZip(
 
     const data = await result.json();
 
-    if (
-      data["country abbreviation"] !== "US" ||
-      !Array.isArray(data.places)
-    ) {
+    if (data["country abbreviation"] !== "US" || !Array.isArray(data.places)) {
       throw new Error("Unexpected ZIP lookup response.");
     }
 
-    const places: ZipPlace[] = data.places.flatMap(
-      (place: unknown) => {
-        if (
-          !place ||
-          typeof place !== "object"
-        ) {
-          return [];
-        }
+    const places: ZipPlace[] = data.places.flatMap((place: unknown) => {
+      if (!place || typeof place !== "object") {
+        return [];
+      }
 
-        const record = place as Record<string, unknown>;
+      const record = place as Record<string, unknown>;
 
-        const city = record["place name"];
-        const stateCode = record["state abbreviation"];
+      const city = record["place name"];
+      const stateCode = record["state abbreviation"];
 
-        if (
-          typeof city !== "string" ||
-          typeof stateCode !== "string" ||
-          !city.trim() ||
-          !STATES[stateCode]
-        ) {
-          return [];
-        }
+      if (
+        typeof city !== "string" ||
+        typeof stateCode !== "string" ||
+        !city.trim() ||
+        !STATES[stateCode]
+      ) {
+        return [];
+      }
 
-        return [
-          {
-            city: city.trim(),
-            stateCode,
-          },
-        ];
-      },
-    );
+      return [
+        {
+          city: city.trim(),
+          stateCode,
+        },
+      ];
+    });
 
     if (zipCache.size >= 256) {
       zipCache.clear();
@@ -447,9 +416,7 @@ export async function getLocalDemoReply(
 
   switch (step) {
     case "service": {
-      if (
-        /\b(?:roof|roofing|shingle|shingles)\b/i.test(input)
-      ) {
+      if (/\b(?:roof|roofing|shingle|shingles)\b/i.test(input)) {
         lead.industry = "Roofing";
 
         lead.service = /leak/i.test(input)
@@ -460,9 +427,7 @@ export async function getLocalDemoReply(
           ? "Sorry you're dealing with a roof leak. Let's collect the property details."
           : "I can help with a roofing enquiry.";
       } else if (
-        /\b(?:ac|hvac|heating|heater|furnace)\b|air condition/i.test(
-          input,
-        )
+        /\b(?:ac|hvac|heating|heater|furnace)\b|air condition/i.test(input)
       ) {
         lead.industry = "HVAC";
 
@@ -470,13 +435,12 @@ export async function getLocalDemoReply(
           ? "Heating repair"
           : "AC repair";
 
-        acknowledgement =
-          "Let's get the details for the HVAC team.";
+        acknowledgement = "Let's get the details for the HVAC team.";
       } else {
         return response(
           lead,
           "This demo supports roofing and HVAC enquiries. " +
-          "Tell me about your roof, air conditioning, or heating issue.",
+            "Tell me about your roof, air conditioning, or heating issue.",
         );
       }
 
@@ -490,8 +454,8 @@ export async function getLocalDemoReply(
         return response(
           lead,
           "I couldn't recognise that as a US state. " +
-          "Please enter one of the 50 state names or its " +
-          "two-letter abbreviation. Washington, DC is also supported.",
+            "Please enter one of the 50 state names or its " +
+            "two-letter abbreviation. Washington, DC is also supported.",
         );
       }
 
@@ -504,17 +468,12 @@ export async function getLocalDemoReply(
 
     case "address": {
       const address = input
-        .replace(
-          /^(?:my address is|the address is|address:)\s*/i,
-          "",
-        )
+        .replace(/^(?:my address is|the address is|address:)\s*/i, "")
         .trim();
 
-      const hasHouseNumber =
-        /^\d+[A-Za-z]?(?:[-/]\d+)?\s+.+/.test(address);
+      const hasHouseNumber = /^\d+[A-Za-z]?(?:[-/]\d+)?\s+.+/.test(address);
 
-      const hasStreetName =
-        /[A-Za-z]{2}/.test(address);
+      const hasStreetName = /[A-Za-z]{2}/.test(address);
 
       if (
         address.length < 6 ||
@@ -525,15 +484,14 @@ export async function getLocalDemoReply(
         return response(
           lead,
           "Please enter a street address with a house number, " +
-          "for example 123 Main Street, Apt 4. " +
-          "This checks the address format only.",
+            "for example 123 Main Street, Apt 4. " +
+            "This checks the address format only.",
         );
       }
 
       lead.address = address;
 
-      acknowledgement =
-        "Thanks, I've noted the street address.";
+      acknowledgement = "Thanks, I've noted the street address.";
 
       break;
     }
@@ -543,7 +501,7 @@ export async function getLocalDemoReply(
         return response(
           lead,
           "Please enter a 5-digit ZIP code, keeping any leading zero. " +
-          "If you have ZIP+4, enter only the first five digits.",
+            "If you have ZIP+4, enter only the first five digits.",
         );
       }
 
@@ -555,8 +513,8 @@ export async function getLocalDemoReply(
         return response(
           lead,
           "I can't reach the ZIP lookup right now, " +
-          "so I haven't verified it. " +
-          "Please try the ZIP code again in a moment.",
+            "so I haven't verified it. " +
+            "Please try the ZIP code again in a moment.",
         );
       }
 
@@ -564,7 +522,7 @@ export async function getLocalDemoReply(
         return response(
           lead,
           "I couldn't find that ZIP code in the lookup. " +
-          "Please check the five digits and try again.",
+            "Please check the five digits and try again.",
         );
       }
 
@@ -574,19 +532,15 @@ export async function getLocalDemoReply(
 
       if (!statePlaces.length) {
         const listedStates = [
-          ...new Set(
-            places.map(
-              (place) => STATES[place.stateCode],
-            ),
-          ),
+          ...new Set(places.map((place) => STATES[place.stateCode])),
         ].join(" / ");
 
         return response(
           lead,
           `That ZIP code is listed in ${listedStates}, ` +
-          `but you selected ${lead.state}. ` +
-          `Please enter a ZIP code for ${lead.state}, ` +
-          'or type "change state".',
+            `but you selected ${lead.state}. ` +
+            `Please enter a ZIP code for ${lead.state}, ` +
+            'or type "change state".',
         );
       }
 
@@ -598,39 +552,22 @@ export async function getLocalDemoReply(
 
       return response(
         lead,
-        `That ZIP code matches ${lead.state}. ` +
-        PROMPTS.city,
+        `That ZIP code matches ${lead.state}. ` + PROMPTS.city,
         getCityOptions(statePlaces),
       );
     }
 
     case "city": {
-      if (
-        !lead.zipCode ||
-        !lead.zipVerified ||
-        !lead.stateCode
-      ) {
-        return response(
-          lead,
-          "Please verify your state and ZIP code first.",
-        );
+      if (!lead.zipCode || !lead.zipVerified || !lead.stateCode) {
+        return response(lead, "Please verify your state and ZIP code first.");
       }
 
       const enteredCity = input
-        .replace(
-          /^(?:my city is|the city is|i live in|city:)\s*/i,
-          "",
-        )
+        .replace(/^(?:my city is|the city is|i live in|city:)\s*/i, "")
         .trim();
 
-      if (
-        enteredCity.length < 2 ||
-        enteredCity.length > 100
-      ) {
-        return response(
-          lead,
-          "Please enter the city name for the property.",
-        );
+      if (enteredCity.length < 2 || enteredCity.length > 100) {
+        return response(lead, "Please enter the city name for the property.");
       }
 
       let places: ZipPlace[];
@@ -641,7 +578,7 @@ export async function getLocalDemoReply(
         return response(
           lead,
           "I can't reach the city lookup right now. " +
-          "Your city hasn't been verified. Please try again.",
+            "Your city hasn't been verified. Please try again.",
         );
       }
 
@@ -653,16 +590,14 @@ export async function getLocalDemoReply(
         return response(
           lead,
           "I couldn't confirm the places for this ZIP code. " +
-          'Please try again or type "change ZIP" to correct it.',
+            'Please try again or type "change ZIP" to correct it.',
         );
       }
 
-      const normalizedInput =
-        normalizeCity(enteredCity);
+      const normalizedInput = normalizeCity(enteredCity);
 
       const matchedPlace = statePlaces.find(
-        (place) =>
-          normalizeCity(place.city) === normalizedInput,
+        (place) => normalizeCity(place.city) === normalizedInput,
       );
 
       if (!matchedPlace) {
@@ -671,12 +606,12 @@ export async function getLocalDemoReply(
         return response(
           lead,
           `I couldn't match "${enteredCity}" to ZIP code ` +
-          `${lead.zipCode} in ${lead.state}. ` +
-          `The lookup lists: ${
-            cityOptions.map((option) => option.label).join(", ")
-          }. ` +
-          "Please check the city spelling, select a matching city, " +
-          'or type "change ZIP".',
+            `${lead.zipCode} in ${lead.state}. ` +
+            `The lookup lists: ${cityOptions
+              .map((option) => option.label)
+              .join(", ")}. ` +
+            "Please check the city spelling, select a matching city, " +
+            'or type "change ZIP".',
           cityOptions,
         );
       }
@@ -685,11 +620,9 @@ export async function getLocalDemoReply(
       lead.cityVerified = true;
 
       lead.location =
-        `${lead.address}, ${lead.city}, ` +
-        `${lead.stateCode} ${lead.zipCode}`;
+        `${lead.address}, ${lead.city}, ` + `${lead.stateCode} ${lead.zipCode}`;
 
-      acknowledgement =
-        `Thanks — ${lead.city} matches your ZIP code and state.`;
+      acknowledgement = `Thanks — ${lead.city} matches your ZIP code and state.`;
 
       break;
     }
@@ -701,17 +634,13 @@ export async function getLocalDemoReply(
         )
       ) {
         lead.urgency = "Not urgent";
-      } else if (
-        /urgent|asap|emergency|right away|immediately/i.test(
-          input,
-        )
-      ) {
+      } else if (/urgent|asap|emergency|right away|immediately/i.test(input)) {
         lead.urgency = "Urgent";
       } else {
         return response(
           lead,
           "Should I mark this as urgent, or can it wait? " +
-          "You can choose below.",
+            "You can choose below.",
         );
       }
 
@@ -736,37 +665,28 @@ export async function getLocalDemoReply(
         return response(
           lead,
           "For this demo, please choose today, tomorrow, " +
-          "this week, or next week.",
+            "this week, or next week.",
         );
       }
 
-      acknowledgement =
-        `I've noted ${lead.timeline.toLowerCase()} as your preference.`;
+      acknowledgement = `I've noted ${lead.timeline.toLowerCase()} as your preference.`;
 
       break;
     }
 
     case "name": {
       const name = input
-        .replace(
-          /^(?:my name is|i am|i'm|call me)\s+/i,
-          "",
-        )
+        .replace(/^(?:my name is|i am|i'm|call me)\s+/i, "")
         .trim();
 
-      const validCharacters =
-        /^[\p{L}\p{M}][\p{L}\p{M} .'-]*$/u.test(name);
+      const validCharacters = /^[\p{L}\p{M}][\p{L}\p{M} .'-]*$/u.test(name);
 
-      if (
-        name.length < 2 ||
-        name.length > 80 ||
-        !validCharacters
-      ) {
+      if (name.length < 2 || name.length > 80 || !validCharacters) {
         return response(
           lead,
           "Please enter a name using letters, spaces, " +
-          "hyphens, or apostrophes. " +
-          "A sample name is fine for this demo.",
+            "hyphens, or apostrophes. " +
+            "A sample name is fine for this demo.",
         );
       }
 
@@ -779,10 +699,7 @@ export async function getLocalDemoReply(
 
     case "phone": {
       const value = input
-        .replace(
-          /^(?:my phone number is|my number is|phone:)\s*/i,
-          "",
-        )
+        .replace(/^(?:my phone number is|my number is|phone:)\s*/i, "")
         .trim();
 
       const phone = parsePhoneNumberFromString(value, {
@@ -790,17 +707,13 @@ export async function getLocalDemoReply(
         extract: false,
       });
 
-      if (
-        !phone ||
-        phone.country !== "US" ||
-        !phone.isValid()
-      ) {
+      if (!phone || phone.country !== "US" || !phone.isValid()) {
         return response(
           lead,
           "That doesn't look like a valid US phone number. " +
-          "Please enter a US area code and number, " +
-          "with 10 digits or +1. Canadian and other " +
-          "international numbers aren't supported.",
+            "Please enter a US area code and number, " +
+            "with 10 digits or +1. Canadian and other " +
+            "international numbers aren't supported.",
         );
       }
 
@@ -814,9 +727,7 @@ export async function getLocalDemoReply(
 
   return response(
     lead,
-    next
-      ? `${acknowledgement} ${PROMPTS[next]}`.trim()
-      : undefined,
+    next ? `${acknowledgement} ${PROMPTS[next]}`.trim() : undefined,
   );
 }
 

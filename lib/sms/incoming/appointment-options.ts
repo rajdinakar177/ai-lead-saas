@@ -155,7 +155,7 @@ export async function sendFreshSmsAppointmentOptions({
 
   try {
     await sendSmsReply({
-        business,
+      business,
       to: normalizedPhone,
       body: reply,
     });

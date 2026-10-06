@@ -22,10 +22,7 @@ type Props = {
   enabled: boolean;
 };
 
-export function GoogleCalendarSettings({
-  integration,
-  enabled,
-}: Props) {
+export function GoogleCalendarSettings({ integration, enabled }: Props) {
   const router = useRouter();
 
   const connected = integration?.connected === true;
@@ -69,9 +66,7 @@ export function GoogleCalendarSettings({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error || "Unable to disconnect Google Calendar.",
-        );
+        throw new Error(data.error || "Unable to disconnect Google Calendar.");
       }
 
       /*
@@ -106,9 +101,7 @@ export function GoogleCalendarSettings({
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(
-          data.error || "Unable to open billing portal.",
-        );
+        throw new Error(data.error || "Unable to open billing portal.");
       }
 
       if (!data.url) {
@@ -135,9 +128,7 @@ export function GoogleCalendarSettings({
           </div>
 
           <div>
-            <h3 className="font-semibold text-white">
-              Google Calendar
-            </h3>
+            <h3 className="font-semibold text-white">Google Calendar</h3>
 
             <p className="mt-1 max-w-xl text-sm leading-6 text-zinc-500">
               Connect your Google Calendar so Leadquivo appointments can stay
@@ -191,8 +182,8 @@ export function GoogleCalendarSettings({
 
           <div className="mt-6 flex flex-col gap-4 border-t border-white/10 pt-6 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-zinc-500">
-              New bookings, reschedules and cancellations are synced with
-              Google Calendar.
+              New bookings, reschedules and cancellations are synced with Google
+              Calendar.
             </p>
 
             <div className="flex flex-col gap-2 sm:flex-row">
@@ -214,10 +205,7 @@ export function GoogleCalendarSettings({
               >
                 {disconnecting ? (
                   <>
-                    <LoaderCircle
-                      size={16}
-                      className="animate-spin"
-                    />
+                    <LoaderCircle size={16} className="animate-spin" />
                     Disconnecting...
                   </>
                 ) : (
@@ -263,10 +251,7 @@ export function GoogleCalendarSettings({
               >
                 {disconnecting ? (
                   <>
-                    <LoaderCircle
-                      size={16}
-                      className="animate-spin"
-                    />
+                    <LoaderCircle size={16} className="animate-spin" />
                     Disconnecting...
                   </>
                 ) : (
@@ -317,18 +302,10 @@ export function GoogleCalendarSettings({
   );
 }
 
-function InfoCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function InfoCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-      <p className="text-xs uppercase tracking-wider text-zinc-600">
-        {label}
-      </p>
+      <p className="text-xs uppercase tracking-wider text-zinc-600">{label}</p>
 
       <p className="mt-2 break-all text-sm font-medium text-zinc-200">
         {value}

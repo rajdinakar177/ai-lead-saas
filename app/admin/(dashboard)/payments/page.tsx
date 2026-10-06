@@ -56,17 +56,14 @@ export default async function AdminPaymentsPage() {
     expand: ["data.customer"],
   });
 
-  const successfulPayments = invoices.data.filter(
-    (invoice) => invoice.status === "paid",
-  ).length;
+  const successfulPayments = invoices.data.filter((invoice) => invoice.status === "paid").length;
 
   const failedPayments = invoices.data.filter(
     (invoice) => invoice.status === "uncollectible",
   ).length;
 
   const pendingPayments = invoices.data.filter(
-    (invoice) =>
-      invoice.status === "open" || invoice.status === "draft",
+    (invoice) => invoice.status === "open" || invoice.status === "draft",
   ).length;
 
   const totalCollected = invoices.data
@@ -76,43 +73,25 @@ export default async function AdminPaymentsPage() {
   return (
     <>
       <div>
-        <p className="text-sm font-medium uppercase tracking-widest text-blue-400">
-          Billing
-        </p>
+        <p className="text-sm font-medium uppercase tracking-widest text-blue-400">Billing</p>
 
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">
-          Payments
-        </h1>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight">Payments</h1>
 
-        <p className="mt-2 text-zinc-500">
-          Monitor recent Stripe invoices and payment activity.
-        </p>
+        <p className="mt-2 text-zinc-500">Monitor recent Stripe invoices and payment activity.</p>
       </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <PaymentStatus
-          label="Paid"
-          value={successfulPayments.toLocaleString()}
-        />
+        <PaymentStatus label="Paid" value={successfulPayments.toLocaleString()} />
 
-        <PaymentStatus
-          label="Failed"
-          value={failedPayments.toLocaleString()}
-        />
+        <PaymentStatus label="Failed" value={failedPayments.toLocaleString()} />
 
-        <PaymentStatus
-          label="Pending"
-          value={pendingPayments.toLocaleString()}
-        />
+        <PaymentStatus label="Pending" value={pendingPayments.toLocaleString()} />
 
         <PaymentStatus
           label="Collected"
           value={
             invoices.data.length > 0
-              ? formatCurrency(
-                  totalCollected,
-                  invoices.data[0]?.currency ?? "usd",
-                )
+              ? formatCurrency(totalCollected, invoices.data[0]?.currency ?? "usd")
               : "$0.00"
           }
         />
@@ -135,39 +114,24 @@ export default async function AdminPaymentsPage() {
 
         {invoices.data.length === 0 ? (
           <div className="px-6 py-12 text-center">
-            <CreditCard
-              size={28}
-              className="mx-auto text-zinc-700"
-            />
+            <CreditCard size={28} className="mx-auto text-zinc-700" />
 
-            <p className="mt-4 text-sm text-zinc-500">
-              No Stripe invoices found.
-            </p>
+            <p className="mt-4 text-sm text-zinc-500">No Stripe invoices found.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[950px] text-left text-sm">
               <thead className="border-b border-white/10 text-xs uppercase tracking-wider text-zinc-600">
                 <tr>
-                  <th className="px-6 py-4 font-medium">
-                    Customer
-                  </th>
+                  <th className="px-6 py-4 font-medium">Customer</th>
 
-                  <th className="px-4 py-4 font-medium">
-                    Amount
-                  </th>
+                  <th className="px-4 py-4 font-medium">Amount</th>
 
-                  <th className="px-4 py-4 font-medium">
-                    Status
-                  </th>
+                  <th className="px-4 py-4 font-medium">Status</th>
 
-                  <th className="px-4 py-4 font-medium">
-                    Invoice
-                  </th>
+                  <th className="px-4 py-4 font-medium">Invoice</th>
 
-                  <th className="px-4 py-4 font-medium">
-                    Date
-                  </th>
+                  <th className="px-4 py-4 font-medium">Date</th>
                 </tr>
               </thead>
 
@@ -181,35 +145,25 @@ export default async function AdminPaymentsPage() {
                       : null;
 
                   return (
-                    <tr
-                      key={invoice.id}
-                      className="transition hover:bg-white/[0.02]"
-                    >
+                    <tr key={invoice.id} className="transition hover:bg-white/[0.02]">
                       <td className="px-6 py-4">
                         <p className="font-medium text-zinc-200">
-                          {customer?.name ||
-                            customer?.email ||
-                            "Stripe customer"}
+                          {customer?.name || customer?.email || "Stripe customer"}
                         </p>
 
                         {customer?.name && customer?.email ? (
-                          <p className="mt-1 text-xs text-zinc-600">
-                            {customer.email}
-                          </p>
+                          <p className="mt-1 text-xs text-zinc-600">{customer.email}</p>
                         ) : null}
 
                         <p className="mt-1 font-mono text-xs text-zinc-700">
                           {typeof invoice.customer === "string"
                             ? invoice.customer
-                            : customer?.id ?? "—"}
+                            : (customer?.id ?? "—")}
                         </p>
                       </td>
 
                       <td className="px-4 py-4 font-medium text-zinc-300">
-                        {formatCurrency(
-                          invoice.amount_due,
-                          invoice.currency,
-                        )}
+                        {formatCurrency(invoice.amount_due, invoice.currency)}
                       </td>
 
                       <td className="px-4 py-4">
@@ -228,9 +182,7 @@ export default async function AdminPaymentsPage() {
                         </p>
                       </td>
 
-                      <td className="px-4 py-4 text-zinc-400">
-                        {formatDate(invoice.created)}
-                      </td>
+                      <td className="px-4 py-4 text-zinc-400">{formatDate(invoice.created)}</td>
                     </tr>
                   );
                 })}
@@ -247,20 +199,12 @@ export default async function AdminPaymentsPage() {
   );
 }
 
-function PaymentStatus({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function PaymentStatus({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
       <p className="text-sm text-zinc-500">{label}</p>
 
-      <p className="mt-3 text-3xl font-semibold">
-        {value}
-      </p>
+      <p className="mt-3 text-3xl font-semibold">{value}</p>
     </div>
   );
 }

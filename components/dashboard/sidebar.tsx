@@ -115,10 +115,11 @@ function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
                 key={item.href}
                 href={item.href}
                 onClick={onNavigate}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${active
+                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
+                  active
                     ? "bg-white text-black"
                     : "text-zinc-400 hover:bg-white/5 hover:text-white"
-                  }`}
+                }`}
               >
                 <Icon size={18} />
 
@@ -134,10 +135,11 @@ function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
         <Link
           href="/dashboard/settings"
           onClick={onNavigate}
-          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${pathname === "/dashboard/settings"
+          className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition ${
+            pathname === "/dashboard/settings"
               ? "bg-white text-black"
               : "text-zinc-500 hover:bg-white/5 hover:text-white"
-            }`}
+          }`}
         >
           <Settings size={18} />
           Business Settings
@@ -234,8 +236,9 @@ export function Sidebar() {
           Mobile drawer
       ========================== */}
       <aside
-        className={`fixed inset-y-0 left-0 z-[60] flex w-[85%] max-w-72 flex-col border-r border-white/10 bg-zinc-950 shadow-2xl transition-transform duration-300 lg:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
+        className={`fixed inset-y-0 left-0 z-[60] flex w-[85%] max-w-72 flex-col border-r border-white/10 bg-zinc-950 shadow-2xl transition-transform duration-300 lg:hidden ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
       >
         <div className="absolute right-3 top-3 z-10">
           <button

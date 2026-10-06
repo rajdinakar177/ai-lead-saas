@@ -66,13 +66,15 @@ export function Hero() {
 
           <h1 className="mt-7 max-w-4xl text-[3.25rem] font-semibold leading-[0.98] tracking-[-0.055em] text-white sm:text-6xl lg:text-[4.7rem]">
             Your next customer
-            <span className="block text-zinc-500">shouldn&apos;t have to wait.</span>
+            <span className="block text-zinc-500">
+              shouldn&apos;t have to wait.
+            </span>
           </h1>
 
           <p className="mt-7 max-w-xl text-base leading-7 text-zinc-400 sm:text-lg sm:leading-8">
             Capture leads, respond instantly, qualify prospects and move them
-            toward an appointment with one AI-powered workflow built for
-            roofing and HVAC businesses.
+            toward an appointment with one AI-powered workflow built for roofing
+            and HVAC businesses.
           </p>
 
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">

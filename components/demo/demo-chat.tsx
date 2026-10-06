@@ -21,11 +21,7 @@ import {
   User,
 } from "lucide-react";
 import { DemoRegistrationPopup } from "@/components/demo/demo-registration-popup";
-import {
-  AnimatePresence,
-  motion,
-  useReducedMotion,
-} from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import {
   type FormEvent,
@@ -122,11 +118,7 @@ type DemoChatProps = {
 };
 
 function normalizeStatus(status?: string | null): LeadStatus {
-  if (
-    status === "hot" ||
-    status === "qualified" ||
-    status === "booked"
-  ) {
+  if (status === "hot" || status === "qualified" || status === "booked") {
     return "hot";
   }
 
@@ -156,11 +148,13 @@ export function DemoChat({
 
   const [leadId, setLeadId] = useState<string | null>(null);
 
-  const [publicAccessToken, setPublicAccessToken] =
-    useState<string | null>(null);
+  const [publicAccessToken, setPublicAccessToken] = useState<string | null>(
+    null,
+  );
 
-  const [conversationToken, setConversationToken] =
-    useState<string | null>(null);
+  const [conversationToken, setConversationToken] = useState<string | null>(
+    null,
+  );
 
   const [initializing, setInitializing] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -176,8 +170,9 @@ export function DemoChat({
   const [readyToBook, setReadyToBook] = useState(false);
   const [completed, setCompleted] = useState(false);
 
-  const [appointmentSlots, setAppointmentSlots] =
-    useState<AppointmentSlot[]>([]);
+  const [appointmentSlots, setAppointmentSlots] = useState<AppointmentSlot[]>(
+    [],
+  );
 
   const [loadingSlots, setLoadingSlots] = useState(false);
 
@@ -213,11 +208,7 @@ export function DemoChat({
   }, []);
 
   const loadAvailability = useCallback(
-    async (
-      timeline: string,
-      currentLeadId: string,
-      accessToken: string,
-    ) => {
+    async (timeline: string, currentLeadId: string, accessToken: string) => {
       if (demoOnly) {
         setAppointmentSlots(getLocalDemoSlots());
         return;
@@ -246,9 +237,7 @@ export function DemoChat({
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(
-            data.error || "Unable to load availability.",
-          );
+          throw new Error(data.error || "Unable to load availability.");
         }
 
         setAppointmentSlots(data.slots ?? []);
@@ -284,9 +273,7 @@ export function DemoChat({
     const data: LeadApiResponse = await response.json();
 
     if (!response.ok) {
-      throw new Error(
-        data.error || "Unable to initialize conversation.",
-      );
+      throw new Error(data.error || "Unable to initialize conversation.");
     }
 
     setLeadId(data.lead.id ?? null);
@@ -327,20 +314,15 @@ export function DemoChat({
         setReadyToBook(false);
         setCompleted(false);
 
-        const storageKey =
-          `leadflow:${businessSlug}:leadId`;
+        const storageKey = `leadflow:${businessSlug}:leadId`;
 
-        const accessTokenKey =
-          `leadflow:${businessSlug}:publicAccessToken`;
+        const accessTokenKey = `leadflow:${businessSlug}:publicAccessToken`;
 
-        const conversationTokenKey =
-          `leadflow:${businessSlug}:conversationToken`;
+        const conversationTokenKey = `leadflow:${businessSlug}:conversationToken`;
 
-        const storedLeadId =
-          localStorage.getItem(storageKey);
+        const storedLeadId = localStorage.getItem(storageKey);
 
-        const storedAccessToken =
-          localStorage.getItem(accessTokenKey);
+        const storedAccessToken = localStorage.getItem(accessTokenKey);
 
         const storedConversationToken =
           localStorage.getItem(conversationTokenKey);
@@ -359,18 +341,13 @@ export function DemoChat({
           );
 
           if (response.ok) {
-            const data: LeadApiResponse =
-              await response.json();
+            const data: LeadApiResponse = await response.json();
 
-            const restoredLeadId =
-              data.lead.id ?? storedLeadId;
+            const restoredLeadId = data.lead.id ?? storedLeadId;
 
-            const isCompleted =
-              Boolean(data.completed);
+            const isCompleted = Boolean(data.completed);
 
-            const canBook =
-              data.lead.status === "qualified" &&
-              !isCompleted;
+            const canBook = data.lead.status === "qualified" && !isCompleted;
 
             setLeadId(restoredLeadId);
             setPublicAccessToken(storedAccessToken);
@@ -440,13 +417,7 @@ export function DemoChat({
   async function sendMessage(messageText?: string) {
     const text = (messageText ?? input).trim();
 
-    if (
-      !text ||
-      busyRef.current ||
-      loading ||
-      initializing ||
-      completed
-    ) {
+    if (!text || busyRef.current || loading || initializing || completed) {
       return;
     }
 
@@ -463,10 +434,7 @@ export function DemoChat({
       text,
     };
 
-    const updatedMessages = [
-      ...messages,
-      userMessage,
-    ];
+    const updatedMessages = [...messages, userMessage];
 
     setMessages(updatedMessages);
 
@@ -474,21 +442,14 @@ export function DemoChat({
       // Simulated public demo.
       // Only ZIP lookup can make an external request.
       if (demoOnly) {
-        const result = await getLocalDemoReply(
-          text.slice(0, 500),
-          lead,
-        );
+        const result = await getLocalDemoReply(text.slice(0, 500), lead);
 
         setLead(result.lead);
         setStatus(result.status);
         setOptions(result.options);
         setReadyToBook(result.readyToBook);
 
-        setAppointmentSlots(
-          result.readyToBook
-            ? getLocalDemoSlots()
-            : [],
-        );
+        setAppointmentSlots(result.readyToBook ? getLocalDemoSlots() : []);
 
         setMessages((current) => [
           ...current,
@@ -518,15 +479,10 @@ export function DemoChat({
         }),
       });
 
-      const data: ChatApiResponse =
-        await response.json();
+      const data: ChatApiResponse = await response.json();
 
       if (!response.ok) {
-        setError(
-          data.error ||
-          data.reply ||
-          "Unable to send message.",
-        );
+        setError(data.error || data.reply || "Unable to send message.");
 
         return;
       }
@@ -544,10 +500,7 @@ export function DemoChat({
         setLeadId(data.leadId);
         setPublicAccessToken(data.publicAccessToken);
 
-        localStorage.setItem(
-          `leadflow:${businessSlug}:leadId`,
-          data.leadId,
-        );
+        localStorage.setItem(`leadflow:${businessSlug}:leadId`, data.leadId);
 
         localStorage.setItem(
           `leadflow:${businessSlug}:publicAccessToken`,
@@ -557,9 +510,7 @@ export function DemoChat({
 
       setLead({
         ...toLeadData(data.lead),
-        appointment:
-          data.lead.appointment ??
-          lead.appointment,
+        appointment: data.lead.appointment ?? lead.appointment,
       });
 
       setStatus(data.status);
@@ -575,11 +526,9 @@ export function DemoChat({
         },
       ]);
 
-      const currentLeadId =
-        data.leadId ?? leadId;
+      const currentLeadId = data.leadId ?? leadId;
 
-      const currentAccessToken =
-        data.publicAccessToken ?? publicAccessToken;
+      const currentAccessToken = data.publicAccessToken ?? publicAccessToken;
 
       if (
         data.readyToBook &&
@@ -599,9 +548,7 @@ export function DemoChat({
       console.error("Send message error:", error);
 
       setError(
-        error instanceof Error
-          ? error.message
-          : "Something went wrong.",
+        error instanceof Error ? error.message : "Something went wrong.",
       );
     } finally {
       busyRef.current = false;
@@ -609,16 +556,12 @@ export function DemoChat({
     }
   }
 
-  function handleSubmit(
-    event: FormEvent<HTMLFormElement>,
-  ) {
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     void sendMessage();
   }
 
-  async function chooseAppointment(
-    slot: AppointmentSlot,
-  ) {
+  async function chooseAppointment(slot: AppointmentSlot) {
     if (
       busyRef.current ||
       loading ||
@@ -673,28 +616,23 @@ export function DemoChat({
       setError(null);
       setOptions([]);
 
-      const response = await fetch(
-        "/api/appointments",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            leadId,
-            publicAccessToken,
-            appointment: slot.label,
-            scheduledFor: slot.scheduledFor,
-          }),
+      const response = await fetch("/api/appointments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          leadId,
+          publicAccessToken,
+          appointment: slot.label,
+          scheduledFor: slot.scheduledFor,
+        }),
+      });
 
       const data = await response.json();
 
       if (!response.ok) {
-        setError(
-          data.error || "Unable to save appointment.",
-        );
+        setError(data.error || "Unable to save appointment.");
 
         return;
       }
@@ -726,9 +664,7 @@ export function DemoChat({
       console.error("Appointment error:", error);
 
       setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to save appointment.",
+        error instanceof Error ? error.message : "Unable to save appointment.",
       );
     } finally {
       busyRef.current = false;
@@ -737,11 +673,7 @@ export function DemoChat({
   }
 
   async function restartDemo() {
-    if (
-      busyRef.current ||
-      loading ||
-      initializing
-    ) {
+    if (busyRef.current || loading || initializing) {
       return;
     }
 
@@ -761,17 +693,11 @@ export function DemoChat({
       setAppointmentSlots([]);
       setLoadingSlots(false);
 
-      localStorage.removeItem(
-        `leadflow:${businessSlug}:leadId`,
-      );
+      localStorage.removeItem(`leadflow:${businessSlug}:leadId`);
 
-      localStorage.removeItem(
-        `leadflow:${businessSlug}:publicAccessToken`,
-      );
+      localStorage.removeItem(`leadflow:${businessSlug}:publicAccessToken`);
 
-      localStorage.removeItem(
-        `leadflow:${businessSlug}:conversationToken`,
-      );
+      localStorage.removeItem(`leadflow:${businessSlug}:conversationToken`);
 
       setLeadId(null);
       setPublicAccessToken(null);
@@ -798,10 +724,7 @@ export function DemoChat({
       <div className="flex min-h-[600px] items-center justify-center overflow-hidden rounded-[2rem] border border-white/[0.08] bg-[#080808]">
         <div className="text-center">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
-            <LoaderCircle
-              size={19}
-              className="animate-spin text-white"
-            />
+            <LoaderCircle size={19} className="animate-spin text-white" />
           </div>
 
           <p className="mt-4 text-sm font-medium text-zinc-300">
@@ -827,11 +750,7 @@ export function DemoChat({
       }
     >
       <motion.section
-        initial={
-          reduceMotion
-            ? false
-            : { opacity: 0, y: 30 }
-        }
+        initial={reduceMotion ? false : { opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{
           duration: 0.65,
@@ -854,10 +773,7 @@ export function DemoChat({
               </p>
 
               <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-zinc-500 sm:text-xs">
-                <Sparkles
-                  size={11}
-                  className="shrink-0"
-                />
+                <Sparkles size={11} className="shrink-0" />
 
                 <span>
                   {demoOnly
@@ -880,9 +796,7 @@ export function DemoChat({
               className="transition-transform duration-500 group-hover:rotate-180"
             />
 
-            <span className="hidden sm:inline">
-              Restart
-            </span>
+            <span className="hidden sm:inline">Restart</span>
           </button>
         </div>
 
@@ -891,16 +805,16 @@ export function DemoChat({
           role="log"
           aria-label="Conversation"
           aria-live="polite"
-          className={`demo-chat-scroll overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 ${compact
-            ? "h-[360px]"
-            : "h-[clamp(220px,calc(100dvh_-_370px),480px)]"
-            }`}
+          className={`demo-chat-scroll overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 ${
+            compact
+              ? "h-[360px]"
+              : "h-[clamp(220px,calc(100dvh_-_370px),480px)]"
+          }`}
         >
           <div className="space-y-5">
             <AnimatePresence initial={false}>
               {messages.map((message) => {
-                const isUser =
-                  message.sender === "user";
+                const isUser = message.sender === "user";
 
                 return (
                   <motion.div
@@ -909,10 +823,10 @@ export function DemoChat({
                       reduceMotion
                         ? false
                         : {
-                          opacity: 0,
-                          y: 14,
-                          x: isUser ? 15 : -15,
-                        }
+                            opacity: 0,
+                            y: 14,
+                            x: isUser ? 15 : -15,
+                          }
                     }
                     animate={{
                       opacity: 1,
@@ -923,44 +837,38 @@ export function DemoChat({
                       duration: 0.35,
                       ease: [0.22, 1, 0.36, 1],
                     }}
-                    className={`flex ${isUser
-                      ? "justify-end"
-                      : "justify-start"
-                      }`}
+                    className={`flex ${
+                      isUser ? "justify-end" : "justify-start"
+                    }`}
                   >
                     <div
-                      className={`flex max-w-[92%] items-end gap-2.5 sm:max-w-[82%] ${isUser
-                        ? "flex-row-reverse"
-                        : ""
-                        }`}
+                      className={`flex max-w-[92%] items-end gap-2.5 sm:max-w-[82%] ${
+                        isUser ? "flex-row-reverse" : ""
+                      }`}
                     >
                       <div
-                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${isUser
-                          ? "border border-white/10 bg-white/[0.04] text-zinc-400"
-                          : "bg-white text-black"
-                          }`}
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
+                          isUser
+                            ? "border border-white/10 bg-white/[0.04] text-zinc-400"
+                            : "bg-white text-black"
+                        }`}
                       >
-                        {isUser ? (
-                          <User size={13} />
-                        ) : (
-                          <Bot size={13} />
-                        )}
+                        {isUser ? <User size={13} /> : <Bot size={13} />}
                       </div>
 
                       <div className="min-w-0">
                         {!isUser ? (
                           <p className="mb-1.5 ml-1 text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-500">
-                            {demoOnly
-                              ? "Demo assistant"
-                              : "AI Assistant"}
+                            {demoOnly ? "Demo assistant" : "AI Assistant"}
                           </p>
                         ) : null}
 
                         <div
-                          className={`whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-sm leading-6 ${isUser
-                            ? "rounded-br-md bg-white text-black"
-                            : "rounded-bl-md border border-white/[0.08] bg-white/[0.035] text-zinc-300"
-                            }`}
+                          className={`whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-sm leading-6 ${
+                            isUser
+                              ? "rounded-br-md bg-white text-black"
+                              : "rounded-bl-md border border-white/[0.08] bg-white/[0.035] text-zinc-300"
+                          }`}
                         >
                           {message.text}
                         </div>
@@ -973,11 +881,7 @@ export function DemoChat({
 
             {loading ? (
               <motion.div
-                initial={
-                  reduceMotion
-                    ? false
-                    : { opacity: 0, y: 10 }
-                }
+                initial={reduceMotion ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="flex justify-start"
               >
@@ -988,9 +892,7 @@ export function DemoChat({
 
                   <div>
                     <p className="mb-1.5 ml-1 text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-500">
-                      {demoOnly
-                        ? "Demo assistant"
-                        : "AI Assistant"}
+                      {demoOnly ? "Demo assistant" : "AI Assistant"}
                     </p>
 
                     <div className="flex h-11 items-center gap-1.5 rounded-2xl rounded-bl-md border border-white/[0.08] bg-white/[0.035] px-4">
@@ -1001,13 +903,9 @@ export function DemoChat({
                             reduceMotion
                               ? undefined
                               : {
-                                opacity: [
-                                  0.25,
-                                  1,
-                                  0.25,
-                                ],
-                                y: [0, -3, 0],
-                              }
+                                  opacity: [0.25, 1, 0.25],
+                                  y: [0, -3, 0],
+                                }
                           }
                           transition={{
                             duration: 1,
@@ -1030,16 +928,9 @@ export function DemoChat({
         {/* Actions */}
         <div className="border-t border-white/[0.07] bg-black/30 p-4 sm:p-5">
           <AnimatePresence>
-            {options.length > 0 &&
-              !loading &&
-              !readyToBook &&
-              !completed ? (
+            {options.length > 0 && !loading && !readyToBook && !completed ? (
               <motion.div
-                initial={
-                  reduceMotion
-                    ? false
-                    : { opacity: 0, y: 8 }
-                }
+                initial={reduceMotion ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 className="mb-4"
@@ -1053,9 +944,7 @@ export function DemoChat({
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() =>
-                        void sendMessage(option.value)
-                      }
+                      onClick={() => void sendMessage(option.value)}
                       disabled={loading}
                       className="rounded-xl border border-white/[0.09] bg-white/[0.035] px-3.5 py-2.5 text-xs font-medium text-zinc-300 transition hover:border-white/20 hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-40 sm:text-sm"
                     >
@@ -1078,18 +967,11 @@ export function DemoChat({
 
           {readyToBook && !completed ? (
             <motion.div
-              initial={
-                reduceMotion
-                  ? false
-                  : { opacity: 0, y: 12 }
-              }
+              initial={reduceMotion ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
             >
               <div className="mb-3 flex items-center gap-2">
-                <CalendarDays
-                  size={15}
-                  className="text-white"
-                />
+                <CalendarDays size={15} className="text-white" />
 
                 <p className="text-sm font-medium text-zinc-300">
                   {demoOnly
@@ -1102,18 +984,14 @@ export function DemoChat({
 
               {demoOnly ? (
                 <p className="mb-3 text-xs leading-5 text-zinc-500">
-                  These times are illustrative. No
-                  appointment or SMS will be created.
+                  These times are illustrative. No appointment or SMS will be
+                  created.
                 </p>
               ) : null}
 
               {loadingSlots ? (
                 <div className="flex items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.025] px-4 py-3 text-sm text-zinc-500">
-                  <LoaderCircle
-                    size={15}
-                    className="animate-spin"
-                  />
-
+                  <LoaderCircle size={15} className="animate-spin" />
                   Checking availability...
                 </div>
               ) : appointmentSlots.length > 0 ? (
@@ -1122,9 +1000,7 @@ export function DemoChat({
                     <button
                       key={slot.scheduledFor}
                       type="button"
-                      onClick={() =>
-                        void chooseAppointment(slot)
-                      }
+                      onClick={() => void chooseAppointment(slot)}
                       disabled={loading}
                       className="group flex items-center justify-between rounded-xl border border-white/[0.09] bg-white/[0.025] px-4 py-3 text-left text-sm text-zinc-300 transition hover:border-white/20 hover:bg-white hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
                     >
@@ -1139,18 +1015,13 @@ export function DemoChat({
                 </div>
               ) : (
                 <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] px-4 py-3 text-sm text-zinc-500">
-                  No appointment times are currently
-                  available for this period.
+                  No appointment times are currently available for this period.
                 </div>
               )}
             </motion.div>
           ) : completed ? (
             <motion.div
-              initial={
-                reduceMotion
-                  ? false
-                  : { opacity: 0, scale: 0.97 }
-              }
+              initial={reduceMotion ? false : { opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
               className="flex items-center gap-3 rounded-2xl border border-white/15 bg-white px-4 py-3 text-black"
             >
@@ -1173,16 +1044,11 @@ export function DemoChat({
               </div>
             </motion.div>
           ) : (
-            <form
-              onSubmit={handleSubmit}
-              className="flex items-center gap-2.5"
-            >
+            <form onSubmit={handleSubmit} className="flex items-center gap-2.5">
               <div className="relative min-w-0 flex-1">
                 <input
                   value={input}
-                  onChange={(event) =>
-                    setInput(event.target.value)
-                  }
+                  onChange={(event) => setInput(event.target.value)}
                   placeholder="Type your message..."
                   disabled={loading}
                   maxLength={demoOnly ? 500 : 2000}
@@ -1199,10 +1065,7 @@ export function DemoChat({
                 className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-black transition hover:scale-[1.03] hover:bg-zinc-200 active:scale-95 disabled:cursor-not-allowed disabled:opacity-30"
               >
                 {loading ? (
-                  <LoaderCircle
-                    size={17}
-                    className="animate-spin"
-                  />
+                  <LoaderCircle size={17} className="animate-spin" />
                 ) : (
                   <Send size={17} />
                 )}
@@ -1212,9 +1075,8 @@ export function DemoChat({
 
           {demoOnly && !completed ? (
             <p className="mt-3 text-[11px] leading-5 text-zinc-500">
-              Use sample contact details. ZIP codes
-              are checked against a public lookup.
-              Type “change state” to correct the state.
+              Use sample contact details. ZIP codes are checked against a public
+              lookup. Type “change state” to correct the state.
             </p>
           ) : null}
         </div>
@@ -1222,11 +1084,7 @@ export function DemoChat({
 
       {!compact ? (
         <motion.div
-          initial={
-            reduceMotion
-              ? false
-              : { opacity: 0, x: 45 }
-          }
+          initial={reduceMotion ? false : { opacity: 0, x: 45 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{
             duration: 0.65,
@@ -1243,9 +1101,7 @@ export function DemoChat({
         </motion.div>
       ) : null}
 
-      {demoOnly ? (
-        <DemoRegistrationPopup completed={completed} />
-      ) : null}
+      {demoOnly ? <DemoRegistrationPopup completed={completed} /> : null}
     </div>
   );
 }
@@ -1263,32 +1119,30 @@ function LeadSummary({
 }) {
   const qualificationFields = demoOnly
     ? [
-      lead.industry,
-      lead.service,
-      lead.state,
-      lead.address,
-      lead.zipVerified ? lead.zipCode : undefined,
-      lead.urgency,
-      lead.timeline,
-      lead.name,
-      lead.phone,
-    ]
+        lead.industry,
+        lead.service,
+        lead.state,
+        lead.address,
+        lead.zipVerified ? lead.zipCode : undefined,
+        lead.urgency,
+        lead.timeline,
+        lead.name,
+        lead.phone,
+      ]
     : [
-      lead.industry,
-      lead.service,
-      lead.location,
-      lead.urgency,
-      lead.timeline,
-      lead.name,
-      lead.phone,
-    ];
+        lead.industry,
+        lead.service,
+        lead.location,
+        lead.urgency,
+        lead.timeline,
+        lead.name,
+        lead.phone,
+      ];
 
-  const completedFields =
-    qualificationFields.filter(Boolean).length;
+  const completedFields = qualificationFields.filter(Boolean).length;
 
   const progress = Math.round(
-    (completedFields / qualificationFields.length) *
-    100,
+    (completedFields / qualificationFields.length) * 100,
   );
 
   return (
@@ -1299,9 +1153,7 @@ function LeadSummary({
             <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-500">
               <CircleDot size={11} />
 
-              {demoOnly
-                ? "Simulated qualification"
-                : "Live qualification"}
+              {demoOnly ? "Simulated qualification" : "Live qualification"}
             </div>
 
             <h2 className="mt-3 text-xl font-semibold tracking-tight text-white">
@@ -1316,14 +1168,10 @@ function LeadSummary({
 
         <div className="mt-6">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-zinc-500">
-              Profile captured
-            </span>
+            <span className="text-zinc-500">Profile captured</span>
 
             <span className="font-medium text-zinc-300">
-              {completed
-                ? "Complete"
-                : `${progress}%`}
+              {completed ? "Complete" : `${progress}%`}
             </span>
           </div>
 
@@ -1331,9 +1179,7 @@ function LeadSummary({
             <motion.div
               initial={{ width: 0 }}
               animate={{
-                width: completed
-                  ? "100%"
-                  : `${progress}%`,
+                width: completed ? "100%" : `${progress}%`,
               }}
               transition={{
                 duration: 0.5,
@@ -1370,71 +1216,40 @@ function LeadSummary({
           </p>
 
           <div className="space-y-3">
-            <SummaryRow
-              label="Industry"
-              value={lead.industry}
-            />
+            <SummaryRow label="Industry" value={lead.industry} />
 
-            <SummaryRow
-              label="Service"
-              value={lead.service}
-            />
+            <SummaryRow label="Service" value={lead.service} />
 
             {demoOnly ? (
               <>
-                <SummaryRow
-                  label="State"
-                  value={lead.state}
-                />
+                <SummaryRow label="State" value={lead.state} />
 
-                <SummaryRow
-                  label="Address"
-                  value={lead.address}
-                />
+                <SummaryRow label="Address" value={lead.address} />
 
-                <SummaryRow
-                  label="City"
-                  value={lead.city}
-                />
+                <SummaryRow label="City" value={lead.city} />
 
                 <SummaryRow
                   label="ZIP code"
                   value={
                     lead.zipCode
-                      ? `${lead.zipCode}${lead.zipVerified
-                        ? " · State matched"
-                        : ""
-                      }`
+                      ? `${lead.zipCode}${
+                          lead.zipVerified ? " · State matched" : ""
+                        }`
                       : undefined
                   }
                 />
               </>
             ) : (
-              <SummaryRow
-                label="Location"
-                value={lead.location}
-              />
+              <SummaryRow label="Location" value={lead.location} />
             )}
 
-            <SummaryRow
-              label="Urgency"
-              value={lead.urgency}
-            />
+            <SummaryRow label="Urgency" value={lead.urgency} />
 
-            <SummaryRow
-              label="Timeline"
-              value={lead.timeline}
-            />
+            <SummaryRow label="Timeline" value={lead.timeline} />
 
-            <SummaryRow
-              label="Name"
-              value={lead.name}
-            />
+            <SummaryRow label="Name" value={lead.name} />
 
-            <SummaryRow
-              label="Phone"
-              value={lead.phone}
-            />
+            <SummaryRow label="Phone" value={lead.phone} />
           </div>
         </div>
 
@@ -1451,14 +1266,10 @@ function LeadSummary({
 
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
-                  {demoOnly
-                    ? "Sample appointment"
-                    : "Appointment"}
+                  {demoOnly ? "Sample appointment" : "Appointment"}
                 </p>
 
-                <p className="mt-1 text-sm font-semibold">
-                  {lead.appointment}
-                </p>
+                <p className="mt-1 text-sm font-semibold">{lead.appointment}</p>
               </div>
             </div>
           </motion.div>
@@ -1466,10 +1277,7 @@ function LeadSummary({
 
         <div className="mt-6 border-t border-white/[0.07] pt-5">
           <div className="flex gap-3">
-            <MapPin
-              size={14}
-              className="mt-0.5 shrink-0 text-zinc-500"
-            />
+            <MapPin size={14} className="mt-0.5 shrink-0 text-zinc-500" />
 
             <p className="text-xs leading-5 text-zinc-500">
               {demoOnly
@@ -1483,11 +1291,7 @@ function LeadSummary({
   );
 }
 
-function StatusBadge({
-  status,
-}: {
-  status: LeadStatus;
-}) {
+function StatusBadge({ status }: { status: LeadStatus }) {
   const labels: Record<LeadStatus, string> = {
     new: "New",
     warm: "Warm",
@@ -1496,28 +1300,21 @@ function StatusBadge({
 
   return (
     <span
-      className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] ${status === "hot"
-        ? "border-white bg-white text-black"
-        : "border-white/10 bg-white/[0.035] text-zinc-400"
-        }`}
+      className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.1em] ${
+        status === "hot"
+          ? "border-white bg-white text-black"
+          : "border-white/10 bg-white/[0.035] text-zinc-400"
+      }`}
     >
       {labels[status]}
     </span>
   );
 }
 
-function SummaryRow({
-  label,
-  value,
-}: {
-  label: string;
-  value?: string;
-}) {
+function SummaryRow({ label, value }: { label: string; value?: string }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-white/5 pb-3">
-      <span className="shrink-0 text-sm text-zinc-500">
-        {label}
-      </span>
+      <span className="shrink-0 text-sm text-zinc-500">{label}</span>
 
       <span className="max-w-[65%] break-words text-right text-sm text-zinc-200">
         {value || "—"}

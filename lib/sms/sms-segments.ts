@@ -72,14 +72,14 @@ export function calculateSmsSegments(text: string): SmsSegmentInfo {
     };
   }
 
-/*
- * UCS-2 / Unicode.
- *
- * JavaScript string length counts UTF-16 code units,
- * which gives us a closer pre-send estimate for
- * Twilio SMS segmentation, including surrogate pairs.
- */
-const unicodeUnits = text.length;
+  /*
+   * UCS-2 / Unicode.
+   *
+   * JavaScript string length counts UTF-16 code units,
+   * which gives us a closer pre-send estimate for
+   * Twilio SMS segmentation, including surrogate pairs.
+   */
+  const unicodeUnits = text.length;
 
   const segments = unicodeUnits <= 70 ? 1 : Math.ceil(unicodeUnits / 67);
 

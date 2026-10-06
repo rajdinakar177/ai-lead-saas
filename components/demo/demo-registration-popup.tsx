@@ -34,14 +34,10 @@ export function DemoRegistrationPopup({
     const timer = window.setTimeout(() => {
       const dialog = dialogRef.current;
 
-      if (
-        dialog &&
-        dialog.isConnected &&
-        !dialog.open
-      ) {
+      if (dialog && dialog.isConnected && !dialog.open) {
         dialog.showModal();
       }
-    }, 650);
+    }, 3000);
 
     return () => window.clearTimeout(timer);
   }, [completed]);
@@ -87,37 +83,24 @@ export function DemoRegistrationPopup({
           Let your business handle enquiries like this.
         </h2>
 
-        <p
-          id={descriptionId}
-          className="mt-3 text-sm leading-6 text-zinc-400"
-        >
-          Register your business and set up an assistant
-          to capture leads, qualify customer requests,
-          and help book appointments.
+        <p id={descriptionId} className="mt-3 text-sm leading-6 text-zinc-400">
+          Register your business and set up an assistant to capture leads,
+          qualify customer requests, and help book appointments.
         </p>
 
         <div className="my-6 space-y-3">
           <div className="flex items-center gap-3 text-sm text-zinc-300">
-            <MessageSquare
-              size={17}
-              className="shrink-0 text-white"
-            />
+            <MessageSquare size={17} className="shrink-0 text-white" />
             Capture enquiries from your website
           </div>
 
           <div className="flex items-center gap-3 text-sm text-zinc-300">
-            <CheckCircle2
-              size={17}
-              className="shrink-0 text-white"
-            />
+            <CheckCircle2 size={17} className="shrink-0 text-white" />
             Collect and qualify customer details
           </div>
 
           <div className="flex items-center gap-3 text-sm text-zinc-300">
-            <CalendarDays
-              size={17}
-              className="shrink-0 text-white"
-            />
+            <CalendarDays size={17} className="shrink-0 text-white" />
             Guide qualified leads toward appointments
           </div>
         </div>

@@ -11,7 +11,7 @@ import { Reveal } from "@/components/shared/reveal";
 
 export default function Home() {
   return (
-    <>
+    <div className="landing">
       <Navbar />
 
       <main className="overflow-hidden">
@@ -37,6 +37,6 @@ export default function Home() {
       </main>
 
       <Footer />
-    </>
+    </div>
   );
 }

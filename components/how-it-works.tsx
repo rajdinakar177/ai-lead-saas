@@ -53,7 +53,9 @@ export function HowItWorks() {
 
             <h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em] text-white sm:text-5xl lg:text-6xl">
               From inquiry to appointment.
-              <span className="block text-zinc-600">One connected workflow.</span>
+              <span className="block text-zinc-600">
+                One connected workflow.
+              </span>
             </h2>
 
             <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-zinc-500">

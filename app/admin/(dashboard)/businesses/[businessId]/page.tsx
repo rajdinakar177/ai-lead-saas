@@ -71,9 +71,7 @@ function getStatusClasses(status?: string | null) {
   }
 }
 
-export default async function AdminBusinessPage({
-  params,
-}: AdminBusinessPageProps) {
+export default async function AdminBusinessPage({ params }: AdminBusinessPageProps) {
   const { businessId } = await params;
 
   if (!Types.ObjectId.isValid(businessId)) {
@@ -138,13 +136,9 @@ export default async function AdminBusinessPage({
 
       <div className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium uppercase tracking-widest text-blue-400">
-            Business
-          </p>
+          <p className="text-sm font-medium uppercase tracking-widest text-blue-400">Business</p>
 
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight">
-            {business.name}
-          </h1>
+          <h1 className="mt-3 text-3xl font-semibold tracking-tight">{business.name}</h1>
 
           <div className="mt-2 flex items-center gap-2 text-sm text-zinc-500">
             <Mail size={14} />
@@ -171,9 +165,7 @@ export default async function AdminBusinessPage({
             <div>
               <p className="text-sm text-zinc-500">Total Leads</p>
 
-              <p className="mt-3 text-3xl font-semibold">
-                {totalLeads.toLocaleString()}
-              </p>
+              <p className="mt-3 text-3xl font-semibold">{totalLeads.toLocaleString()}</p>
             </div>
 
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-zinc-400">
@@ -185,13 +177,9 @@ export default async function AdminBusinessPage({
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-zinc-500">
-                Total Appointments
-              </p>
+              <p className="text-sm text-zinc-500">Total Appointments</p>
 
-              <p className="mt-3 text-3xl font-semibold">
-                {totalAppointments.toLocaleString()}
-              </p>
+              <p className="mt-3 text-3xl font-semibold">{totalAppointments.toLocaleString()}</p>
             </div>
 
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-zinc-400">
@@ -210,9 +198,7 @@ export default async function AdminBusinessPage({
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
-            <p className="text-xs uppercase tracking-wider text-zinc-600">
-              Plan
-            </p>
+            <p className="text-xs uppercase tracking-wider text-zinc-600">Plan</p>
 
             <p className="mt-1 text-sm font-medium capitalize text-zinc-200">
               {subscription?.plan ?? "No plan"}
@@ -220,9 +206,7 @@ export default async function AdminBusinessPage({
           </div>
 
           <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3">
-            <p className="text-xs uppercase tracking-wider text-zinc-600">
-              Status
-            </p>
+            <p className="text-xs uppercase tracking-wider text-zinc-600">Status</p>
 
             <span
               className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${getStatusClasses(
@@ -235,43 +219,23 @@ export default async function AdminBusinessPage({
 
           {subscription?.cancelAtPeriodEnd ? (
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
-              <p className="text-xs uppercase tracking-wider text-amber-500/70">
-                Cancellation
-              </p>
+              <p className="text-xs uppercase tracking-wider text-amber-500/70">Cancellation</p>
 
-              <p className="mt-1 text-sm text-amber-400">
-                Cancels at period end
-              </p>
+              <p className="mt-1 text-sm text-amber-400">Cancels at period end</p>
             </div>
           ) : null}
         </div>
 
         <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-          <InfoItem
-            label="Period Start"
-            value={formatDate(subscription?.currentPeriodStart)}
-          />
+          <InfoItem label="Period Start" value={formatDate(subscription?.currentPeriodStart)} />
 
-          <InfoItem
-            label="Period End"
-            value={formatDate(subscription?.currentPeriodEnd)}
-          />
+          <InfoItem label="Period End" value={formatDate(subscription?.currentPeriodEnd)} />
 
-          <InfoItem
-            label="Cancel At"
-            value={formatDate(subscription?.cancelAt)}
-          />
+          <InfoItem label="Cancel At" value={formatDate(subscription?.cancelAt)} />
 
-          <InfoItem
-            label="Canceled At"
-            value={formatDate(subscription?.canceledAt)}
-          />
+          <InfoItem label="Canceled At" value={formatDate(subscription?.canceledAt)} />
 
-          <InfoItem
-            label="Stripe Customer ID"
-            value={subscription?.stripeCustomerId}
-            mono
-          />
+          <InfoItem label="Stripe Customer ID" value={subscription?.stripeCustomerId} mono />
 
           <InfoItem
             label="Stripe Subscription ID"
@@ -279,11 +243,7 @@ export default async function AdminBusinessPage({
             mono
           />
 
-          <InfoItem
-            label="Stripe Price ID"
-            value={subscription?.stripePriceId}
-            mono
-          />
+          <InfoItem label="Stripe Price ID" value={subscription?.stripePriceId} mono />
         </div>
       </div>
 
@@ -295,48 +255,21 @@ export default async function AdminBusinessPage({
         </div>
 
         <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-          <InfoItem
-            label="Industry"
-            value={business.industry}
-          />
+          <InfoItem label="Industry" value={business.industry} />
 
-          <InfoItem
-            label="Phone"
-            value={business.phone}
-            icon={<Phone size={14} />}
-          />
+          <InfoItem label="Phone" value={business.phone} icon={<Phone size={14} />} />
 
-          <InfoItem
-            label="Country"
-            value={business.country}
-            icon={<MapPin size={14} />}
-          />
+          <InfoItem label="Country" value={business.country} icon={<MapPin size={14} />} />
 
-          <InfoItem
-            label="Country Code"
-            value={business.countryCode}
-          />
+          <InfoItem label="Country Code" value={business.countryCode} />
 
-          <InfoItem
-            label="Timezone"
-            value={business.timezone}
-            icon={<Globe2 size={14} />}
-          />
+          <InfoItem label="Timezone" value={business.timezone} icon={<Globe2 size={14} />} />
 
-          <InfoItem
-            label="Currency"
-            value={business.currency}
-          />
+          <InfoItem label="Currency" value={business.currency} />
 
-          <InfoItem
-            label="Public Slug"
-            value={business.slug}
-          />
+          <InfoItem label="Public Slug" value={business.slug} />
 
-          <InfoItem
-            label="Joined"
-            value={formatDate(business.createdAt)}
-          />
+          <InfoItem label="Joined" value={formatDate(business.createdAt)} />
         </div>
       </div>
     </>
@@ -356,20 +289,12 @@ function InfoItem({
 }) {
   return (
     <div className="min-w-0">
-      <p className="text-xs font-medium uppercase tracking-wider text-zinc-600">
-        {label}
-      </p>
+      <p className="text-xs font-medium uppercase tracking-wider text-zinc-600">{label}</p>
 
       <div className="mt-2 flex min-w-0 items-center gap-2 text-sm text-zinc-300">
         {icon}
 
-        <span
-          className={
-            mono
-              ? "break-all font-mono text-xs text-zinc-400"
-              : "break-words"
-          }
-        >
+        <span className={mono ? "break-all font-mono text-xs text-zinc-400" : "break-words"}>
           {value || "—"}
         </span>
       </div>

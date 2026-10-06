@@ -1,9 +1,4 @@
-import {
-  ArrowUpRight,
-  Clock3,
-  Home,
-  Snowflake,
-} from "lucide-react";
+import { ArrowUpRight, Clock3, Home, Snowflake } from "lucide-react";
 
 import { Reveal } from "@/components/shared/reveal";
 
@@ -53,8 +48,8 @@ export function Solutions() {
           </div>
 
           <p className="max-w-xl text-base leading-7 text-zinc-500 lg:justify-self-end">
-            Give every new inquiry an immediate path forward—from first
-            response to qualification and appointment scheduling.
+            Give every new inquiry an immediate path forward—from first response
+            to qualification and appointment scheduling.
           </p>
         </div>
 

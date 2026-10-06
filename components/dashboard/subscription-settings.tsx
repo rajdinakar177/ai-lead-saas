@@ -45,10 +45,10 @@ export function SubscriptionSettings({
 
   const cancellationDate = cancelAt
     ? new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    }).format(new Date(cancelAt))
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(new Date(cancelAt))
     : null;
 
   async function startCheckout(plan: PlanId) {
@@ -146,8 +146,6 @@ export function SubscriptionSettings({
 
   return (
     <div>
-
-
       {currentPlan && currentStatus !== "none" && (
         <div className="mb-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -222,9 +220,7 @@ export function SubscriptionSettings({
                   className="rounded-xl border border-zinc-800 p-4"
                 >
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-sm text-zinc-400">
-                      {item.label}
-                    </span>
+                    <span className="text-sm text-zinc-400">{item.label}</span>
 
                     <span className="text-sm font-medium text-white">
                       {item.used.toLocaleString()} /{" "}
@@ -242,7 +238,8 @@ export function SubscriptionSettings({
                   </div>
 
                   <p className="mt-2 text-xs text-zinc-600">
-                    {Math.max(0, item.limit - item.used).toLocaleString()} remaining
+                    {Math.max(0, item.limit - item.used).toLocaleString()}{" "}
+                    remaining
                   </p>
                 </div>
               );

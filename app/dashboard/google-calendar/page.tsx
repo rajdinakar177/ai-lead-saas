@@ -34,10 +34,7 @@ export default async function GoogleCalendarPage() {
       }
     : null;
 
-  const googleCalendarEnabled = hasSubscriptionFeature(
-    business.subscription,
-    "googleCalendar",
-  );
+  const googleCalendarEnabled = hasSubscriptionFeature(business.subscription, "googleCalendar");
 
   return (
     <div>
@@ -47,10 +44,7 @@ export default async function GoogleCalendarPage() {
       />
 
       <div className="mt-8 max-w-8xl">
-        <GoogleCalendarSettings
-          integration={googleCalendar}
-          enabled={googleCalendarEnabled}
-        />
+        <GoogleCalendarSettings integration={googleCalendar} enabled={googleCalendarEnabled} />
       </div>
     </div>
   );

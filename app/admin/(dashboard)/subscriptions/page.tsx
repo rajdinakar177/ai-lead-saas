@@ -68,17 +68,13 @@ export default async function AdminSubscriptionsPage() {
   const starterCount = businesses.filter(
     (business) =>
       business.subscription?.plan === "starter" &&
-      ["active", "trialing"].includes(
-        business.subscription?.status ?? "",
-      ),
+      ["active", "trialing"].includes(business.subscription?.status ?? ""),
   ).length;
 
   const proCount = businesses.filter(
     (business) =>
       business.subscription?.plan === "pro" &&
-      ["active", "trialing"].includes(
-        business.subscription?.status ?? "",
-      ),
+      ["active", "trialing"].includes(business.subscription?.status ?? ""),
   ).length;
 
   const pastDueCount = businesses.filter(
@@ -88,13 +84,9 @@ export default async function AdminSubscriptionsPage() {
   return (
     <>
       <div>
-        <p className="text-sm font-medium uppercase tracking-widest text-blue-400">
-          Billing
-        </p>
+        <p className="text-sm font-medium uppercase tracking-widest text-blue-400">Billing</p>
 
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">
-          Subscriptions
-        </h1>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight">Subscriptions</h1>
 
         <p className="mt-2 text-zinc-500">
           Monitor customer plans, subscription status and billing periods.
@@ -102,25 +94,13 @@ export default async function AdminSubscriptionsPage() {
       </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard
-          label="Stripe Subscriptions"
-          value={businesses.length}
-        />
+        <SummaryCard label="Stripe Subscriptions" value={businesses.length} />
 
-        <SummaryCard
-          label="Active Starter"
-          value={starterCount}
-        />
+        <SummaryCard label="Active Starter" value={starterCount} />
 
-        <SummaryCard
-          label="Active Pro"
-          value={proCount}
-        />
+        <SummaryCard label="Active Pro" value={proCount} />
 
-        <SummaryCard
-          label="Past Due"
-          value={pastDueCount}
-        />
+        <SummaryCard label="Past Due" value={pastDueCount} />
       </div>
 
       <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
@@ -140,9 +120,7 @@ export default async function AdminSubscriptionsPage() {
 
         {businesses.length === 0 ? (
           <div className="px-6 py-12 text-center">
-            <p className="text-sm text-zinc-500">
-              No Stripe subscriptions found.
-            </p>
+            <p className="text-sm text-zinc-500">No Stripe subscriptions found.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -155,17 +133,11 @@ export default async function AdminSubscriptionsPage() {
 
                   <th className="px-4 py-4 font-medium">Status</th>
 
-                  <th className="px-4 py-4 font-medium">
-                    Current period
-                  </th>
+                  <th className="px-4 py-4 font-medium">Current period</th>
 
-                  <th className="px-4 py-4 font-medium">
-                    Cancellation
-                  </th>
+                  <th className="px-4 py-4 font-medium">Cancellation</th>
 
-                  <th className="px-4 py-4 font-medium">
-                    Stripe subscription
-                  </th>
+                  <th className="px-4 py-4 font-medium">Stripe subscription</th>
                 </tr>
               </thead>
 
@@ -174,10 +146,7 @@ export default async function AdminSubscriptionsPage() {
                   const subscription = business.subscription;
 
                   return (
-                    <tr
-                      key={business._id.toString()}
-                      className="transition hover:bg-white/[0.02]"
-                    >
+                    <tr key={business._id.toString()} className="transition hover:bg-white/[0.02]">
                       <td className="px-6 py-4">
                         <Link
                           href={`/admin/businesses/${business._id.toString()}`}
@@ -186,9 +155,7 @@ export default async function AdminSubscriptionsPage() {
                           {business.name}
                         </Link>
 
-                        <p className="mt-1 text-xs text-zinc-600">
-                          {business.email}
-                        </p>
+                        <p className="mt-1 text-xs text-zinc-600">{business.email}</p>
                       </td>
 
                       <td className="px-4 py-4">
@@ -208,32 +175,20 @@ export default async function AdminSubscriptionsPage() {
                       </td>
 
                       <td className="px-4 py-4 text-zinc-400">
-                        <div>
-                          {formatDate(
-                            subscription?.currentPeriodStart,
-                          )}
-                        </div>
+                        <div>{formatDate(subscription?.currentPeriodStart)}</div>
 
                         <div className="mt-1 text-xs text-zinc-600">
-                          to{" "}
-                          {formatDate(
-                            subscription?.currentPeriodEnd,
-                          )}
+                          to {formatDate(subscription?.currentPeriodEnd)}
                         </div>
                       </td>
 
                       <td className="px-4 py-4 text-zinc-400">
                         {subscription?.cancelAtPeriodEnd ? (
                           <>
-                            <span className="text-amber-400">
-                              Cancels at period end
-                            </span>
+                            <span className="text-amber-400">Cancels at period end</span>
 
                             <p className="mt-1 text-xs text-zinc-600">
-                              {formatDate(
-                                subscription?.cancelAt ??
-                                  subscription?.currentPeriodEnd,
-                              )}
+                              {formatDate(subscription?.cancelAt ?? subscription?.currentPeriodEnd)}
                             </p>
                           </>
                         ) : (
@@ -248,10 +203,7 @@ export default async function AdminSubscriptionsPage() {
                             className="font-mono text-xs text-zinc-500"
                           >
                             {subscription.stripeSubscriptionId.length > 22
-                              ? `${subscription.stripeSubscriptionId.slice(
-                                  0,
-                                  22,
-                                )}...`
+                              ? `${subscription.stripeSubscriptionId.slice(0, 22)}...`
                               : subscription.stripeSubscriptionId}
                           </span>
                         ) : (
@@ -270,20 +222,12 @@ export default async function AdminSubscriptionsPage() {
   );
 }
 
-function SummaryCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: number;
-}) {
+function SummaryCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
       <p className="text-sm text-zinc-500">{label}</p>
 
-      <p className="mt-3 text-3xl font-semibold">
-        {value.toLocaleString()}
-      </p>
+      <p className="mt-3 text-3xl font-semibold">{value.toLocaleString()}</p>
     </div>
   );
 }

@@ -1,10 +1,4 @@
-import {
-  Building2,
-  CircleCheckBig,
-  CreditCard,
-  DollarSign,
-  Users,
-} from "lucide-react";
+import { Building2, CircleCheckBig, CreditCard, DollarSign, Users } from "lucide-react";
 import { PLAN_PRICING } from "@/lib/plan-pricing";
 import { connectDB } from "@/lib/mongodb";
 import { Business } from "@/models/Business";
@@ -46,12 +40,10 @@ export default async function AdminPage() {
     }),
   ]);
 
-  const activeSubscriptions =
-    activeStarterSubscriptions + activeProSubscriptions;
+  const activeSubscriptions = activeStarterSubscriptions + activeProSubscriptions;
 
   const estimatedMrr =
-    activeStarterSubscriptions * STARTER_MONTHLY_PRICE +
-    activeProSubscriptions * PRO_MONTHLY_PRICE;
+    activeStarterSubscriptions * STARTER_MONTHLY_PRICE + activeProSubscriptions * PRO_MONTHLY_PRICE;
 
   const stats = [
     {
@@ -79,13 +71,9 @@ export default async function AdminPage() {
   return (
     <>
       <div>
-        <p className="text-sm font-medium uppercase tracking-widest text-blue-400">
-          Super Admin
-        </p>
+        <p className="text-sm font-medium uppercase tracking-widest text-blue-400">Super Admin</p>
 
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">
-          Platform Overview
-        </h1>
+        <h1 className="mt-3 text-3xl font-semibold tracking-tight">Platform Overview</h1>
 
         <p className="mt-2 text-zinc-500">
           Monitor businesses, subscriptions, revenue and platform activity.
@@ -105,9 +93,7 @@ export default async function AdminPage() {
                 <div>
                   <p className="text-sm text-zinc-500">{stat.label}</p>
 
-                  <p className="mt-3 text-3xl font-semibold tracking-tight">
-                    {stat.value}
-                  </p>
+                  <p className="mt-3 text-3xl font-semibold tracking-tight">{stat.value}</p>
                 </div>
 
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5 text-zinc-400">
@@ -127,21 +113,15 @@ export default async function AdminPage() {
             {activeStarterSubscriptions.toLocaleString()}
           </p>
 
-          <p className="mt-2 text-xs text-zinc-600">
-            Active or trialing subscriptions
-          </p>
+          <p className="mt-2 text-xs text-zinc-600">Active or trialing subscriptions</p>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
           <p className="text-sm text-zinc-500">Pro</p>
 
-          <p className="mt-3 text-3xl font-semibold">
-            {activeProSubscriptions.toLocaleString()}
-          </p>
+          <p className="mt-3 text-3xl font-semibold">{activeProSubscriptions.toLocaleString()}</p>
 
-          <p className="mt-2 text-xs text-zinc-600">
-            Active or trialing subscriptions
-          </p>
+          <p className="mt-2 text-xs text-zinc-600">Active or trialing subscriptions</p>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
@@ -151,13 +131,9 @@ export default async function AdminPage() {
             <p className="text-sm">Total Leads</p>
           </div>
 
-          <p className="mt-3 text-3xl font-semibold">
-            {totalLeads.toLocaleString()}
-          </p>
+          <p className="mt-3 text-3xl font-semibold">{totalLeads.toLocaleString()}</p>
 
-          <p className="mt-2 text-xs text-zinc-600">
-            Leads captured across all businesses
-          </p>
+          <p className="mt-2 text-xs text-zinc-600">Leads captured across all businesses</p>
         </div>
       </div>
 
@@ -165,43 +141,30 @@ export default async function AdminPage() {
         <h2 className="text-lg font-semibold">Revenue & subscriptions</h2>
 
         <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-500">
-          Estimated MRR is calculated from active and trialing Starter and Pro
-          subscriptions using the current monthly plan prices. Stripe payment
-          data is available separately in the Payments section.
+          Estimated MRR is calculated from active and trialing Starter and Pro subscriptions using
+          the current monthly plan prices. Stripe payment data is available separately in the
+          Payments section.
         </p>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-3">
           <RevenueItem
             label="Starter MRR"
-            value={`$${(
-              activeStarterSubscriptions * STARTER_MONTHLY_PRICE
-            ).toLocaleString()}`}
+            value={`$${(activeStarterSubscriptions * STARTER_MONTHLY_PRICE).toLocaleString()}`}
           />
 
           <RevenueItem
             label="Pro MRR"
-            value={`$${(
-              activeProSubscriptions * PRO_MONTHLY_PRICE
-            ).toLocaleString()}`}
+            value={`$${(activeProSubscriptions * PRO_MONTHLY_PRICE).toLocaleString()}`}
           />
 
-          <RevenueItem
-            label="Estimated Total MRR"
-            value={`$${estimatedMrr.toLocaleString()}`}
-          />
+          <RevenueItem label="Estimated Total MRR" value={`$${estimatedMrr.toLocaleString()}`} />
         </div>
       </div>
     </>
   );
 }
 
-function RevenueItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function RevenueItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] px-4 py-4">
       <p className="text-xs uppercase tracking-wider text-zinc-600">{label}</p>
