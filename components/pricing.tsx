@@ -39,7 +39,7 @@ export function Pricing() {
   return (
     <section
       id="pricing"
-      className="relative border-t border-white/[0.07] bg-[#050505] py-24 sm:py-32"
+      className="signal-field relative border-t border-white/[0.07] bg-[#050505] py-24 sm:py-32"
     >
       <div className="mx-auto max-w-6xl px-5 lg:px-8">
         <Reveal direction="up">

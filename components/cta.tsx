@@ -5,7 +5,7 @@ export function CTA() {
   return (
     <section
       id="contact"
-      className="relative overflow-hidden border-t border-white/[0.07] bg-black py-24 sm:py-32"
+      className="signal-field relative overflow-hidden border-t border-white/[0.07] bg-black py-24 sm:py-32"
     >
       <div className="pointer-events-none absolute left-1/2 top-1/2 h-[450px] w-[750px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/[0.04] blur-[130px]" />
 

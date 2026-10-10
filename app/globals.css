@@ -62,8 +62,16 @@ body {
   margin: 0;
 
   background:
-    radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.035), transparent 35%),
-    radial-gradient(circle at 85% 15%, rgba(255, 255, 255, 0.02), transparent 30%),
+    radial-gradient(
+      circle at 20% 0%,
+      rgba(255, 255, 255, 0.035),
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 85% 15%,
+      rgba(255, 255, 255, 0.02),
+      transparent 30%
+    ),
     var(--background);
 
   color: var(--foreground);
@@ -85,6 +93,9 @@ body {
 ======================================== */
 
 .landing {
+  --signal: #3e7bfa;
+  --signal-soft: rgba(62, 123, 250, 0.16);
+
   font-family: var(--font-body), Arial, Helvetica, sans-serif;
 }
 
@@ -94,13 +105,95 @@ body {
   font-weight: 700;
 }
 
+/*
+ * Quiet dot field used across every landing section — a signal/ping
+ * field rather than a generic ruled grid, tying the background to
+ * what the product does (pinging a lead and getting a reply back).
+ * Added on top of each section's existing solid background color.
+ */
+.signal-field {
+  background-image: radial-gradient(
+    var(--surface-soft) 1px,
+    transparent 1.4px
+  );
+
+  background-size: 26px 26px;
+}
+
+/*
+ * The one bold, animated moment on the page: concentric rings
+ * pulsing outward behind the hero, like a message going out and a
+ * reply pinging back. A single orchestrated loop, not scattered
+ * per-element motion.
+ */
+.ping-rings {
+  position: absolute;
+  inset: 0;
+
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+
+  overflow: hidden;
+}
+
+.ping-ring {
+  position: absolute;
+  top: 18%;
+
+  width: 120px;
+  height: 120px;
+
+  border-radius: 999px;
+  border: 1px solid var(--signal);
+
+  opacity: 0;
+
+  animation: ping-ring-pulse 4.5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.ping-ring--delay-1 {
+  animation-delay: 1.5s;
+}
+
+.ping-ring--delay-2 {
+  animation-delay: 3s;
+}
+
+@keyframes ping-ring-pulse {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.45;
+  }
+
+  80% {
+    opacity: 0;
+  }
+
+  100% {
+    transform: scale(7);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ping-ring {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
 
 .glass-card {
-  background: linear-gradient(180deg, var(--surface-hover), var(--surface-subtle));
+  background: linear-gradient(
+    180deg,
+    var(--surface-hover),
+    var(--surface-subtle)
+  );
 
   border: 1px solid var(--border);
 
@@ -120,11 +213,20 @@ a {
 .landing-grid {
   background-image:
     linear-gradient(var(--surface-soft) 1px, transparent 1px),
-    linear-gradient(90deg, var(--surface-soft) 1px, transparent 1px);
+    linear-gradient(
+      90deg,
+      var(--surface-soft) 1px,
+      transparent 1px
+    );
 
   background-size: 64px 64px;
 
-  mask-image: linear-gradient(to bottom, black 0%, rgba(0, 0, 0, 0.7) 55%, transparent 100%);
+  mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    rgba(0, 0, 0, 0.7) 55%,
+    transparent 100%
+  );
 }
 
 .landing-card {
@@ -132,7 +234,11 @@ a {
 
   border: 1px solid var(--border);
 
-  background: linear-gradient(145deg, var(--surface-soft), var(--surface-subtle));
+  background: linear-gradient(
+    145deg,
+    var(--surface-soft),
+    var(--surface-subtle)
+  );
 
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.025),
@@ -147,7 +253,11 @@ a {
 .landing-card:hover {
   border-color: var(--border-hover);
 
-  background: linear-gradient(145deg, var(--surface-hover), var(--surface-subtle));
+  background: linear-gradient(
+    145deg,
+    var(--surface-hover),
+    var(--surface-subtle)
+  );
 }
 
 .faq-content {
@@ -169,6 +279,7 @@ details[open] .faq-content {
 .faq-content > * {
   overflow: hidden;
 }
+
 
 /* ========================================
    AI Demo / Lead Chat

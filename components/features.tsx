@@ -52,7 +52,7 @@ export function Features() {
   return (
     <section
       id="features"
-      className="relative border-t border-white/[0.07] bg-black py-24 sm:py-32"
+      className="signal-field relative border-t border-white/[0.07] bg-black py-24 sm:py-32"
     >
       <div className="mx-auto max-w-7xl px-5 lg:px-8">
         <Reveal direction="left">
@@ -63,9 +63,7 @@ export function Features() {
 
             <h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em] text-white sm:text-5xl lg:text-6xl">
               Built around the moments
-              <span className="block text-zinc-600">
-                that turn leads into jobs.
-              </span>
+              <span className="block text-zinc-600">that turn leads into jobs.</span>
             </h2>
           </div>
         </Reveal>

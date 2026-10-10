@@ -35,7 +35,7 @@ export function FAQ() {
   return (
     <section
       id="faq"
-      className="border-t border-white/[0.07] bg-black py-24 sm:py-32"
+      className="signal-field border-t border-white/[0.07] bg-black py-24 sm:py-32"
     >
       <div className="mx-auto max-w-4xl px-5 lg:px-8">
         <div className="text-center">

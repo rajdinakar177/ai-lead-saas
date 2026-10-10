@@ -34,11 +34,17 @@ export function Hero() {
 
   return (
     <section className="relative isolate min-h-screen overflow-hidden pb-24 pt-32 sm:pt-36 lg:flex lg:items-center lg:pb-28 lg:pt-32">
-      <div className="pointer-events-none absolute inset-0 -z-20 bg-black" />
+      <div className="signal-field pointer-events-none absolute inset-0 -z-20 bg-black" />
 
-      <div className="landing-grid pointer-events-none absolute inset-0 -z-10 opacity-50" />
+      {!reduceMotion && (
+        <div className="ping-rings -z-10">
+          <div className="ping-ring" />
+          <div className="ping-ring ping-ring--delay-1" />
+          <div className="ping-ring ping-ring--delay-2" />
+        </div>
+      )}
 
-      <div className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[500px] w-[900px] -translate-x-1/2 rounded-full bg-white/[0.045] blur-[120px]" />
+      <div className="pointer-events-none absolute left-1/2 top-0 -z-10 h-[500px] w-[900px] -translate-x-1/2 rounded-full bg-[#3e7bfa]/[0.07] blur-[120px]" />
 
       <div className="mx-auto grid w-full max-w-7xl items-center gap-16 px-5 lg:grid-cols-[1.02fr_0.98fr] lg:px-8">
         <motion.div
@@ -66,15 +72,13 @@ export function Hero() {
 
           <h1 className="mt-7 max-w-4xl text-[3.25rem] font-semibold leading-[0.98] tracking-[-0.055em] text-white sm:text-6xl lg:text-[4.7rem]">
             Your next customer
-            <span className="block text-zinc-500">
-              shouldn&apos;t have to wait.
-            </span>
+            <span className="block text-zinc-500">shouldn&apos;t have to wait.</span>
           </h1>
 
           <p className="mt-7 max-w-xl text-base leading-7 text-zinc-400 sm:text-lg sm:leading-8">
             Capture leads, respond instantly, qualify prospects and move them
-            toward an appointment with one AI-powered workflow built for roofing
-            and HVAC businesses.
+            toward an appointment with one AI-powered workflow built for
+            roofing and HVAC businesses.
           </p>
 
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">

@@ -1,4 +1,9 @@
-import { ArrowUpRight, Clock3, Home, Snowflake } from "lucide-react";
+import {
+  ArrowUpRight,
+  Clock3,
+  Home,
+  Snowflake,
+} from "lucide-react";
 
 import { Reveal } from "@/components/shared/reveal";
 
@@ -33,7 +38,7 @@ export function Solutions() {
   return (
     <section
       id="solutions"
-      className="relative border-t border-white/[0.07] bg-black py-24 sm:py-32"
+      className="signal-field relative border-t border-white/[0.07] bg-black py-24 sm:py-32"
     >
       <div className="mx-auto max-w-7xl px-5 lg:px-8">
         <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-end">
@@ -48,8 +53,8 @@ export function Solutions() {
           </div>
 
           <p className="max-w-xl text-base leading-7 text-zinc-500 lg:justify-self-end">
-            Give every new inquiry an immediate path forward—from first response
-            to qualification and appointment scheduling.
+            Give every new inquiry an immediate path forward—from first
+            response to qualification and appointment scheduling.
           </p>
         </div>
 

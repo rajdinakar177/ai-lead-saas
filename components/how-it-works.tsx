@@ -42,7 +42,7 @@ export function HowItWorks() {
   return (
     <section
       id="how-it-works"
-      className="relative border-t border-white/[0.07] bg-[#050505] py-24 sm:py-32"
+      className="signal-field relative border-t border-white/[0.07] bg-[#050505] py-24 sm:py-32"
     >
       <div className="mx-auto max-w-7xl px-5 lg:px-8">
         <Reveal direction="up">
@@ -53,9 +53,7 @@ export function HowItWorks() {
 
             <h2 className="mt-5 text-4xl font-semibold tracking-[-0.04em] text-white sm:text-5xl lg:text-6xl">
               From inquiry to appointment.
-              <span className="block text-zinc-600">
-                One connected workflow.
-              </span>
+              <span className="block text-zinc-600">One connected workflow.</span>
             </h2>
 
             <p className="mx-auto mt-6 max-w-2xl text-base leading-7 text-zinc-500">
