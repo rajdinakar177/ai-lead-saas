@@ -1,11 +1,12 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 
 type RevealDirection = "up" | "down" | "left" | "right";
 
 type RevealProps = {
-  children: React.ReactNode;
+  children: ReactNode;
   delay?: number;
   direction?: RevealDirection;
   className?: string;
@@ -13,27 +14,12 @@ type RevealProps = {
 
 const offsets: Record<
   RevealDirection,
-  {
-    x: number;
-    y: number;
-  }
+  { x: number; y: number }
 > = {
-  up: {
-    x: 0,
-    y: 48,
-  },
-  down: {
-    x: 0,
-    y: -48,
-  },
-  left: {
-    x: -72,
-    y: 0,
-  },
-  right: {
-    x: 72,
-    y: 0,
-  },
+  up: { x: 0, y: 48 },
+  down: { x: 0, y: -48 },
+  left: { x: -72, y: 0 },
+  right: { x: 72, y: 0 },
 };
 
 export function Reveal({
@@ -47,20 +33,17 @@ export function Reveal({
 
   return (
     <motion.div
-      className={className}
-      initial={
-        reduceMotion
-          ? {
-              opacity: 1,
-              x: 0,
-              y: 0,
-            }
-          : {
-              opacity: 0,
-              x: offset.x,
-              y: offset.y,
-            }
-      }
+      className={[
+        "reveal-motion",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      initial={{
+        opacity: 0,
+        x: offset.x,
+        y: offset.y,
+      }}
       whileInView={{
         opacity: 1,
         x: 0,

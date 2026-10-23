@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
-
+import { useSyncExternalStore } from "react";
 const activity = [
   {
     icon: MessageSquareText,
@@ -28,9 +28,30 @@ const activity = [
     description: "Available booking times presented",
   },
 ];
+function subscribeToHydration() {
+  return () => {};
+}
 
+function getClientSnapshot() {
+  return true;
+}
+
+function getServerSnapshot() {
+  return false;
+}
 export function Hero() {
-  const reduceMotion = useReducedMotion();
+const prefersReducedMotion = useReducedMotion();
+
+const hydrated = useSyncExternalStore(
+  subscribeToHydration,
+  getClientSnapshot,
+  getServerSnapshot,
+);
+
+// Use the same value on the server and during initial hydration.
+// Apply the device preference after hydration.
+const reduceMotion =
+  !hydrated || prefersReducedMotion === true;
 
   return (
     <section className="relative isolate min-h-screen overflow-hidden pb-24 pt-32 sm:pt-36 lg:flex lg:items-center lg:pb-28 lg:pt-32">

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useState, type SubmitEvent } from "react";
 import { LoaderCircle, LogIn } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -13,7 +13,7 @@ export function AdminLoginForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
 
     try {

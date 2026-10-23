@@ -306,3 +306,11 @@ details[open] .faq-content {
 .demo-chat-scroll::-webkit-scrollbar-thumb:hover {
   background: var(--border-strong);
 }
+@media (prefers-reduced-motion: reduce) {
+  .reveal-motion {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
