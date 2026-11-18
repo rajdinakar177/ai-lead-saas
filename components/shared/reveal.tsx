@@ -12,10 +12,7 @@ type RevealProps = {
   className?: string;
 };
 
-const offsets: Record<
-  RevealDirection,
-  { x: number; y: number }
-> = {
+const offsets: Record<RevealDirection, { x: number; y: number }> = {
   up: { x: 0, y: 48 },
   down: { x: 0, y: -48 },
   left: { x: -72, y: 0 },
@@ -33,12 +30,7 @@ export function Reveal({
 
   return (
     <motion.div
-      className={[
-        "reveal-motion",
-        className,
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      className={["reveal-motion", className].filter(Boolean).join(" ")}
       initial={{
         opacity: 0,
         x: offset.x,

@@ -62,16 +62,8 @@ body {
   margin: 0;
 
   background:
-    radial-gradient(
-      circle at 20% 0%,
-      rgba(255, 255, 255, 0.035),
-      transparent 35%
-    ),
-    radial-gradient(
-      circle at 85% 15%,
-      rgba(255, 255, 255, 0.02),
-      transparent 30%
-    ),
+    radial-gradient(circle at 20% 0%, rgba(255, 255, 255, 0.035), transparent 35%),
+    radial-gradient(circle at 85% 15%, rgba(255, 255, 255, 0.02), transparent 30%),
     var(--background);
 
   color: var(--foreground);
@@ -112,10 +104,7 @@ body {
  * Added on top of each section's existing solid background color.
  */
 .signal-field {
-  background-image: radial-gradient(
-    var(--surface-soft) 1px,
-    transparent 1.4px
-  );
+  background-image: radial-gradient(var(--surface-soft) 1px, transparent 1.4px);
 
   background-size: 26px 26px;
 }
@@ -189,11 +178,7 @@ a {
 }
 
 .glass-card {
-  background: linear-gradient(
-    180deg,
-    var(--surface-hover),
-    var(--surface-subtle)
-  );
+  background: linear-gradient(180deg, var(--surface-hover), var(--surface-subtle));
 
   border: 1px solid var(--border);
 
@@ -213,20 +198,11 @@ a {
 .landing-grid {
   background-image:
     linear-gradient(var(--surface-soft) 1px, transparent 1px),
-    linear-gradient(
-      90deg,
-      var(--surface-soft) 1px,
-      transparent 1px
-    );
+    linear-gradient(90deg, var(--surface-soft) 1px, transparent 1px);
 
   background-size: 64px 64px;
 
-  mask-image: linear-gradient(
-    to bottom,
-    black 0%,
-    rgba(0, 0, 0, 0.7) 55%,
-    transparent 100%
-  );
+  mask-image: linear-gradient(to bottom, black 0%, rgba(0, 0, 0, 0.7) 55%, transparent 100%);
 }
 
 .landing-card {
@@ -234,11 +210,7 @@ a {
 
   border: 1px solid var(--border);
 
-  background: linear-gradient(
-    145deg,
-    var(--surface-soft),
-    var(--surface-subtle)
-  );
+  background: linear-gradient(145deg, var(--surface-soft), var(--surface-subtle));
 
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.025),
@@ -253,11 +225,7 @@ a {
 .landing-card:hover {
   border-color: var(--border-hover);
 
-  background: linear-gradient(
-    145deg,
-    var(--surface-hover),
-    var(--surface-subtle)
-  );
+  background: linear-gradient(145deg, var(--surface-hover), var(--surface-subtle));
 }
 
 .faq-content {
@@ -279,7 +247,6 @@ details[open] .faq-content {
 .faq-content > * {
   overflow: hidden;
 }
-
 
 /* ========================================
    AI Demo / Lead Chat
